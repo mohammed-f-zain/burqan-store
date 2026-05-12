@@ -57,6 +57,13 @@ cd "$DEPLOY_PATH"
 log "npm ci…"
 npm ci
 
+DASH_ENV="${DEPLOY_PATH}/packages/dashboard/.env.production"
+log "Writing dashboard build env → ${DASH_ENV}"
+cat >"$DASH_ENV" <<EOF
+VITE_API_URL=https://${DOMAIN_API}
+VITE_QR_PAYLOAD_BASE_URL=https://${DOMAIN_ROOT}
+EOF
+
 ENV_FILE="${DEPLOY_PATH}/packages/api/.env"
 if [[ ! -f "$ENV_FILE" ]]; then
   log "Creating packages/api/.env (first run only)…"
@@ -95,13 +102,6 @@ if [[ "${SKIP_QR_POOL:-}" != "1" ]]; then
   log "Generating QR pool (QR_POOL_TARGET=${QR_POOL_TARGET:-300})…"
   (cd "${DEPLOY_PATH}/packages/api" && QR_POOL_TARGET="${QR_POOL_TARGET:-300}" npm run gen:qr) || true
 fi
-
-DASH_ENV="${DEPLOY_PATH}/packages/dashboard/.env.production"
-log "Writing dashboard build env → ${DASH_ENV}"
-cat >"$DASH_ENV" <<EOF
-VITE_API_URL=https://${DOMAIN_API}
-VITE_QR_PAYLOAD_BASE_URL=https://${DOMAIN_ROOT}
-EOF
 
 log "Building dashboard…"
 npm run build -w @burqan/dashboard
