@@ -4,6 +4,8 @@ const base = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
 
 export const api = axios.create({
   baseURL: `${base}/api/v1/admin`,
+  /** Avoid infinite “loading” if the API never responds (wrong host, firewall, hung proxy). */
+  timeout: 20_000,
 });
 
 api.interceptors.request.use((config) => {
