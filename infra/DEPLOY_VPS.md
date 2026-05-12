@@ -4,9 +4,9 @@
 
 - **Do not commit** server passwords, `.env`, or private keys to git.
 - After first login, **rotate the root password**, create an SSH key (`ssh-copy-id`), and consider disabling password SSH in `/etc/ssh/sshd_config`.
-- The GitHub Action (`.github/workflows/deploy-api.yml`) only redeploys the **API**; rebuild the dashboard on the server (or in CI) when the SPA changes.
+- The GitHub Action (`.github/workflows/deploy-api.yml`) redeploys the **API** and **dashboard** on each push to `main` (`npm run build` for `@burqan/api` and `@burqan/dashboard` on the VPS; nginx serves `packages/dashboard/dist`).
 
-## GitHub Actions (API deploy on push to `main`)
+## GitHub Actions (API + dashboard on push to `main`)
 
 Add **repository secrets**: repo → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**.
 
@@ -16,6 +16,15 @@ Add **repository secrets**: repo → **Settings** → **Secrets and variables** 
 | `VPS_USER` | `root` or `deploy` | SSH login |
 | `VPS_SSH_KEY` | Full `-----BEGIN … PRIVATE KEY-----` … `-----END …` block | **Private** key whose **public** key is in `~/.ssh/authorized_keys` on the server. This action does **not** use SSH passwords. |
 | `DEPLOY_PATH` | `/var/www/burqan-store` | Path to the git clone on the VPS |
+
+**Optional repository variables** (same page → **Variables**): set so CI writes `packages/dashboard/.env.production` before each dashboard build (recommended):
+
+| Variable | Example |
+|----------|---------|
+| `DASHBOARD_VITE_API_URL` | `https://api.burqan.store` |
+| `DASHBOARD_VITE_QR_PAYLOAD_BASE_URL` | `https://burqan.store` |
+
+If `DASHBOARD_VITE_API_URL` is unset, the workflow keeps the server’s existing `packages/dashboard/.env.production` (e.g. from bootstrap). If that file is missing or has no `VITE_API_URL=`, the dashboard build step fails with a clear Actions log message.
 
 ### If Actions fails: `unable to authenticate … no supported methods remain`
 

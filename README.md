@@ -85,7 +85,7 @@ npx eas-cli@latest build --profile preview --platform android
 
 ## GitHub → auto deploy
 
-Workflow: `.github/workflows/deploy-api.yml` (SSH pull + build + `pm2 reload`).
+Workflow: `.github/workflows/deploy-api.yml` (SSH: pull `main`, `npm ci`, build **API** + **dashboard**, `pm2 reload` for the API).
 
 Configure **repository secrets** (repo → **Settings** → **Secrets and variables** → **Actions**). If `VPS_HOST` is missing, the workflow fails with **“missing server host”**.
 
@@ -93,6 +93,8 @@ Configure **repository secrets** (repo → **Settings** → **Secrets and variab
 - `VPS_USER` — SSH user (e.g. `deploy` or `root`)  
 - `VPS_SSH_KEY` — **private** SSH key (full PEM). Password-only SSH does **not** work with this action — install the matching **public** key in `~/.ssh/authorized_keys` on the server.  
 - `DEPLOY_PATH` — absolute path to the git clone (e.g. `/var/www/burqan-store`)  
+
+Optional **Actions variables** (same settings page → **Variables**): `DASHBOARD_VITE_API_URL` (e.g. `https://api.burqan.store`) and `DASHBOARD_VITE_QR_PAYLOAD_BASE_URL` (e.g. `https://burqan.store`) so each deploy writes `packages/dashboard/.env.production` before the Vite build. If unset, the server’s existing `.env.production` is kept.
 
 Optional: add `port: ${{ secrets.VPS_SSH_PORT }}` to the workflow if SSH is not on port 22.
 

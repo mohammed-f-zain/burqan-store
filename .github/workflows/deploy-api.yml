@@ -1,13 +1,16 @@
-name: Deploy Burqan API
+name: Deploy Burqan API & Dashboard
 
-# Requires repository secrets (Settings → Secrets and variables → Actions):
-#   VPS_HOST      — server IP or DNS (e.g. 187.127.84.143)
-#   VPS_USER      — SSH user (e.g. root or deploy)
-#   VPS_SSH_KEY   — private key PEM (password auth is not used here)
-#   DEPLOY_PATH   — e.g. /var/www/burqan-store
-# Optional: VPS_SSH_PORT if not 22 (not wired below; add `port:` to ssh-action if needed)
-# If deploy fails with "unable to authenticate … no supported methods remain", the public key
-# for VPS_SSH_KEY is missing from ~/.ssh/authorized_keys for VPS_USER — see infra/DEPLOY_VPS.md
+# Secrets (Settings → Secrets and variables → Actions):
+#   VPS_HOST, VPS_USER, VPS_SSH_KEY, DEPLOY_PATH — required for SSH deploy
+# Optional: VPS_SSH_PORT if not 22 (add port: to ssh-action if needed)
+#
+# Variables (Settings → Secrets and variables → Actions → Variables) — optional:
+#   DASHBOARD_VITE_API_URL — e.g. https://api.burqan.store (writes packages/dashboard/.env.production before build)
+#   DASHBOARD_VITE_QR_PAYLOAD_BASE_URL — e.g. https://burqan.store (optional; QR hints in admin UI)
+# If DASHBOARD_VITE_API_URL is unset, the workflow reuses existing packages/dashboard/.env.production on the server
+# (bootstrap creates it). If neither is set, the dashboard build step fails with a clear error.
+#
+# If SSH fails with "unable to authenticate … no supported methods remain", see infra/DEPLOY_VPS.md
 
 on:
   push:
@@ -46,4 +49,19 @@ jobs:
             git reset --hard origin/main
             npm ci
             npm run build -w @burqan/api
-            pm2 reload ecosystem.config.cjs --only burqan-api || pm2 start ecosystem.config.cjs --only burqan-api
+            pm2 reload ecosystem.config.cjs --only burqan-api --update-env || pm2 start ecosystem.config.cjs --only burqan-api
+
+            DASH_VITE_API='${{ vars.DASHBOARD_VITE_API_URL }}'
+            DASH_VITE_QR='${{ vars.DASHBOARD_VITE_QR_PAYLOAD_BASE_URL }}'
+            if [[ -n "${DASH_VITE_API}" ]]; then
+              {
+                echo "VITE_API_URL=${DASH_VITE_API}"
+                if [[ -n "${DASH_VITE_QR}" ]]; then
+                  echo "VITE_QR_PAYLOAD_BASE_URL=${DASH_VITE_QR}"
+                fi
+              } > packages/dashboard/.env.production
+            elif ! grep -q '^VITE_API_URL=' packages/dashboard/.env.production 2>/dev/null; then
+              echo "::error::Dashboard needs VITE_API_URL. Set Actions variable DASHBOARD_VITE_API_URL (e.g. https://api.burqan.store) or create packages/dashboard/.env.production on the server — see infra/DEPLOY_VPS.md"
+              exit 1
+            fi
+            npm run build -w @burqan/dashboard
