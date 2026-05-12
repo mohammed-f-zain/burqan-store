@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: burqan
+      POSTGRES_PASSWORD: burqan
+      POSTGRES_DB: burqan
+    ports:
+      - "15433:5432"
+    volumes:
+      - burqan_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U burqan -d burqan"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  burqan_pg:

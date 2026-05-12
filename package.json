@@ -1,0 +1,22 @@
+{
+  "name": "burqan-store",
+  "private": true,
+  "workspaces": [
+    "packages/api",
+    "packages/dashboard",
+    "packages/mobile"
+  ],
+  "scripts": {
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "api:dev": "npm run dev -w @burqan/api",
+    "api:migrate": "npm run migrate -w @burqan/api",
+    "api:seed": "npm run seed -w @burqan/api",
+    "api:gen:qr": "npm run gen:qr -w @burqan/api",
+    "dashboard:dev": "npm run dev -w @burqan/dashboard",
+    "mobile:start": "npm run start -w mobile"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

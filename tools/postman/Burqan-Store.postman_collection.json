@@ -1,0 +1,173 @@
+{
+  "info": {
+    "name": "Burqan Store API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:4000" },
+    { "key": "adminToken", "value": "" },
+    { "key": "repToken", "value": "" },
+    { "key": "ownerToken", "value": "" },
+    { "key": "qrPublicToken", "value": "" },
+    { "key": "storeId", "value": "1" },
+    { "key": "productId", "value": "1" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/health"
+      }
+    },
+    {
+      "name": "Admin — Login",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const j = pm.response.json();",
+              "if (j.token) pm.collectionVariables.set('adminToken', j.token);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"super@burqan.store\",\n  \"password\": \"ChangeMe_Super_Strong_1!\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/admin/auth/login"
+      }
+    },
+    {
+      "name": "Admin — Me",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+        "url": "{{baseUrl}}/api/v1/admin/me"
+      }
+    },
+    {
+      "name": "Admin — Create role (example)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Operations\",\n  \"slug\": \"operations\",\n  \"permissions\": [\n    \"stores.read\",\n    \"stores.deferred_toggle\",\n    \"products.read\",\n    \"reps.read\",\n    \"orders.read\"\n  ]\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/admin/roles"
+      }
+    },
+    {
+      "name": "Admin — List stores",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+        "url": "{{baseUrl}}/api/v1/admin/stores"
+      }
+    },
+    {
+      "name": "Rep — Login",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const j = pm.response.json();",
+              "if (j.token) pm.collectionVariables.set('repToken', j.token);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"rep@burqan.store\",\n  \"password\": \"ChangeMe_Rep_Strong_1!\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/rep/auth/login"
+      }
+    },
+    {
+      "name": "Rep — Areas",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{repToken}}" }],
+        "url": "{{baseUrl}}/api/v1/rep/areas"
+      }
+    },
+    {
+      "name": "Rep — Resolve QR",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{repToken}}" }],
+        "url": "{{baseUrl}}/api/v1/rep/qr/{{qrPublicToken}}"
+      }
+    },
+    {
+      "name": "Rep — Register store (first visit)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{repToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"qrPublicToken\": \"{{qrPublicToken}}\",\n  \"name\": \"Demo Store\",\n  \"phone\": \"+966511111111\",\n  \"ownerName\": \"Owner\",\n  \"locationLat\": 24.7136,\n  \"locationLng\": 46.6753,\n  \"addressText\": \"Riyadh\",\n  \"areaId\": 1\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/rep/stores/register"
+      }
+    },
+    {
+      "name": "Rep — Create order",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{repToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"storeId\": {{storeId}},\n  \"paymentType\": \"cash\",\n  \"lines\": [\n    { \"productId\": {{productId}}, \"quantity\": 2 }\n  ]\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/rep/orders"
+      }
+    },
+    {
+      "name": "Admin — Toggle deferred for store",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"enabled\": true\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/admin/stores/{{storeId}}/deferred"
+      }
+    },
+    {
+      "name": "Public — Owner summary",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/v1/public/owner/summary?t={{ownerToken}}"
+      }
+    }
+  ]
+}
