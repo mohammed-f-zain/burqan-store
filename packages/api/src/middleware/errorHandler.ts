@@ -1,4 +1,5 @@
 import multer from "multer";
+import type { ErrorRequestHandler, RequestHandler } from "express";
 
 import { HttpError } from "../utils/errors.js";
 
