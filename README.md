@@ -87,13 +87,16 @@ npx eas-cli@latest build --profile preview --platform android
 
 Workflow: `.github/workflows/deploy-api.yml` (SSH pull + build + `pm2 reload`).
 
-Configure repository secrets:
+Configure **repository secrets** (repo → **Settings** → **Secrets and variables** → **Actions**). If `VPS_HOST` is missing, the workflow fails with **“missing server host”**.
 
-- `VPS_HOST` — server IP or hostname  
-- `VPS_USER` — SSH user (not root)  
-- `VPS_SSH_KEY` — **private** key (full PEM)  
-- `VPS_SSH_PORT` — optional, default 22  
-- `DEPLOY_PATH` — absolute path to the git clone on the server  
+- `VPS_HOST` — server IP or hostname (required)  
+- `VPS_USER` — SSH user (e.g. `deploy` or `root`)  
+- `VPS_SSH_KEY` — **private** SSH key (full PEM). Password-only SSH does **not** work with this action — install the matching **public** key in `~/.ssh/authorized_keys` on the server.  
+- `DEPLOY_PATH` — absolute path to the git clone (e.g. `/var/www/burqan-store`)  
+
+Optional: add `port: ${{ secrets.VPS_SSH_PORT }}` to the workflow if SSH is not on port 22.
+
+More detail: `infra/DEPLOY_VPS.md`.
 
 ## QR printing
 

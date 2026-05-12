@@ -6,6 +6,25 @@
 - After first login, **rotate the root password**, create an SSH key (`ssh-copy-id`), and consider disabling password SSH in `/etc/ssh/sshd_config`.
 - The GitHub Action (`.github/workflows/deploy-api.yml`) only redeploys the **API**; rebuild the dashboard on the server (or in CI) when the SPA changes.
 
+## GitHub Actions (API deploy on push to `main`)
+
+Add **repository secrets**: repo → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**.
+
+| Secret | Example | Notes |
+|--------|---------|--------|
+| `VPS_HOST` | `187.127.84.143` | **Required.** If missing, the workflow fails with *“missing server host”*. |
+| `VPS_USER` | `root` or `deploy` | SSH login |
+| `VPS_SSH_KEY` | Full `-----BEGIN … PRIVATE KEY-----` … `-----END …` block | **Private** key whose **public** key is in `~/.ssh/authorized_keys` on the server. This action does **not** use SSH passwords. |
+| `DEPLOY_PATH` | `/var/www/burqan-store` | Path to the git clone on the VPS |
+
+Generate a deploy key (on your Mac):
+
+```bash
+ssh-keygen -t ed25519 -f ./burqan-github-deploy -N ""
+cat burqan-github-deploy.pub   # add this ONE line to /root/.ssh/authorized_keys on the server
+cat burqan-github-deploy       # paste ENTIRE output into GitHub secret VPS_SSH_KEY
+```
+
 ## One-time server bootstrap
 
 From your laptop (with `sshpass` installed), after DNS points `burqan.store` and `api.burqan.store` to the VPS:
