@@ -99,6 +99,28 @@ sudo certbot --nginx -d burqan.store -d www.burqan.store -d api.burqan.store
 
 Use a real email when certbot asks. After success, **renewal** is usually enabled automatically (`certbot.timer`). Test with: `sudo certbot renew --dry-run`.
 
+### HTTP works but HTTPS does not
+
+Our nginx repo configs are **HTTP-only on port 80** until certbot succeeds; then certbot adds `listen 443 ssl` and certificate paths. If you never ran certbot (or it failed), **nothing listens on 443** — browsers time out or show “connection refused” for `https://…`.
+
+On the **VPS**, run in order:
+
+```bash
+# 1) Is anything listening on 443?
+sudo ss -tlnp | grep ':443'
+
+# 2) Does nginx mention SSL for your hosts?
+sudo nginx -T 2>/dev/null | grep -E 'listen 443|ssl_certificate' | head -20
+
+# 3) Did Let’s Encrypt issue a cert?
+sudo certbot certificates
+```
+
+- If **step 1 is empty** and **step 3 shows no certificate**, run `infra/enable-tls-certbot.sh` (with `CERTBOT_EMAIL`) or interactive `sudo certbot --nginx -d …` and fix any error in `/var/log/letsencrypt/letsencrypt.log`.
+- **Firewall:** Ubuntu UFW should allow 443 (`sudo ufw status`; use `sudo ufw allow 443/tcp` or `sudo ufw allow 'Nginx Full'`). Also open **TCP 443** in your **hosting panel** (cloud “firewall” / security group) if the provider has one — HTTP can work while 443 is still blocked there.
+- **DNS:** `dig +short burqan.store A` and `dig +short api.burqan.store A` must return **this server’s IPv4**. If you have **AAAA** (IPv6) records, they must point to this box too; a wrong AAAA often breaks HTTPS for some networks while HTTP “works” over IPv4.
+- After certbot edits nginx, always: `sudo nginx -t && sudo systemctl reload nginx`.
+
 ## Env overrides (optional)
 
 ```bash
