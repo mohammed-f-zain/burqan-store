@@ -80,13 +80,24 @@ bash /var/www/burqan-store/infra/bootstrap-burqan-vps.sh
 
 The script installs Node 20, nginx, PostgreSQL, pm2, UFW; creates DB/user `burqan`; clones the repo (default `https://github.com/mohammed-f-zain/burqan-store.git`); writes `packages/api/.env` once; migrates, seeds, builds API + dashboard; configures nginx; starts pm2.
 
-**TLS:**
+**TLS (HTTPS):** DNS for `burqan.store`, `www.burqan.store`, and `api.burqan.store` must point to this server **before** you run certbot.
+
+**Option A — scripted (recommended):** on the VPS, set your email and run:
 
 ```bash
-certbot --nginx -d burqan.store -d www.burqan.store -d api.burqan.store
+export CERTBOT_EMAIL='your-real-email@example.com'
+bash /var/www/burqan-store/infra/enable-tls-certbot.sh
 ```
 
-Use a real email when certbot asks.
+Optional: `DOMAIN_ROOT=burqan.store DOMAIN_API=api.burqan.store` (same defaults).
+
+**Option B — interactive:**
+
+```bash
+sudo certbot --nginx -d burqan.store -d www.burqan.store -d api.burqan.store
+```
+
+Use a real email when certbot asks. After success, **renewal** is usually enabled automatically (`certbot.timer`). Test with: `sudo certbot renew --dry-run`.
 
 ## Env overrides (optional)
 

@@ -128,5 +128,7 @@ ufw --force enable || true
 
 log "Done."
 log "Next: obtain TLS with certbot, e.g.:"
-log "  certbot --nginx -d ${DOMAIN_ROOT} -d www.${DOMAIN_ROOT} -d ${DOMAIN_API}"
+log "  export CERTBOT_EMAIL='you@example.com'"
+log "  bash ${DEPLOY_PATH}/infra/enable-tls-certbot.sh"
+log "  # or: certbot --nginx -d ${DOMAIN_ROOT} -d www.${DOMAIN_ROOT} -d ${DOMAIN_API}"
 log "Super admin (if seed defaults): check packages/api seed / SEED_* env — then change password after login."
