@@ -17,6 +17,35 @@ Add **repository secrets**: repo → **Settings** → **Secrets and variables** 
 | `VPS_SSH_KEY` | Full `-----BEGIN … PRIVATE KEY-----` … `-----END …` block | **Private** key whose **public** key is in `~/.ssh/authorized_keys` on the server. This action does **not** use SSH passwords. |
 | `DEPLOY_PATH` | `/var/www/burqan-store` | Path to the git clone on the VPS |
 
+### If Actions fails: `unable to authenticate … no supported methods remain`
+
+That message means the runner reached your host over SSH, but **no public key you offered was accepted**. The Action only uses **`VPS_SSH_KEY`** (no password). Fix it on the server side:
+
+1. **`VPS_USER` must be the account whose `authorized_keys` you edit.** If the secret says `deploy`, the public key must be in `/home/deploy/.ssh/authorized_keys`, not only in `root`.
+
+2. **The public key on the server must be the pair of the private key in `VPS_SSH_KEY`.** On any machine that has the **same** private key file you pasted into GitHub (saved locally as `key.pem` for this check only):
+
+   ```bash
+   ssh-keygen -lf key.pem          # fingerprint
+   ssh-keygen -y -f key.pem        # prints the ONE-line public key — must appear verbatim in authorized_keys
+   ```
+
+3. **On the VPS** (use your host’s web console / recovery login if normal SSH still fails):
+
+   ```bash
+   mkdir -p ~/.ssh && chmod 700 ~/.ssh
+   nano ~/.ssh/authorized_keys     # paste the single ssh-ed25519 or ssh-rsa line from step 2
+   chmod 600 ~/.ssh/authorized_keys
+   ```
+
+4. **Test from your laptop** before re-running the workflow (use the same private key file):
+
+   ```bash
+   ssh -i ./key.pem -o IdentitiesOnly=yes "${VPS_USER}@${VPS_HOST}" 'echo ok'
+   ```
+
+5. **Common mistakes:** private key pasted into GitHub without the first/last line (`-----BEGIN` / `-----END`); extra spaces; only the `.pub` file was pasted into the secret (wrong — the secret must be the **private** key); key was created with a **passphrase** — then `appleboy/ssh-action` needs a `passphrase` input wired to another secret (see [ssh-action](https://github.com/appleboy/ssh-action) README).
+
 Generate a deploy key (on your Mac):
 
 ```bash

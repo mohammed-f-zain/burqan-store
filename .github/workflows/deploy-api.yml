@@ -6,6 +6,8 @@ name: Deploy Burqan API
 #   VPS_SSH_KEY   — private key PEM (password auth is not used here)
 #   DEPLOY_PATH   — e.g. /var/www/burqan-store
 # Optional: VPS_SSH_PORT if not 22 (not wired below; add `port:` to ssh-action if needed)
+# If deploy fails with "unable to authenticate … no supported methods remain", the public key
+# for VPS_SSH_KEY is missing from ~/.ssh/authorized_keys for VPS_USER — see infra/DEPLOY_VPS.md
 
 on:
   push:
