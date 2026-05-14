@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { DatabaseError } from "pg";
 import { z } from "zod";
 
 import { imageUpload } from "../lib/uploadConfig.js";
@@ -10,6 +11,16 @@ import { signAdminToken } from "../utils/jwt.js";
 import { optionalStoredImagePathNullableSchema, optionalStoredImagePathSchema } from "../utils/storedImagePath.js";
 
 const router = Router();
+
+/** URL-safe role slug: lowercase, a-z, 0-9, hyphens only. */
+function normalizeRoleSlug(input: string): string {
+  return input
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -187,10 +198,29 @@ router.get(
 );
 
 const roleSchema = z.object({
-  name: z.string().min(2),
-  slug: z.string().min(2).regex(/^[a-z0-9-]+$/),
+  name: z.string().trim().min(2).max(120),
+  slug: z
+    .string()
+    .trim()
+    .min(1)
+    .transform((s) => normalizeRoleSlug(s))
+    .pipe(z.string().min(2).max(120).regex(/^[a-z0-9-]+$/)),
   permissions: z.array(z.string()).default([]),
 });
+
+const rolePatchSchema = z.preprocess((raw) => {
+  if (!raw || typeof raw !== "object") return raw;
+  const o = { ...(raw as Record<string, unknown>) };
+  if (typeof o.slug === "string") {
+    const n = normalizeRoleSlug(o.slug);
+    o.slug = n.length === 0 ? undefined : n;
+  }
+  return o;
+}, z.object({
+  name: z.string().trim().min(2).max(120).optional(),
+  slug: z.string().min(2).max(120).regex(/^[a-z0-9-]+$/).optional(),
+  permissions: z.array(z.string()).optional(),
+}));
 
 router.get(
   "/roles",
@@ -222,16 +252,13 @@ router.post(
       );
       res.status(201).json({ role: rows[0] });
     } catch (e) {
+      if (e instanceof DatabaseError && e.code === "23505") {
+        return res.status(409).json({ error: "هذا المعرّف (slug) مستخدم بالفعل" });
+      }
       next(e);
     }
   }
 );
-
-const rolePatchSchema = z.object({
-  name: z.string().min(2).optional(),
-  slug: z.string().min(2).regex(/^[a-z0-9-]+$/).optional(),
-  permissions: z.array(z.string()).optional(),
-});
 
 router.patch(
   "/roles/:id",
@@ -265,6 +292,9 @@ router.patch(
       if (!rows[0]) throw new HttpError(404, "Role not found");
       res.json({ role: rows[0] });
     } catch (e) {
+      if (e instanceof DatabaseError && e.code === "23505") {
+        return res.status(409).json({ error: "هذا المعرّف (slug) مستخدم بالفعل" });
+      }
       next(e);
     }
   }

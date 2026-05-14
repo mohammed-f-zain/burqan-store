@@ -61,6 +61,7 @@ export const ar = {
     createTitle: "إنشاء دور",
     name: "اسم الدور",
     slug: "المعرّف (إنجليزي صغير)",
+    slugHint: "أحرف إنجليزية صغيرة وأرقام وشرطات فقط. مثال: sales-manager. يُطبَّع المدخل تلقائياً.",
     perms: "الصلاحيات",
     createBtn: "إنشاء الدور",
     listTitle: "الأدوار الحالية",
@@ -78,6 +79,8 @@ export const ar = {
     updated: "تم تحديث الدور.",
     deleted: "تم الحذف.",
     loadFailed: "فشل تحميل الأدوار.",
+    createFailed: "تعذّر إنشاء الدور.",
+    saveFailed: "تعذّر حفظ الدور.",
   },
 
   admins: {

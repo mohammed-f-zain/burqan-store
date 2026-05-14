@@ -61,6 +61,8 @@ export const en: Messages = {
     createTitle: "Create role",
     name: "Role name",
     slug: "Slug (lowercase)",
+    slugHint:
+      "Use letters, numbers, and hyphens only (e.g. sales-manager). Spaces and capitals are normalized automatically.",
     perms: "Permissions",
     createBtn: "Create role",
     listTitle: "Existing roles",
@@ -78,6 +80,8 @@ export const en: Messages = {
     updated: "Role updated.",
     deleted: "Deleted.",
     loadFailed: "Failed to load roles.",
+    createFailed: "Could not create role.",
+    saveFailed: "Could not save role.",
   },
 
   admins: {

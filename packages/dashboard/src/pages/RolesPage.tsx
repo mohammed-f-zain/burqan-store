@@ -7,6 +7,20 @@ import { PERMISSION_KEYS } from "../constants/permissions";
 import { useClientPagination } from "../hooks/useClientPagination";
 import { useLocale } from "../i18n/LocaleContext";
 
+function pickAxiosErrorMessage(err: unknown, fallback: string): string {
+  if (typeof err !== "object" || err === null || !("response" in err)) return fallback;
+  const data = (err as { response?: { data?: { error?: string; details?: { fieldErrors?: Record<string, string[]> } } } })
+    .response?.data;
+  if (!data?.error) return fallback;
+  const fe = data.details?.fieldErrors;
+  if (fe && typeof fe === "object") {
+    for (const msgs of Object.values(fe)) {
+      if (Array.isArray(msgs) && msgs[0]) return `${data.error} — ${msgs[0]}`;
+    }
+  }
+  return data.error;
+}
+
 type Role = { id: number; name: string; slug: string; permissions: string[] };
 
 export default function RolesPage() {
@@ -38,29 +52,41 @@ export default function RolesPage() {
   async function onCreate(e: FormEvent) {
     e.preventDefault();
     setMsg(null);
-    await api.post("/roles", { name, slug, permissions: selected });
-    setName("");
-    setSlug("");
-    setSelected([]);
-    await load();
-    setMsg(t.roles.created);
+    try {
+      await api.post("/roles", { name, slug, permissions: selected });
+      setName("");
+      setSlug("");
+      setSelected([]);
+      await load();
+      setMsg(t.roles.created);
+    } catch (err) {
+      setMsg(pickAxiosErrorMessage(err, t.roles.createFailed));
+    }
   }
 
   async function saveEdit() {
     if (!editing) return;
     setMsg(null);
-    await api.patch(`/roles/${editing.id}`, { name: editing.name, permissions: editing.permissions });
-    setEditing(null);
-    await load();
-    setMsg(t.roles.updated);
+    try {
+      await api.patch(`/roles/${editing.id}`, { name: editing.name, permissions: editing.permissions });
+      setEditing(null);
+      await load();
+      setMsg(t.roles.updated);
+    } catch (err) {
+      setMsg(pickAxiosErrorMessage(err, t.roles.saveFailed));
+    }
   }
 
   async function remove(id: number) {
     if (!confirm(t.roles.confirmDelete)) return;
     setMsg(null);
-    await api.delete(`/roles/${id}`);
-    await load();
-    setMsg(t.roles.deleted);
+    try {
+      await api.delete(`/roles/${id}`);
+      await load();
+      setMsg(t.roles.deleted);
+    } catch (err) {
+      setMsg(pickAxiosErrorMessage(err, t.roles.saveFailed));
+    }
   }
 
   return (
@@ -68,7 +94,11 @@ export default function RolesPage() {
       <div className="card">
         <h2>{t.roles.title}</h2>
         {msg && (
-          <p className="muted">
+          <p
+            className={
+              msg === t.roles.created || msg === t.roles.updated || msg === t.roles.deleted ? "muted" : "error"
+            }
+          >
             {t.roles.msg} {msg}
           </p>
         )}
@@ -83,6 +113,9 @@ export default function RolesPage() {
                 {t.roles.slug}
                 <input value={slug} onChange={(e) => setSlug(e.target.value)} required />
               </label>
+              <p className="muted small" style={{ marginTop: 4 }}>
+                {t.roles.slugHint}
+              </p>
             </div>
             <div>
               <div className="muted small" style={{ marginBottom: 8 }}>
