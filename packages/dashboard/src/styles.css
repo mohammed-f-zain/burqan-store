@@ -533,6 +533,14 @@ html[dir="ltr"] .lang-switch {
   display: block;
 }
 
+.qr-cell--stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 96px;
+}
+
 html.locale-en body {
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }

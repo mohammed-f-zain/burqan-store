@@ -1,17 +1,23 @@
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
 import { StatusBar } from "expo-status-bar";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  FlatList,
+  KeyboardAvoidingView,
+  Linking,
+  Modal,
+  Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { resolveApiBase } from "./resolveApiBase";
 
@@ -77,6 +83,10 @@ const t = {
   addToCart: "أضف منتجات إلى السلة.",
   photosPermission: "يلزم إذن الوصول إلى الصور.",
   cameraDenied: "يلزم إذن الكاميرا.",
+  cameraLoading: "جاري تجهيز الكاميرا…",
+  cameraPreviewWait: "جاري تشغيل معاينة الكاميرا…",
+  cameraMountError: "تعذّر تشغيل الكاميرا:",
+  openSettings: "فتح إعدادات التطبيق",
   loginFailed: "فشل الدخول",
   qrFailed: "فشل البحث عن الرمز",
   uploadFailed: "فشل رفع الصورة",
@@ -84,6 +94,7 @@ const t = {
   cancelled: "أُلغي",
   storeCreated: (id: number) => `تم إنشاء المتجر #${id}.`,
   currency: "ر.س",
+  dismissMessage: "اضغط لإخفاء الرسالة",
 } as const;
 
 type Area = { id: number; name: string };
@@ -102,6 +113,7 @@ type Product = {
   price: string;
   designation?: string | null;
 };
+type RepOrderRow = { id: string; payment_type: string; total_amount: string; created_at: string };
 
 async function uploadRepImage(apiBase: string, bearer: string, uri: string, mimeType: string): Promise<string> {
   const form = new FormData();
@@ -117,6 +129,17 @@ async function uploadRepImage(apiBase: string, bearer: string, uri: string, mime
 }
 
 export default function App() {
+  const insets = useSafeAreaInsets();
+  const { width: winW, height: winH } = useWindowDimensions();
+  /** Extra space under the Dynamic Island / status bar (larger on iPhone with island). */
+  const scanTopMargin = Platform.OS === "ios" ? 36 : 16;
+  const scanBottomChrome = Math.max(insets.bottom, 16);
+  const scanModalPadding = {
+    paddingTop: insets.top + scanTopMargin,
+    paddingBottom: scanBottomChrome,
+  };
+  const embeddedCameraHeight = Math.max(360, winH - (insets.top + scanTopMargin) - scanBottomChrome);
+
   const [token, setToken] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -125,6 +148,34 @@ export default function App() {
 
   const [mode, setMode] = useState<"home" | "scan" | "register" | "store">("home");
   const [permission, requestPermission] = useCameraPermissions();
+  /** iOS sometimes lags updating `permission` after the user taps Allow — still show CameraView if request() just succeeded. */
+  const [scanPermissionOverride, setScanPermissionOverride] = useState(false);
+  const [cameraPreviewReady, setCameraPreviewReady] = useState(false);
+  /** Mount native camera after the modal is on-screen so layout/size is non-zero (avoids black preview). */
+  const [cameraSessionActive, setCameraSessionActive] = useState(false);
+  /** System QR scanner listener — must not be removed when `launchScanner` promise resolves (that can happen as soon as the UI opens). */
+  const modernBarcodeSubRef = useRef<{ remove: () => void } | null>(null);
+
+  const canUseCamera = Boolean(permission?.granted || scanPermissionOverride);
+
+  useEffect(() => {
+    return () => {
+      modernBarcodeSubRef.current?.remove();
+      modernBarcodeSubRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (mode !== "scan" || !canUseCamera) {
+      setCameraSessionActive(false);
+      setCameraPreviewReady(false);
+      return;
+    }
+    setCameraPreviewReady(false);
+    setCameraSessionActive(false);
+    const t = setTimeout(() => setCameraSessionActive(true), 280);
+    return () => clearTimeout(t);
+  }, [mode, canUseCamera]);
   const [lastScanToken, setLastScanToken] = useState<string | null>(null);
   const [manualToken, setManualToken] = useState("");
   const [areas, setAreas] = useState<Area[]>([]);
@@ -136,6 +187,8 @@ export default function App() {
   const [cart, setCart] = useState<Record<number, number>>({});
   const [paymentType, setPaymentType] = useState<"cash" | "deferred">("cash");
   const [visitNote, setVisitNote] = useState("");
+  const [homeRefreshing, setHomeRefreshing] = useState(false);
+  const [storeRefreshing, setStoreRefreshing] = useState(false);
 
   const headers = useMemo(() => {
     const h: Record<string, string> = { "Content-Type": "application/json" };
@@ -229,7 +282,43 @@ export default function App() {
     }
   }
 
-  async function refreshStoreData(storeId: number) {
+  /** Uses Apple/Google system QR UI when available (reliable on iPhone); otherwise opens in-app camera modal. */
+  async function openQrScanner() {
+    setMessage(null);
+    if (!permission?.granted) {
+      const r = await requestPermission();
+      if (!r.granted) {
+        setMessage(t.cameraDenied);
+        return;
+      }
+      setScanPermissionOverride(true);
+    } else {
+      setScanPermissionOverride(true);
+    }
+
+    if (CameraView.isModernBarcodeScannerAvailable) {
+      modernBarcodeSubRef.current?.remove();
+      modernBarcodeSubRef.current = null;
+
+      const sub = CameraView.onModernBarcodeScanned((ev) => {
+        sub.remove();
+        if (modernBarcodeSubRef.current === sub) modernBarcodeSubRef.current = null;
+        void resolveQr(ev.data);
+      });
+      modernBarcodeSubRef.current = sub;
+
+      void CameraView.launchScanner({ barcodeTypes: ["qr"] }).catch((e) => {
+        if (modernBarcodeSubRef.current === sub) modernBarcodeSubRef.current = null;
+        sub.remove();
+        setMessage(e instanceof Error ? e.message : String(e));
+      });
+      return;
+    }
+
+    setMode("scan");
+  }
+
+  const refreshStoreData = useCallback(async (storeId: number) => {
     try {
       const [v, o, p] = await Promise.all([
         apiGet(`/api/v1/rep/stores/${storeId}/visits`),
@@ -242,7 +331,24 @@ export default function App() {
     } catch {
       /* ignore */
     }
-  }
+  }, [apiGet]);
+
+  const onHomeRefresh = useCallback(async () => {
+    if (!token) return;
+    setHomeRefreshing(true);
+    try {
+      const a = await fetch(`${API_BASE}/api/v1/rep/areas`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const aj = await a.json();
+      if (a.ok) setAreas(aj.areas ?? []);
+      if (activeStore) await refreshStoreData(activeStore.id);
+    } catch {
+      /* ignore */
+    } finally {
+      setHomeRefreshing(false);
+    }
+  }, [token, activeStore, refreshStoreData]);
 
   async function logVisit() {
     if (!activeStore) return;
@@ -305,57 +411,81 @@ export default function App() {
 
   if (!token) {
     return (
-      <View style={styles.center}>
-        <StatusBar style="light" />
-        <Text style={styles.title}>{t.appTitle}</Text>
-        <Text style={styles.sub}>{__DEV__ ? t.loginSub : t.loginSubProd}</Text>
-        <Text style={[styles.muted, { fontSize: 11, marginTop: 6, textAlign: "center" }]} selectable>
-          API: {API_BASE}
-        </Text>
-        <TextInput style={styles.input} autoCapitalize="none" value={email} onChangeText={setEmail} placeholder={t.email} />
-        <TextInput style={styles.input} secureTextEntry value={password} onChangeText={setPassword} placeholder={t.password} />
-        <Pressable style={styles.primary} onPress={login} disabled={busy}>
-          {busy ? <ActivityIndicator color="#04121a" /> : <Text style={styles.primaryText}>{t.signIn}</Text>}
-        </Pressable>
-        {message && <Text style={styles.error}>{message}</Text>}
-      </View>
+      <SafeAreaView style={{ flex: 1, backgroundColor: bg }} edges={["top", "bottom", "left", "right"]}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          <View style={styles.center}>
+            <StatusBar style="light" />
+            <Text style={styles.title}>{t.appTitle}</Text>
+            <Text style={styles.sub}>{__DEV__ ? t.loginSub : t.loginSubProd}</Text>
+            <Text style={[styles.muted, { fontSize: 11, marginTop: 6, textAlign: "center" }]} selectable>
+              API: {API_BASE}
+            </Text>
+            <TextInput style={styles.input} autoCapitalize="none" value={email} onChangeText={setEmail} placeholder={t.email} />
+            <TextInput style={styles.input} secureTextEntry value={password} onChangeText={setPassword} placeholder={t.password} />
+            <Pressable style={styles.primary} onPress={login} disabled={busy}>
+              {busy ? <ActivityIndicator color="#04121a" /> : <Text style={styles.primaryText}>{t.signIn}</Text>}
+            </Pressable>
+            {message ? (
+              <Pressable onPress={() => setMessage(null)} style={styles.messageDismiss}>
+                <Text style={styles.error}>{message}</Text>
+                <Text style={styles.dismissHint}>{t.dismissMessage}</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
     );
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
-      <StatusBar style="light" />
-      <View style={styles.header}>
-        <Text style={styles.title}>{t.appTitle}</Text>
-        <Pressable
-          onPress={() => {
-            setToken(null);
-            setActiveStore(null);
-            setMode("home");
-            setMessage(null);
-          }}
+    <SafeAreaView style={{ flex: 1, backgroundColor: bg }} edges={["top", "left", "right"]}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <StatusBar style="light" />
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={[styles.page, { paddingBottom: insets.bottom + 28 }]}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={
+            mode === "home" ? (
+              <RefreshControl refreshing={homeRefreshing} onRefresh={onHomeRefresh} tintColor={accent} colors={[accent]} />
+            ) : mode === "store" && activeStore ? (
+              <RefreshControl
+                refreshing={storeRefreshing}
+                onRefresh={async () => {
+                  setStoreRefreshing(true);
+                  try {
+                    await refreshStoreData(activeStore.id);
+                  } finally {
+                    setStoreRefreshing(false);
+                  }
+                }}
+                tintColor={accent}
+                colors={[accent]}
+              />
+            ) : undefined
+          }
         >
-          <Text style={styles.link}>{t.signOut}</Text>
-        </Pressable>
-      </View>
+          <View style={styles.header}>
+            <Text style={styles.title}>{t.appTitle}</Text>
+            <Pressable
+              onPress={() => {
+                modernBarcodeSubRef.current?.remove();
+                modernBarcodeSubRef.current = null;
+                setToken(null);
+                setActiveStore(null);
+                setMode("home");
+                setMessage(null);
+              }}
+            >
+              <Text style={styles.link}>{t.signOut}</Text>
+            </Pressable>
+          </View>
 
       {mode === "home" && (
         <>
           <View style={styles.card}>
             <Text style={styles.cardTitle}>{t.scanTitle}</Text>
-            <Pressable
-              style={styles.secondary}
-              onPress={async () => {
-                if (!permission?.granted) {
-                  const r = await requestPermission();
-                  if (!r.granted) {
-                    setMessage(t.cameraDenied);
-                    return;
-                  }
-                }
-                setMode("scan");
-              }}
-            >
+            <Pressable style={styles.secondary} onPress={() => void openQrScanner()}>
               <Text style={styles.secondaryText}>{t.openScanner}</Text>
             </Pressable>
             <Text style={styles.label}>{t.manualLabel}</Text>
@@ -374,22 +504,6 @@ export default function App() {
             </Pressable>
           )}
         </>
-      )}
-
-      {mode === "scan" && permission?.granted && (
-        <View style={styles.scanner}>
-          <CameraView
-            style={StyleSheet.absoluteFill}
-            facing="back"
-            barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-            onBarcodeScanned={({ data }) => {
-              void resolveQr(data);
-            }}
-          />
-          <Pressable style={styles.closeScan} onPress={() => setMode("home")}>
-            <Text style={styles.closeScanText}>{t.close}</Text>
-          </Pressable>
-        </View>
       )}
 
       {mode === "register" && lastScanToken && token && (
@@ -456,67 +570,62 @@ export default function App() {
           )}
 
           {storeTab === "visits" && (
-            <FlatList
-              data={visits}
-              keyExtractor={(item) => String(item.id)}
-              style={{ marginTop: 12, maxHeight: 320 }}
-              ListEmptyComponent={<Text style={styles.muted}>{t.noVisits}</Text>}
-              renderItem={({ item }) => (
-                <View style={styles.listRow}>
-                  <Text style={styles.body}>{new Date(item.visited_at).toLocaleString("ar-SA")}</Text>
-                  {item.note ? <Text style={styles.muted}>{item.note}</Text> : null}
-                </View>
+            <View style={{ marginTop: 12 }}>
+              {visits.length === 0 ? (
+                <Text style={styles.muted}>{t.noVisits}</Text>
+              ) : (
+                visits.map((item) => (
+                  <View key={item.id} style={styles.listRow}>
+                    <Text style={styles.body}>{new Date(item.visited_at).toLocaleString("ar-SA")}</Text>
+                    {item.note ? <Text style={styles.muted}>{item.note}</Text> : null}
+                  </View>
+                ))
               )}
-            />
+            </View>
           )}
 
           {storeTab === "orders" && (
-            <FlatList
-              data={orders as { id: string; payment_type: string; total_amount: string; created_at: string }[]}
-              keyExtractor={(item) => String(item.id)}
-              style={{ marginTop: 12, maxHeight: 360 }}
-              ListEmptyComponent={<Text style={styles.muted}>{t.noOrders}</Text>}
-              renderItem={({ item }) => (
-                <View style={styles.listRow}>
-                  <Text style={styles.body}>
-                    #{item.id} · {item.payment_type} · {item.total_amount}
-                  </Text>
-                  <Text style={styles.muted}>{new Date(item.created_at).toLocaleString("ar-SA")}</Text>
-                </View>
+            <View style={{ marginTop: 12 }}>
+              {(orders as RepOrderRow[]).length === 0 ? (
+                <Text style={styles.muted}>{t.noOrders}</Text>
+              ) : (
+                (orders as RepOrderRow[]).map((item) => (
+                  <View key={String(item.id)} style={styles.listRow}>
+                    <Text style={styles.body}>
+                      #{item.id} · {item.payment_type} · {item.total_amount}
+                    </Text>
+                    <Text style={styles.muted}>{new Date(item.created_at).toLocaleString("ar-SA")}</Text>
+                  </View>
+                ))
               )}
-            />
+            </View>
           )}
 
           {storeTab === "sell" && (
             <View style={{ marginTop: 12 }}>
               <Text style={styles.muted}>{t.sellHint}</Text>
-              <FlatList
-                data={products}
-                keyExtractor={(item) => String(item.id)}
-                style={{ maxHeight: 280 }}
-                renderItem={({ item }) => {
-                  const q = cart[item.id] ?? 0;
-                  return (
-                    <View style={styles.productRow}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.body}>{item.name}</Text>
-                        <Text style={styles.muted}>
-                          {item.price} {t.currency}
-                        </Text>
-                      </View>
-                      <View style={styles.qtyRow}>
-                        <Pressable style={styles.qtyBtn} onPress={() => setQty(item.id, -1)}>
-                          <Text style={styles.qtyBtnText}>−</Text>
-                        </Pressable>
-                        <Text style={styles.qtyNum}>{q}</Text>
-                        <Pressable style={styles.qtyBtn} onPress={() => setQty(item.id, 1)}>
-                          <Text style={styles.qtyBtnText}>+</Text>
-                        </Pressable>
-                      </View>
+              {products.map((item) => {
+                const q = cart[item.id] ?? 0;
+                return (
+                  <View key={item.id} style={styles.productRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.body}>{item.name}</Text>
+                      <Text style={styles.muted}>
+                        {item.price} {t.currency}
+                      </Text>
                     </View>
-                  );
-                }}
-              />
+                    <View style={styles.qtyRow}>
+                      <Pressable style={styles.qtyBtn} onPress={() => setQty(item.id, -1)}>
+                        <Text style={styles.qtyBtnText}>−</Text>
+                      </Pressable>
+                      <Text style={styles.qtyNum}>{q}</Text>
+                      <Pressable style={styles.qtyBtn} onPress={() => setQty(item.id, 1)}>
+                        <Text style={styles.qtyBtnText}>+</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                );
+              })}
               <Text style={styles.label}>{t.payment}</Text>
               <View style={styles.rowBetween}>
                 <Pressable style={[styles.secondary, paymentType === "cash" && styles.tabOn]} onPress={() => setPaymentType("cash")}>
@@ -537,13 +646,95 @@ export default function App() {
         </View>
       )}
 
-      {busy && (
-        <View style={styles.busy}>
-          <ActivityIndicator />
-        </View>
-      )}
-      {message && mode !== "scan" && <Text style={styles.error}>{message}</Text>}
-    </ScrollView>
+      {message && mode !== "scan" ? (
+        <Pressable onPress={() => setMessage(null)} style={styles.messageDismiss}>
+          <Text style={styles.error}>{message}</Text>
+          <Text style={styles.dismissHint}>{t.dismissMessage}</Text>
+        </Pressable>
+      ) : null}
+      </ScrollView>
+        <Modal
+          visible={mode === "scan"}
+          animationType="slide"
+          presentationStyle="fullScreen"
+          onRequestClose={() => {
+            setMode("home");
+            setScanPermissionOverride(false);
+          }}
+        >
+          <View style={[styles.scannerModal, scanModalPadding]}>
+            {permission == null && !scanPermissionOverride ? (
+              <View style={styles.scannerCenter}>
+                <ActivityIndicator size="large" color={accent} />
+                <Text style={styles.scannerHint}>{t.cameraLoading}</Text>
+              </View>
+            ) : !permission?.granted && !scanPermissionOverride ? (
+              <View style={styles.scannerCenter}>
+                <Text style={styles.scannerHint}>{t.cameraDenied}</Text>
+                <Pressable style={styles.primary} onPress={() => void Linking.openSettings()}>
+                  <Text style={styles.primaryText}>{t.openSettings}</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.secondary, { marginTop: 12 }]}
+                  onPress={() => {
+                    setMode("home");
+                    setScanPermissionOverride(false);
+                  }}
+                >
+                  <Text style={styles.secondaryText}>{t.close}</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View style={styles.scanner}>
+                {!cameraSessionActive ? (
+                  <View style={styles.cameraWarmup}>
+                    <ActivityIndicator size="large" color="#fff" />
+                    <Text style={styles.cameraWarmupText}>{t.cameraPreviewWait}</Text>
+                  </View>
+                ) : (
+                  <>
+                    <CameraView
+                      style={{ width: winW, height: embeddedCameraHeight }}
+                      facing="back"
+                      {...(Platform.OS === "ios" ? { active: true } : {})}
+                      {...(Platform.OS === "android" ? { ratio: "16:9" as const } : {})}
+                      barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+                      onCameraReady={() => setCameraPreviewReady(true)}
+                      onMountError={(e) => {
+                        setMessage(`${t.cameraMountError} ${e.message}`);
+                      }}
+                      onBarcodeScanned={({ data }) => {
+                        void resolveQr(data);
+                      }}
+                    />
+                    {!cameraPreviewReady && (
+                      <View style={styles.cameraWarmup}>
+                        <ActivityIndicator size="large" color="#fff" />
+                        <Text style={styles.cameraWarmupText}>{t.cameraPreviewWait}</Text>
+                      </View>
+                    )}
+                  </>
+                )}
+                <Pressable
+                  style={styles.closeScan}
+                  onPress={() => {
+                    setMode("home");
+                    setScanPermissionOverride(false);
+                  }}
+                >
+                  <Text style={styles.closeScanText}>{t.close}</Text>
+                </Pressable>
+              </View>
+            )}
+          </View>
+        </Modal>
+        {busy ? (
+          <View style={styles.busyOverlay} pointerEvents="auto">
+            <ActivityIndicator size="large" color={accent} />
+          </View>
+        ) : null}
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
@@ -719,11 +910,23 @@ const styles = StyleSheet.create({
   error: { color: "#fb7185", marginTop: 10, textAlign: "right" },
   muted: { color: muted, marginTop: 8, fontSize: 13, textAlign: "right" },
   link: { color: accent, fontWeight: "700" },
-  scanner: { height: 400, borderRadius: 16, overflow: "hidden", marginTop: 12, borderColor: line, borderWidth: 1 },
+  scannerModal: { flex: 1, backgroundColor: "#000" },
+  scannerCenter: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24 },
+  scannerHint: { color: "#e8eefc", marginTop: 16, textAlign: "center", fontSize: 15 },
+  scanner: { flex: 1, width: "100%", backgroundColor: "#000" },
+  cameraWarmup: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 10,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.35)",
+  },
+  cameraWarmupText: { color: "#fff", marginTop: 14, fontSize: 15, textAlign: "center", paddingHorizontal: 24 },
   closeScan: {
     position: "absolute",
     right: 12,
     top: 12,
+    zIndex: 20,
     backgroundColor: "rgba(0,0,0,0.55)",
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -731,6 +934,15 @@ const styles = StyleSheet.create({
   },
   closeScanText: { color: "white", fontWeight: "800" },
   busy: { padding: 10 },
+  busyOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(11,18,32,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 40,
+  },
+  messageDismiss: { marginTop: 12, paddingVertical: 4 },
+  dismissHint: { color: muted, fontSize: 12, marginTop: 4, textAlign: "right" },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
   tabs: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
   tab: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 999, borderWidth: 1, borderColor: line },

@@ -204,7 +204,7 @@ export const en: Messages = {
     colStore: "Store",
     colArea: "Area",
     colOwner: "Owner",
-    colQr: "Card token",
+    colQr: "Store QR",
     colDeferred: "Deferred",
     open: "Open",
     closed: "Closed",

@@ -1,10 +1,12 @@
 import { FormEvent, useEffect, useState } from "react";
+import { QRCodeSVG } from "qrcode.react";
 
 import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import PaginationBar from "../components/PaginationBar";
 import { useClientPagination } from "../hooks/useClientPagination";
 import { useLocale } from "../i18n/LocaleContext";
+import { qrPayload } from "../utils/qrPayload";
 
 type Store = {
   id: number;
@@ -94,7 +96,12 @@ export default function StoresPage() {
                   </td>
                   <td>{s.area_name}</td>
                   <td>{s.owner_name}</td>
-                  <td className="mono small">{s.qr_public_token.slice(0, 12)}…</td>
+                  <td className="qr-cell qr-cell--stack">
+                    <QRCodeSVG value={qrPayload(s.qr_public_token)} size={88} level="M" includeMargin={false} />
+                    <span className="muted small mono break-all" title={s.qr_public_token}>
+                      {s.qr_public_token.slice(0, 10)}…
+                    </span>
+                  </td>
                   <td>
                     {can("stores.deferred_toggle") ? (
                       <button type="button" className={s.deferred_payment_enabled ? "pill on" : "pill off"} onClick={() => void toggleDeferred(s)}>

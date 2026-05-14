@@ -5,14 +5,9 @@ import { api } from "../api";
 import PaginationBar from "../components/PaginationBar";
 import { useClientPagination } from "../hooks/useClientPagination";
 import { useLocale } from "../i18n/LocaleContext";
+import { qrPayload } from "../utils/qrPayload";
 
 type Item = { id: string; publicToken: string; createdAt: string };
-
-function qrPayload(publicToken: string): string {
-  const base = import.meta.env.VITE_QR_PAYLOAD_BASE_URL?.trim().replace(/\/$/, "");
-  if (base) return `${base}/r/${encodeURIComponent(publicToken)}`;
-  return publicToken;
-}
 
 export default function QrPoolPage() {
   const { t } = useLocale();
