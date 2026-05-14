@@ -430,7 +430,7 @@ router.get(
   }
 );
 
-const areaSchema = z.object({ name: z.string().min(2) });
+const areaSchema = z.object({ name: z.string().trim().min(2).max(255) });
 
 router.post(
   "/areas",
@@ -444,6 +444,56 @@ router.post(
         [body.name]
       );
       res.status(201).json({ area: rows[0] });
+    } catch (e) {
+      if (e instanceof DatabaseError && e.code === "23505") {
+        return res.status(409).json({ error: "اسم المنطقة مستخدم بالفعل" });
+      }
+      next(e);
+    }
+  }
+);
+
+router.patch(
+  "/areas/:id",
+  adminAuthMiddleware,
+  requireAdminPermission("areas.write"),
+  async (req, res, next) => {
+    try {
+      const id = z.coerce.number().int().positive().parse(req.params.id);
+      const body = areaSchema.parse(req.body);
+      const { rows } = await query(
+        `UPDATE areas SET name = $1 WHERE id = $2 RETURNING id, name, created_at`,
+        [body.name, id]
+      );
+      if (!rows[0]) throw new HttpError(404, "المنطقة غير موجودة");
+      res.json({ area: rows[0] });
+    } catch (e) {
+      if (e instanceof DatabaseError && e.code === "23505") {
+        return res.status(409).json({ error: "اسم المنطقة مستخدم بالفعل" });
+      }
+      next(e);
+    }
+  }
+);
+
+router.delete(
+  "/areas/:id",
+  adminAuthMiddleware,
+  requireAdminPermission("areas.write"),
+  async (req, res, next) => {
+    try {
+      const id = z.coerce.number().int().positive().parse(req.params.id);
+      const { rows: cnt } = await query<{ c: string }>(
+        `SELECT COUNT(*)::text AS c FROM stores WHERE area_id = $1`,
+        [id]
+      );
+      const n = parseInt(cnt[0]?.c ?? "0", 10);
+      if (n > 0) {
+        return res.status(409).json({ error: "لا يمكن حذف المنطقة لوجود متاجر مرتبطة بها" });
+      }
+      const del = await query(`DELETE FROM areas WHERE id = $1 RETURNING id`, [id]);
+      if (!del.rows[0]) throw new HttpError(404, "المنطقة غير موجودة");
+      res.json({ ok: true });
     } catch (e) {
       next(e);
     }

@@ -106,8 +106,22 @@ export const en: Messages = {
 
   areas: {
     title: "Areas",
+    msg: "Message:",
     newLabel: "New area name",
     add: "Add",
+    colName: "Name",
+    colActions: "Actions",
+    edit: "Edit",
+    save: "Save",
+    cancel: "Cancel",
+    delete: "Delete",
+    confirmDelete: "Delete this area? It must not be linked to any store.",
+    updated: "Area updated.",
+    deleted: "Area deleted.",
+    added: "Area added.",
+    addFailed: "Could not add area.",
+    saveFailed: "Could not save area.",
+    deleteFailed: "Could not delete area.",
   },
 
   products: {

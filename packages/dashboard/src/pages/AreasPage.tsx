@@ -5,6 +5,7 @@ import { useAuth } from "../auth/AuthContext";
 import PaginationBar from "../components/PaginationBar";
 import { useClientPagination } from "../hooks/useClientPagination";
 import { useLocale } from "../i18n/LocaleContext";
+import { pickAxiosErrorMessage } from "../lib/apiError";
 
 type Area = { id: number; name: string };
 
@@ -13,6 +14,9 @@ export default function AreasPage() {
   const { t } = useLocale();
   const [areas, setAreas] = useState<Area[]>([]);
   const [name, setName] = useState("");
+  const [msg, setMsg] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editName, setEditName] = useState("");
 
   const areaPgn = useClientPagination(areas);
 
@@ -22,25 +26,81 @@ export default function AreasPage() {
   }
 
   useEffect(() => {
-    void load();
+    void load().catch(() => setMsg(t.areas.addFailed));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- initial load only
   }, []);
 
   async function onAdd(e: FormEvent) {
     e.preventDefault();
-    await api.post("/areas", { name });
-    setName("");
-    await load();
+    setMsg(null);
+    try {
+      await api.post("/areas", { name: name.trim() });
+      setName("");
+      await load();
+      setMsg(t.areas.added);
+    } catch (err) {
+      setMsg(pickAxiosErrorMessage(err, t.areas.addFailed));
+    }
   }
+
+  function startEdit(a: Area) {
+    setMsg(null);
+    setEditingId(a.id);
+    setEditName(a.name);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditName("");
+  }
+
+  async function saveEdit() {
+    if (editingId == null) return;
+    setMsg(null);
+    try {
+      await api.patch(`/areas/${editingId}`, { name: editName.trim() });
+      setEditingId(null);
+      setEditName("");
+      await load();
+      setMsg(t.areas.updated);
+    } catch (err) {
+      setMsg(pickAxiosErrorMessage(err, t.areas.saveFailed));
+    }
+  }
+
+  async function remove(id: number) {
+    if (!confirm(t.areas.confirmDelete)) return;
+    setMsg(null);
+    try {
+      await api.delete(`/areas/${id}`);
+      if (editingId === id) cancelEdit();
+      await load();
+      setMsg(t.areas.deleted);
+    } catch (err) {
+      setMsg(pickAxiosErrorMessage(err, t.areas.deleteFailed));
+    }
+  }
+
+  const write = can("areas.write");
 
   return (
     <div className="grid">
       <div className="card">
         <h2>{t.areas.title}</h2>
-        {can("areas.write") && (
+        {msg && (
+          <p
+            className={
+              msg === t.areas.updated || msg === t.areas.deleted || msg === t.areas.added ? "muted" : "error"
+            }
+          >
+            {t.areas.msg} {msg}
+          </p>
+        )}
+        {write && (
           <form onSubmit={onAdd} className="row spread" style={{ gap: 12, alignItems: "flex-end" }}>
             <label style={{ flex: 1 }}>
               {t.areas.newLabel}
-              <input value={name} onChange={(e) => setName(e.target.value)} required />
+              <input value={name} onChange={(e) => setName(e.target.value)} required minLength={2} />
             </label>
             <button className="primary" type="submit">
               {t.areas.add}
@@ -63,13 +123,59 @@ export default function AreasPage() {
             onPageSizeChange={areaPgn.setPageSize}
           />
         )}
-        <ul className="simple-list">
-          {areaPgn.slice.map((a) => (
-            <li key={a.id}>
-              <strong>{a.name}</strong> <span className="muted small">#{a.id}</span>
-            </li>
-          ))}
-        </ul>
+        <div className="table-wrap" style={{ marginTop: areas.length > 0 ? 12 : 0 }}>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>{t.areas.colName}</th>
+                {write && <th>{t.areas.colActions}</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {areaPgn.slice.map((a) => (
+                <tr key={a.id}>
+                  <td>
+                    {editingId === a.id ? (
+                      <input
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        minLength={2}
+                        style={{ width: "100%", maxWidth: 320 }}
+                      />
+                    ) : (
+                      <>
+                        <strong>{a.name}</strong> <span className="muted small">#{a.id}</span>
+                      </>
+                    )}
+                  </td>
+                  {write && (
+                    <td>
+                      {editingId === a.id ? (
+                        <div className="row spread" style={{ gap: 8, flexWrap: "wrap" }}>
+                          <button type="button" className="primary" onClick={() => void saveEdit()}>
+                            {t.areas.save}
+                          </button>
+                          <button type="button" className="ghost" onClick={cancelEdit}>
+                            {t.areas.cancel}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="row spread" style={{ gap: 8, flexWrap: "wrap" }}>
+                          <button type="button" className="ghost" onClick={() => startEdit(a)}>
+                            {t.areas.edit}
+                          </button>
+                          <button type="button" className="ghost danger" onClick={() => void remove(a.id)}>
+                            {t.areas.delete}
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

@@ -105,8 +105,22 @@ export const ar = {
 
   areas: {
     title: "المناطق",
+    msg: "رسالة:",
     newLabel: "اسم منطقة جديدة",
     add: "إضافة",
+    colName: "الاسم",
+    colActions: "إجراءات",
+    edit: "تعديل",
+    save: "حفظ",
+    cancel: "إلغاء",
+    delete: "حذف",
+    confirmDelete: "حذف هذه المنطقة؟ يجب ألا تكون مرتبطة بأي متجر.",
+    updated: "تم تحديث المنطقة.",
+    deleted: "تم حذف المنطقة.",
+    added: "تمت إضافة المنطقة.",
+    addFailed: "تعذّر إضافة المنطقة.",
+    saveFailed: "تعذّر حفظ المنطقة.",
+    deleteFailed: "تعذّر حذف المنطقة.",
   },
 
   products: {
