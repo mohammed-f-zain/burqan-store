@@ -8,7 +8,7 @@ import ThemeToggle from "../components/ThemeToggle";
 import { useLocale } from "../i18n/LocaleContext";
 
 export default function Login() {
-  const nav = useNavigate();
+  const navigate = useNavigate();
   const { t } = useLocale();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -22,7 +22,7 @@ export default function Login() {
     try {
       const { data } = await api.post("/auth/login", { email, password });
       localStorage.setItem("burqan_admin_token", data.token);
-      nav("/app", { replace: true });
+      navigate("/app", { replace: true });
       window.location.reload();
     } catch {
       setErr(t.login.error);
