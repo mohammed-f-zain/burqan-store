@@ -12,6 +12,12 @@ export const en: Messages = {
     en: "English",
   },
 
+  theme: {
+    switch: "Theme",
+    light: "Light",
+    dark: "Dark",
+  },
+
   nav: {
     overview: "Home",
     roles: "Roles & permissions",
@@ -22,6 +28,7 @@ export const en: Messages = {
     stores: "Stores",
     orders: "Orders",
     qrPool: "Card QR codes",
+    account: "Account",
   },
 
   login: {
@@ -179,6 +186,23 @@ export const en: Messages = {
     unit: "Unit price",
     line: "Line",
     close: "Close",
+  },
+
+  account: {
+    title: "Account",
+    profileTitle: "Profile",
+    email: "Email",
+    fullName: "Full name",
+    saveProfile: "Save profile",
+    profileSaved: "Profile updated.",
+    passwordTitle: "Change password",
+    currentPassword: "Current password",
+    newPassword: "New password (min 10 characters)",
+    confirmPassword: "Confirm new password",
+    savePassword: "Update password",
+    passwordSaved: "Password changed.",
+    passwordMismatch: "New passwords do not match.",
+    saveFailed: "Could not save changes.",
   },
 
   owner: {

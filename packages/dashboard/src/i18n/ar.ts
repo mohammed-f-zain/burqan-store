@@ -12,6 +12,12 @@ export const ar = {
     en: "English",
   },
 
+  theme: {
+    switch: "المظهر",
+    light: "فاتح",
+    dark: "داكن",
+  },
+
   nav: {
     overview: "الرئيسية",
     roles: "الأدوار والصلاحيات",
@@ -22,6 +28,7 @@ export const ar = {
     stores: "المتاجر",
     orders: "الطلبات",
     qrPool: "رموز البطاقات",
+    account: "الحساب",
   },
 
   login: {
@@ -179,6 +186,23 @@ export const ar = {
     unit: "سعر الوحدة",
     line: "السطر",
     close: "إغلاق",
+  },
+
+  account: {
+    title: "الحساب",
+    profileTitle: "الملف الشخصي",
+    email: "البريد الإلكتروني",
+    fullName: "الاسم الكامل",
+    saveProfile: "حفظ الملف",
+    profileSaved: "تم تحديث الملف.",
+    passwordTitle: "تغيير كلمة المرور",
+    currentPassword: "كلمة المرور الحالية",
+    newPassword: "كلمة المرور الجديدة (10 أحرف على الأقل)",
+    confirmPassword: "تأكيد كلمة المرور",
+    savePassword: "تحديث كلمة المرور",
+    passwordSaved: "تم تغيير كلمة المرور.",
+    passwordMismatch: "كلمتا المرور الجديدتان غير متطابقتين.",
+    saveFailed: "تعذّر حفظ التغييرات.",
   },
 
   owner: {

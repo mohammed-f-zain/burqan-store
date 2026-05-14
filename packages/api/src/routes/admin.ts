@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { imageUpload } from "../lib/uploadConfig.js";
 import { query, pool } from "../db/pool.js";
-import { adminAuthMiddleware, requireAdminPermission } from "../middleware/adminAuth.js";
+import { adminAuthMiddleware, loadAdmin, requireAdminPermission } from "../middleware/adminAuth.js";
 import { HttpError } from "../utils/errors.js";
 import { hashPassword, verifyPassword } from "../utils/password.js";
 import { signAdminToken } from "../utils/jwt.js";
@@ -45,6 +45,80 @@ router.get("/me", adminAuthMiddleware, async (req, res, next) => {
       isSuperAdmin: admin.isSuperAdmin,
       permissions: admin.permissions,
     });
+  } catch (e) {
+    next(e);
+  }
+});
+
+const patchMeSchema = z
+  .object({
+    fullName: z.string().min(2).max(255).optional(),
+    email: z.string().email().max(255).optional(),
+  })
+  .refine((b) => b.fullName !== undefined || b.email !== undefined, { message: "empty body" });
+
+router.patch("/me", adminAuthMiddleware, async (req, res, next) => {
+  try {
+    const body = patchMeSchema.parse(req.body);
+    const id = req.admin!.id;
+
+    if (body.email !== undefined) {
+      const { rows: taken } = await query<{ id: number }>(
+        `SELECT id FROM admins WHERE lower(email) = lower($1) AND id <> $2`,
+        [body.email, id]
+      );
+      if (taken[0]) throw new HttpError(409, "البريد مستخدم من حساب آخر");
+    }
+
+    const fields: string[] = [];
+    const vals: unknown[] = [];
+    let i = 1;
+    if (body.fullName !== undefined) {
+      fields.push(`full_name = $${i++}`);
+      vals.push(body.fullName);
+    }
+    if (body.email !== undefined) {
+      fields.push(`email = $${i++}`);
+      vals.push(body.email);
+    }
+    if (fields.length === 0) throw new HttpError(400, "لا توجد حقول للتحديث");
+    vals.push(id);
+    await query(`UPDATE admins SET ${fields.join(", ")} WHERE id = $${i}`, vals);
+
+    const fresh = await loadAdmin(id);
+    if (!fresh) throw new HttpError(401, "غير مصرّح");
+    res.json({
+      id: fresh.id,
+      email: fresh.email,
+      fullName: fresh.fullName,
+      isSuperAdmin: fresh.isSuperAdmin,
+      permissions: fresh.permissions,
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(10).max(200),
+});
+
+router.post("/me/change-password", adminAuthMiddleware, async (req, res, next) => {
+  try {
+    const body = changePasswordSchema.parse(req.body);
+    const id = req.admin!.id;
+    const { rows } = await query<{ password_hash: string }>(
+      `SELECT password_hash FROM admins WHERE id = $1 AND is_active = true`,
+      [id]
+    );
+    const row = rows[0];
+    if (!row) throw new HttpError(401, "غير مصرّح");
+    const ok = await verifyPassword(body.currentPassword, row.password_hash);
+    if (!ok) throw new HttpError(400, "كلمة المرور الحالية غير صحيحة");
+    const ph = await hashPassword(body.newPassword);
+    await query(`UPDATE admins SET password_hash = $1 WHERE id = $2`, [ph, id]);
+    res.json({ ok: true });
   } catch (e) {
     next(e);
   }

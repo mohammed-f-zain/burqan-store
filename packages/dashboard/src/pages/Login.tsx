@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import BrandLogo from "../components/BrandLogo";
 import LangSwitch from "../components/LangSwitch";
+import ThemeToggle from "../components/ThemeToggle";
 import { useLocale } from "../i18n/LocaleContext";
 
 export default function Login() {
@@ -38,7 +39,10 @@ export default function Login() {
             <BrandLogo />
             <h1>{t.login.title}</h1>
           </div>
-          <LangSwitch />
+          <div className="login-actions">
+            <ThemeToggle />
+            <LangSwitch />
+          </div>
         </div>
         <p className="muted">{t.login.hint}</p>
         <form onSubmit={onSubmit} className="form">

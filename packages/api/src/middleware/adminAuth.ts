@@ -21,7 +21,7 @@ declare global {
   }
 }
 
-async function loadAdmin(adminId: number): Promise<AdminRequestUser | null> {
+export async function loadAdmin(adminId: number): Promise<AdminRequestUser | null> {
   const { rows } = await query<{
     id: number;
     email: string;

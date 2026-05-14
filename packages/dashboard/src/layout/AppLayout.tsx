@@ -3,6 +3,7 @@ import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import BrandLogo from "../components/BrandLogo";
 import LangSwitch from "../components/LangSwitch";
+import ThemeToggle from "../components/ThemeToggle";
 import { useLocale } from "../i18n/LocaleContext";
 
 export default function AppLayout() {
@@ -11,6 +12,7 @@ export default function AppLayout() {
 
   const nav = [
     { to: "/app", end: true, label: t.nav.overview, perm: null as string | null },
+    { to: "/app/account", label: t.nav.account, perm: null as string | null },
     { to: "/app/roles", label: t.nav.roles, perm: "roles.read" },
     { to: "/app/admins", label: t.nav.admins, perm: "admins.read" },
     { to: "/app/areas", label: t.nav.areas, perm: "areas.read" },
@@ -41,6 +43,7 @@ export default function AppLayout() {
             );
           })}
         </nav>
+        <ThemeToggle className="sidebar-theme" />
         <LangSwitch className="sidebar-lang" />
         <button type="button" className="ghost nav-logout" onClick={logout}>
           {t.logout}
