@@ -12,6 +12,8 @@ function required(name: string, fallback?: string): string {
 
 export const config = {
   nodeEnv: process.env.NODE_ENV ?? "development",
+  /** Bind address: use 0.0.0.0 so phones on the same LAN can reach the API (see LISTEN_HOST in .env.example). */
+  listenHost: process.env.LISTEN_HOST ?? "0.0.0.0",
   port: parseInt(process.env.PORT ?? "4000", 10),
   databaseUrl: required("DATABASE_URL"),
   jwtAdminSecret: required("JWT_ADMIN_SECRET"),

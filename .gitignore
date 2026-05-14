@@ -12,6 +12,9 @@ coverage
 .idea
 .vscode
 
+# Local SSH keys for GitHub Actions (never commit)
+infra/.keys/
+
 # API uploaded files (local)
 packages/api/uploads/*
 !packages/api/uploads/.gitkeep

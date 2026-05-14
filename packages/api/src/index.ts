@@ -4,9 +4,11 @@ import { pool } from "./db/pool.js";
 
 const app = createApp();
 
-app.listen(config.port, () => {
+app.listen(config.port, config.listenHost, () => {
   // eslint-disable-next-line no-console
-  console.log(`API listening on :${config.port}`);
+  console.log(
+    `API listening on http://${config.listenHost}:${config.port} (mobile: use this machine's LAN IP + port in EXPO_PUBLIC_API_URL)`
+  );
 });
 
 async function shutdown() {

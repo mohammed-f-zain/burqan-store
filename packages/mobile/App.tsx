@@ -13,11 +13,17 @@ import {
   View,
 } from "react-native";
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL ?? "http://127.0.0.1:4000";
+import { resolveApiBase } from "./resolveApiBase";
+
+const API_BASE = resolveApiBase();
 
 const t = {
   appTitle: "برقان — المندوب",
-  loginSub: "للاختبار على الهاتف ضع EXPO_PUBLIC_API_URL على عنوان جهازك (IP) وليس localhost.",
+  loginSub:
+    "في وضع التطوير يُستخرج عنوان الـ API تلقائياً من اتصال Expo (نفس جهازك الذي يشغّل Metro). تأكد أن خادم الـ API يعمل على المنفذ 4000. للنفق (tunnel) أو خادم بعيد: عيّن EXPO_PUBLIC_API_URL و EXPO_PUBLIC_API_FORCE_ENV=1 في .env",
+  loginSubProd: "الاتصال بخادم برقان (api.burqan.store).",
+  networkFailed:
+    "تعذّر الاتصال بالخادم. تحقق: 1) تشغيل الـ API على هذا الجهاز (npm run api:dev) والمنفذ 4000. 2) الهاتف والكمبيوتر على نفس الـ Wi‑Fi. 3) جدار ناري macOS يسمح لـ Node بالاتصال الوارد. 4) مع tunnel استخدم EXPO_PUBLIC_API_URL الصحيح مع FORCE_ENV=1.",
   email: "البريد",
   password: "كلمة المرور",
   signIn: "دخول",
@@ -164,12 +170,16 @@ export default function App() {
   async function login() {
     setBusy(true);
     setMessage(null);
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 18_000);
     try {
       const res = await fetch(`${API_BASE}/api/v1/rep/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
+        signal: ctrl.signal,
       });
+      clearTimeout(timer);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? t.loginFailed);
       setToken(data.token);
@@ -179,8 +189,17 @@ export default function App() {
       const aj = await a.json();
       if (a.ok) setAreas(aj.areas ?? []);
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : t.loginFailed);
+      const msg = e instanceof Error ? e.message : String(e);
+      const aborted =
+        (e instanceof Error && e.name === "AbortError") || msg === "Aborted" || msg.toLowerCase().includes("abort");
+      const isNetwork =
+        aborted ||
+        msg === "Network request failed" ||
+        msg === "Network Request Failed" ||
+        msg.toLowerCase().includes("network request");
+      setMessage(isNetwork ? `${t.networkFailed}\n(${aborted ? "timeout" : msg})` : msg || t.loginFailed);
     } finally {
+      clearTimeout(timer);
       setBusy(false);
     }
   }
@@ -289,7 +308,10 @@ export default function App() {
       <View style={styles.center}>
         <StatusBar style="light" />
         <Text style={styles.title}>{t.appTitle}</Text>
-        <Text style={styles.sub}>{t.loginSub}</Text>
+        <Text style={styles.sub}>{__DEV__ ? t.loginSub : t.loginSubProd}</Text>
+        <Text style={[styles.muted, { fontSize: 11, marginTop: 6, textAlign: "center" }]} selectable>
+          API: {API_BASE}
+        </Text>
         <TextInput style={styles.input} autoCapitalize="none" value={email} onChangeText={setEmail} placeholder={t.email} />
         <TextInput style={styles.input} secureTextEntry value={password} onChangeText={setPassword} placeholder={t.password} />
         <Pressable style={styles.primary} onPress={login} disabled={busy}>

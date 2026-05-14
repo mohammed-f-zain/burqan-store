@@ -600,6 +600,30 @@ router.patch(
   }
 );
 
+router.delete(
+  "/products/:id",
+  adminAuthMiddleware,
+  requireAdminPermission("products.write"),
+  async (req, res, next) => {
+    try {
+      const id = z.coerce.number().int().positive().parse(req.params.id);
+      const { rows: used } = await query<{ n: string }>(
+        `SELECT COUNT(*)::text AS n FROM order_lines WHERE product_id = $1`,
+        [id]
+      );
+      const n = parseInt(used[0]?.n ?? "0", 10);
+      if (n > 0) {
+        throw new HttpError(409, "لا يمكن حذف منتج مستخدَم في طلبات سابقة.");
+      }
+      const { rowCount } = await query(`DELETE FROM products WHERE id = $1`, [id]);
+      if (!rowCount) throw new HttpError(404, "المنتج غير موجود");
+      res.status(204).send();
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
 const repCreateSchema = z.object({
   email: z.string().email(),
   password: z.string().min(10),
@@ -661,6 +685,135 @@ router.post(
       } finally {
         c.release();
       }
+    } catch (e) {
+      if (e instanceof DatabaseError && e.code === "23505") {
+        return next(new HttpError(409, "البريد مستخدم مسبقاً"));
+      }
+      next(e);
+    }
+  }
+);
+
+const repPatchSchema = z.object({
+  email: z.string().email().optional(),
+  fullName: z.string().min(2).optional(),
+  phone: z.string().min(6).optional(),
+  imageUrl: optionalStoredImagePathNullableSchema,
+  carPlate: z.string().nullable().optional(),
+  isActive: z.boolean().optional(),
+  areaIds: z.array(z.number().int().positive()).min(1).optional(),
+  newPassword: z.string().min(10).optional(),
+});
+
+router.patch(
+  "/representatives/:id",
+  adminAuthMiddleware,
+  requireAdminPermission("reps.write"),
+  async (req, res, next) => {
+    try {
+      const id = z.coerce.number().int().positive().parse(req.params.id);
+      const body = repPatchSchema.parse(req.body);
+      const hasAny =
+        body.email !== undefined ||
+        body.fullName !== undefined ||
+        body.phone !== undefined ||
+        body.imageUrl !== undefined ||
+        body.carPlate !== undefined ||
+        body.isActive !== undefined ||
+        body.areaIds !== undefined ||
+        body.newPassword !== undefined;
+      if (!hasAny) throw new HttpError(400, "لا توجد حقول للتحديث");
+
+      const c = await pool.connect();
+      try {
+        await c.query("BEGIN");
+        const { rows: cur } = await c.query<{ id: number }>(`SELECT id FROM representatives WHERE id = $1`, [id]);
+        if (!cur[0]) throw new HttpError(404, "المندوب غير موجود");
+
+        if (body.email !== undefined) {
+          const { rows: taken } = await c.query<{ id: number }>(
+            `SELECT id FROM representatives WHERE lower(email) = lower($1) AND id <> $2`,
+            [body.email, id]
+          );
+          if (taken[0]) throw new HttpError(409, "البريد مستخدم مسبقاً");
+        }
+
+        const map: [string, unknown][] = [];
+        if (body.email !== undefined) map.push(["email", body.email]);
+        if (body.fullName !== undefined) map.push(["full_name", body.fullName]);
+        if (body.phone !== undefined) map.push(["phone", body.phone]);
+        if (body.imageUrl !== undefined) map.push(["image_url", body.imageUrl === null ? null : body.imageUrl]);
+        if (body.carPlate !== undefined) map.push(["car_plate", body.carPlate]);
+        if (body.isActive !== undefined) map.push(["is_active", body.isActive]);
+        if (body.newPassword !== undefined) {
+          const ph = await hashPassword(body.newPassword);
+          map.push(["password_hash", ph]);
+        }
+        if (map.length > 0) {
+          const sets = map.map(([col], idx) => `${col} = $${idx + 1}`).join(", ");
+          const vals = map.map(([, v]) => v);
+          vals.push(id);
+          await c.query(`UPDATE representatives SET ${sets} WHERE id = $${vals.length}`, vals);
+        }
+
+        if (body.areaIds !== undefined) {
+          await c.query(`DELETE FROM representative_areas WHERE representative_id = $1`, [id]);
+          for (const aid of body.areaIds) {
+            await c.query(`INSERT INTO representative_areas (representative_id, area_id) VALUES ($1,$2)`, [id, aid]);
+          }
+        }
+
+        await c.query("COMMIT");
+      } catch (e) {
+        try {
+          await c.query("ROLLBACK");
+        } catch {
+          /* ignore rollback errors */
+        }
+        throw e;
+      } finally {
+        c.release();
+      }
+
+      const { rows } = await query(
+        `
+          SELECT r.*, COALESCE(json_agg(ra.area_id) FILTER (WHERE ra.area_id IS NOT NULL), '[]') AS area_ids
+          FROM representatives r
+          LEFT JOIN representative_areas ra ON ra.representative_id = r.id
+          WHERE r.id = $1
+          GROUP BY r.id
+        `,
+        [id]
+      );
+      if (!rows[0]) throw new HttpError(404, "المندوب غير موجود");
+      res.json({ representative: rows[0] });
+    } catch (e) {
+      if (e instanceof DatabaseError && e.code === "23505") {
+        return next(new HttpError(409, "البريد مستخدم مسبقاً"));
+      }
+      next(e);
+    }
+  }
+);
+
+router.delete(
+  "/representatives/:id",
+  adminAuthMiddleware,
+  requireAdminPermission("reps.write"),
+  async (req, res, next) => {
+    try {
+      const id = z.coerce.number().int().positive().parse(req.params.id);
+      const { rows: ord } = await query<{ n: string }>(
+        `SELECT COUNT(*)::text AS n FROM orders WHERE representative_id = $1`,
+        [id]
+      );
+      const n = parseInt(ord[0]?.n ?? "0", 10);
+      if (n > 0) {
+        throw new HttpError(409, "لا يمكن حذف مندوب مرتبط بطلبات.");
+      }
+      const { rowCount } = await query(`DELETE FROM representatives WHERE id = $1`, [id]);
+      if (!rowCount) throw new HttpError(404, "المندوب غير موجود");
+      res.status(204).send();
     } catch (e) {
       next(e);
     }

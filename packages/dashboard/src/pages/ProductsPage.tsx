@@ -5,7 +5,9 @@ import { useAuth } from "../auth/AuthContext";
 import PaginationBar from "../components/PaginationBar";
 import { useClientPagination } from "../hooks/useClientPagination";
 import { useLocale } from "../i18n/LocaleContext";
+import { pickAxiosErrorMessage } from "../lib/apiError";
 import { mediaUrl } from "../lib/mediaUrl";
+import { confirmDanger } from "../lib/swalConfirm";
 import { uploadAdminImage } from "../lib/uploadAdmin";
 
 type Product = {
@@ -38,6 +40,7 @@ export default function ProductsPage() {
   });
   const [uploading, setUploading] = useState(false);
   const [editUploading, setEditUploading] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
   const pgn = useClientPagination(products);
 
   async function load() {
@@ -102,23 +105,56 @@ export default function ProductsPage() {
 
   async function saveEdit() {
     if (!edit) return;
-    await api.patch(`/products/${edit.id}`, {
-      name: edit.name,
-      designation: edit.designation,
-      unitLabel: edit.unit_label,
-      cartonSpec: edit.carton_spec,
-      dimensionsCm: edit.dimensions_cm,
-      cartonWeightKg: edit.carton_weight_kg != null ? parseFloat(String(edit.carton_weight_kg)) : null,
-      imageUrl: edit.image_url === null || edit.image_url === "" ? null : edit.image_url,
-      price: parseFloat(edit.price),
-      isActive: edit.is_active,
+    setMsg(null);
+    try {
+      await api.patch(`/products/${edit.id}`, {
+        name: edit.name,
+        designation: edit.designation,
+        unitLabel: edit.unit_label,
+        cartonSpec: edit.carton_spec,
+        dimensionsCm: edit.dimensions_cm,
+        cartonWeightKg: edit.carton_weight_kg != null ? parseFloat(String(edit.carton_weight_kg)) : null,
+        imageUrl: edit.image_url === null || edit.image_url === "" ? null : edit.image_url,
+        price: parseFloat(edit.price),
+        isActive: edit.is_active,
+      });
+      setEdit(null);
+      await load();
+      setMsg(t.products.updated);
+    } catch (err) {
+      setMsg(pickAxiosErrorMessage(err, t.products.saveFailed));
+    }
+  }
+
+  async function removeProduct(id: number) {
+    const ok = await confirmDanger({
+      title: t.products.deleteTitle,
+      text: t.products.confirmDelete,
+      confirmText: t.products.delete,
+      cancelText: t.roles.cancel,
     });
-    setEdit(null);
-    await load();
+    if (!ok) return;
+    setMsg(null);
+    try {
+      await api.delete(`/products/${id}`);
+      if (edit?.id === id) setEdit(null);
+      await load();
+      setMsg(t.products.deleted);
+    } catch (err) {
+      setMsg(pickAxiosErrorMessage(err, t.products.deleteFailed));
+    }
   }
 
   return (
     <div className="grid">
+      {msg && (
+        <p
+          className={msg === t.products.deleted || msg === t.products.updated ? "muted" : "error"}
+          style={{ gridColumn: "1 / -1" }}
+        >
+          {msg}
+        </p>
+      )}
       {can("products.write") && (
         <div className="card">
           <h2>{t.products.titleAdd}</h2>
@@ -223,9 +259,14 @@ export default function ProductsPage() {
                   <td>{p.is_active ? t.products.yes : t.products.no}</td>
                   <td>
                     {can("products.write") && (
-                      <button type="button" className="ghost" onClick={() => setEdit({ ...p })}>
-                        {t.products.edit}
-                      </button>
+                      <span className="row" style={{ gap: 8 }}>
+                        <button type="button" className="ghost" onClick={() => setEdit({ ...p })}>
+                          {t.products.edit}
+                        </button>
+                        <button type="button" className="ghost danger" onClick={() => void removeProduct(p.id)}>
+                          {t.products.delete}
+                        </button>
+                      </span>
                     )}
                   </td>
                 </tr>
