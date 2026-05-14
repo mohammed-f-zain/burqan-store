@@ -649,3 +649,24 @@ html[dir="ltr"] .theme-toggle {
 .sidebar .theme-toggle {
   align-items: stretch;
 }
+
+/* SweetAlert2 — match dashboard themes */
+.swal-burqan {
+  font-family: inherit;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-card);
+}
+
+html[data-theme="dark"] .swal2-popup.swal-burqan {
+  background: var(--card);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .swal2-title {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .swal2-html-container {
+  color: var(--muted);
+}

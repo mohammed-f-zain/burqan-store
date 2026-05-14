@@ -7,6 +7,7 @@ import { PERMISSION_KEYS } from "../constants/permissions";
 import { useClientPagination } from "../hooks/useClientPagination";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
+import { confirmDanger } from "../lib/swalConfirm";
 
 type Role = { id: number; name: string; slug: string; permissions: string[] };
 
@@ -65,7 +66,13 @@ export default function RolesPage() {
   }
 
   async function remove(id: number) {
-    if (!confirm(t.roles.confirmDelete)) return;
+    const ok = await confirmDanger({
+      title: t.roles.deleteTitle,
+      text: t.roles.confirmDelete,
+      confirmText: t.roles.delete,
+      cancelText: t.roles.cancel,
+    });
+    if (!ok) return;
     setMsg(null);
     try {
       await api.delete(`/roles/${id}`);

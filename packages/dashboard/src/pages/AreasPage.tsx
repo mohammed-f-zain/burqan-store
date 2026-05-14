@@ -6,6 +6,7 @@ import PaginationBar from "../components/PaginationBar";
 import { useClientPagination } from "../hooks/useClientPagination";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
+import { confirmDanger } from "../lib/swalConfirm";
 
 type Area = { id: number; name: string };
 
@@ -69,7 +70,13 @@ export default function AreasPage() {
   }
 
   async function remove(id: number) {
-    if (!confirm(t.areas.confirmDelete)) return;
+    const ok = await confirmDanger({
+      title: t.areas.deleteTitle,
+      text: t.areas.confirmDelete,
+      confirmText: t.areas.delete,
+      cancelText: t.areas.cancel,
+    });
+    if (!ok) return;
     setMsg(null);
     try {
       await api.delete(`/areas/${id}`);
