@@ -234,9 +234,33 @@ button.ghost {
 }
 
 .sidebar-brand {
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  font-size: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.brand-logo {
+  display: block;
+  max-width: 140px;
+  height: auto;
+}
+
+.sidebar-brand-logo {
+  max-width: 120px;
+}
+
+.login-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.login-brand h1 {
+  margin: 0;
+  font-size: 1.35rem;
 }
 
 .sidebar-user {

@@ -2,6 +2,7 @@ import { FormEvent, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { api } from "../api";
+import BrandLogo from "../components/BrandLogo";
 import LangSwitch from "../components/LangSwitch";
 import { useLocale } from "../i18n/LocaleContext";
 
@@ -33,7 +34,10 @@ export default function Login() {
     <div className="login-page">
       <div className="card narrow">
         <div className="login-head">
-          <h1>{t.login.title}</h1>
+          <div className="login-brand">
+            <BrandLogo />
+            <h1>{t.login.title}</h1>
+          </div>
           <LangSwitch />
         </div>
         <p className="muted">{t.login.hint}</p>

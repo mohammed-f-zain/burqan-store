@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthContext";
+import BrandLogo from "../components/BrandLogo";
 import LangSwitch from "../components/LangSwitch";
 import { useLocale } from "../i18n/LocaleContext";
 
@@ -23,7 +24,9 @@ export default function AppLayout() {
   return (
     <div className="dash-layout">
       <aside className="sidebar">
-        <div className="sidebar-brand">{t.brand}</div>
+        <div className="sidebar-brand">
+          <BrandLogo className="sidebar-brand-logo" />
+        </div>
         <div className="sidebar-user muted small">
           {me?.fullName}
           {me?.isSuperAdmin && <span className="badge">{t.superBadge}</span>}
