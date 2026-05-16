@@ -541,6 +541,101 @@ html[dir="ltr"] .lang-switch {
   min-width: 96px;
 }
 
+.table tbody tr.store-row {
+  cursor: pointer;
+}
+
+.table tbody tr.store-row:hover {
+  background: var(--surface);
+}
+
+.table tbody tr.store-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.store-map-thumb-wrap {
+  display: block;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+
+.store-map-thumb {
+  display: block;
+  width: 140px;
+  height: 90px;
+  object-fit: cover;
+}
+
+.store-map-large-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.store-map-embed {
+  width: 100%;
+  min-height: 280px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.store-map-open-link {
+  font-size: 13px;
+  color: var(--accent2);
+}
+
+.store-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-top: 20px;
+}
+
+@media (max-width: 900px) {
+  .store-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.store-detail-photo {
+  width: 100%;
+  max-width: 240px;
+  border-radius: 12px;
+  object-fit: cover;
+  margin-bottom: 12px;
+}
+
+.store-detail-dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 16px;
+  margin: 0;
+}
+
+.store-detail-dl dt {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.store-detail-dl dd {
+  margin: 0;
+}
+
+.store-detail-qr {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.store-detail-map-card .label {
+  margin-bottom: 8px;
+}
+
 html.locale-en body {
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }

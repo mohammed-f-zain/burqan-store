@@ -16,6 +16,7 @@ import PublicOwner from "./pages/PublicOwner";
 import QrPoolPage from "./pages/QrPoolPage";
 import RepresentativesPage from "./pages/RepresentativesPage";
 import RolesPage from "./pages/RolesPage";
+import StoreDetailPage from "./pages/StoreDetailPage";
 import StoresPage from "./pages/StoresPage";
 
 export default function App() {
@@ -37,6 +38,7 @@ export default function App() {
                 <Route path="products" element={<ProductsPage />} />
                 <Route path="representatives" element={<RepresentativesPage />} />
                 <Route path="stores" element={<StoresPage />} />
+                  <Route path="stores/:id" element={<StoreDetailPage />} />
                   <Route path="orders" element={<OrdersPage />} />
                   <Route path="qr-pool" element={<QrPoolPage />} />
                 </Route>

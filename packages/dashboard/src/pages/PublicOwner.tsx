@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { useLocale } from "../i18n/LocaleContext";
+import { formatMarketDateTime } from "../utils/formatMarketDateTime";
 import { publicApi } from "../publicApi";
 
 type OwnerSummary = {
@@ -24,7 +25,7 @@ type OwnerSummary = {
 export default function PublicOwner() {
   const [params] = useSearchParams();
   const token = params.get("t");
-  const { t, locale } = useLocale();
+  const { t } = useLocale();
   const [data, setData] = useState<OwnerSummary | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
@@ -79,7 +80,7 @@ export default function PublicOwner() {
           <ul className="simple-list">
             {data.orders.map((o) => (
               <li key={o.id}>
-                #{o.id} — {o.payment_type} — {o.total_amount} — {new Date(o.created_at).toLocaleString(locale === "ar" ? "ar-SA" : "en-US")}
+                #{o.id} — {o.payment_type} — {o.total_amount} — {formatMarketDateTime(o.created_at)}
               </li>
             ))}
           </ul>

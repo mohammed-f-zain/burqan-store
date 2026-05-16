@@ -19,6 +19,7 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { formatMarketDateTime } from "./formatMarketDateTime";
 import { resolveApiBase } from "./resolveApiBase";
 
 const API_BASE = resolveApiBase();
@@ -303,6 +304,9 @@ export default function App() {
       const sub = CameraView.onModernBarcodeScanned((ev) => {
         sub.remove();
         if (modernBarcodeSubRef.current === sub) modernBarcodeSubRef.current = null;
+        if (CameraView.isModernBarcodeScannerAvailable) {
+          void CameraView.dismissScanner().catch(() => {});
+        }
         void resolveQr(ev.data);
       });
       modernBarcodeSubRef.current = sub;
@@ -576,7 +580,7 @@ export default function App() {
               ) : (
                 visits.map((item) => (
                   <View key={item.id} style={styles.listRow}>
-                    <Text style={styles.body}>{new Date(item.visited_at).toLocaleString("ar-SA")}</Text>
+                    <Text style={styles.body}>{formatMarketDateTime(item.visited_at)}</Text>
                     {item.note ? <Text style={styles.muted}>{item.note}</Text> : null}
                   </View>
                 ))
@@ -594,7 +598,7 @@ export default function App() {
                     <Text style={styles.body}>
                       #{item.id} · {item.payment_type} · {item.total_amount}
                     </Text>
-                    <Text style={styles.muted}>{new Date(item.created_at).toLocaleString("ar-SA")}</Text>
+                    <Text style={styles.muted}>{formatMarketDateTime(item.created_at)}</Text>
                   </View>
                 ))
               )}
@@ -704,6 +708,8 @@ export default function App() {
                         setMessage(`${t.cameraMountError} ${e.message}`);
                       }}
                       onBarcodeScanned={({ data }) => {
+                        setMode("home");
+                        setScanPermissionOverride(false);
                         void resolveQr(data);
                       }}
                     />

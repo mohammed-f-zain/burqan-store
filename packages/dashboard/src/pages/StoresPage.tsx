@@ -1,8 +1,10 @@
 import { FormEvent, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 
 import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
+import StoreMap from "../components/StoreMap";
 import PaginationBar from "../components/PaginationBar";
 import { useClientPagination } from "../hooks/useClientPagination";
 import { useLocale } from "../i18n/LocaleContext";
@@ -16,11 +18,14 @@ type Store = {
   deferred_payment_enabled: boolean;
   area_name: string;
   qr_public_token: string;
+  location_lat: number;
+  location_lng: number;
 };
 
 export default function StoresPage() {
   const { can } = useAuth();
   const { t } = useLocale();
+  const navigate = useNavigate();
   const [stores, setStores] = useState<Store[]>([]);
   const [payStoreId, setPayStoreId] = useState<number | null>(null);
   const [payAmount, setPayAmount] = useState("");
@@ -61,6 +66,7 @@ export default function StoresPage() {
       <div className="card">
         <h2>{t.stores.title}</h2>
         <p className="muted">{t.stores.hint}</p>
+        <p className="muted small">{t.stores.rowHint}</p>
         {stores.length > 0 && (
           <PaginationBar
             className="pagination-bar--flush"
@@ -82,6 +88,7 @@ export default function StoresPage() {
                 <th>{t.stores.colStore}</th>
                 <th>{t.stores.colArea}</th>
                 <th>{t.stores.colOwner}</th>
+                <th>{t.stores.colLocation}</th>
                 <th>{t.stores.colQr}</th>
                 <th>{t.stores.colDeferred}</th>
                 {can("orders.record_payment") && <th>{t.stores.pay}</th>}
@@ -89,20 +96,35 @@ export default function StoresPage() {
             </thead>
             <tbody>
               {storePgn.slice.map((s) => (
-                <tr key={s.id}>
+                <tr
+                  key={s.id}
+                  className="store-row"
+                  onClick={() => navigate(`/app/stores/${s.id}`)}
+                  role="link"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      navigate(`/app/stores/${s.id}`);
+                    }
+                  }}
+                >
                   <td>
                     <div className="strong">{s.name}</div>
                     <div className="muted small">{s.phone}</div>
                   </td>
                   <td>{s.area_name}</td>
                   <td>{s.owner_name}</td>
-                  <td className="qr-cell qr-cell--stack">
-                    <QRCodeSVG value={qrPayload(s.qr_public_token)} size={88} level="M" includeMargin={false} />
+                  <td onClick={(e) => e.stopPropagation()}>
+                    <StoreMap lat={s.location_lat} lng={s.location_lng} variant="thumb" />
+                  </td>
+                  <td className="qr-cell qr-cell--stack" onClick={(e) => e.stopPropagation()}>
+                    <QRCodeSVG value={qrPayload(s.qr_public_token)} size={72} level="M" includeMargin={false} />
                     <span className="muted small mono break-all" title={s.qr_public_token}>
                       {s.qr_public_token.slice(0, 10)}…
                     </span>
                   </td>
-                  <td>
+                  <td onClick={(e) => e.stopPropagation()}>
                     {can("stores.deferred_toggle") ? (
                       <button type="button" className={s.deferred_payment_enabled ? "pill on" : "pill off"} onClick={() => void toggleDeferred(s)}>
                         {s.deferred_payment_enabled ? t.stores.open : t.stores.closed}
@@ -114,7 +136,7 @@ export default function StoresPage() {
                     )}
                   </td>
                   {can("orders.record_payment") && (
-                    <td>
+                    <td onClick={(e) => e.stopPropagation()}>
                       <button type="button" className="ghost" onClick={() => setPayStoreId(s.id)}>
                         {t.stores.pay}
                       </button>

@@ -5,6 +5,7 @@ import { api } from "../api";
 import PaginationBar from "../components/PaginationBar";
 import { useClientPagination } from "../hooks/useClientPagination";
 import { useLocale } from "../i18n/LocaleContext";
+import { formatMarketDateTime } from "../utils/formatMarketDateTime";
 import { qrPayload } from "../utils/qrPayload";
 
 type Item = { id: string; publicToken: string; createdAt: string };
@@ -125,7 +126,7 @@ export default function QrPoolPage() {
                       <td className="qr-cell">
                         <QRCodeSVG value={payload} size={96} level="M" includeMargin={false} />
                       </td>
-                      <td className="small muted">{new Date(row.createdAt).toLocaleString()}</td>
+                      <td className="small muted">{formatMarketDateTime(row.createdAt)}</td>
                     </tr>
                   );
                 })}

@@ -4,6 +4,7 @@ import { api } from "../api";
 import PaginationBar from "../components/PaginationBar";
 import { useClientPagination } from "../hooks/useClientPagination";
 import { useLocale } from "../i18n/LocaleContext";
+import { formatMarketDateTime } from "../utils/formatMarketDateTime";
 
 type OrderRow = {
   id: string;
@@ -19,7 +20,7 @@ type OrderDetail = OrderRow & {
 };
 
 export default function OrdersPage() {
-  const { t, locale } = useLocale();
+  const { t } = useLocale();
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [detail, setDetail] = useState<OrderDetail | null>(null);
 
@@ -81,7 +82,7 @@ export default function OrdersPage() {
                   <td>{o.store_id}</td>
                   <td>{o.payment_type}</td>
                   <td>{o.total_amount}</td>
-                  <td className="small muted">{new Date(o.created_at).toLocaleString(locale === "ar" ? "ar-SA" : "en-US")}</td>
+                  <td className="small muted">{formatMarketDateTime(o.created_at)}</td>
                 </tr>
               ))}
             </tbody>

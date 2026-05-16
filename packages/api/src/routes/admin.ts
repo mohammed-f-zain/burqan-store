@@ -849,16 +849,63 @@ router.get(
       const id = z.coerce.number().int().positive().parse(req.params.id);
       const { rows } = await query(
         `
-        SELECT s.*, a.name AS area_name, qc.public_token AS qr_public_token
+        SELECT s.*, a.name AS area_name, qc.public_token AS qr_public_token,
+          r.full_name AS registered_by_rep_name
         FROM stores s
         JOIN areas a ON a.id = s.area_id
         JOIN qr_codes qc ON qc.id = s.qr_code_id
+        LEFT JOIN representatives r ON r.id = s.registered_by_representative_id
         WHERE s.id = $1
       `,
         [id]
       );
       if (!rows[0]) throw new HttpError(404, "Store not found");
       res.json({ store: rows[0] });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+router.get(
+  "/stores/:id/visits",
+  adminAuthMiddleware,
+  requireAdminPermission("stores.read"),
+  async (req, res, next) => {
+    try {
+      const id = z.coerce.number().int().positive().parse(req.params.id);
+      const { rows } = await query(
+        `SELECT v.id, v.visited_at, v.note, r.full_name AS rep_name
+         FROM visits v
+         JOIN representatives r ON r.id = v.representative_id
+         WHERE v.store_id = $1
+         ORDER BY v.id DESC
+         LIMIT 100`,
+        [id]
+      );
+      res.json({ visits: rows });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+router.get(
+  "/stores/:id/payments",
+  adminAuthMiddleware,
+  requireAdminPermission("stores.read"),
+  async (req, res, next) => {
+    try {
+      const id = z.coerce.number().int().positive().parse(req.params.id);
+      const { rows } = await query(
+        `SELECT id, amount, note, created_at
+         FROM store_payments
+         WHERE store_id = $1
+         ORDER BY id DESC
+         LIMIT 100`,
+        [id]
+      );
+      res.json({ payments: rows });
     } catch (e) {
       next(e);
     }
