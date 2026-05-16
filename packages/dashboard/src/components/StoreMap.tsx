@@ -15,13 +15,21 @@ export function osmExternalUrl(lat: number, lng: number): string {
   return `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=16/${lat}/${lng}`;
 }
 
+/** OSM embed (www.openstreetmap.org). Do not use staticmap.openstreetmap.de — that host often fails DNS. */
+function osmEmbedUrl(la: number, lo: number, pad: number): string {
+  const bbox = `${lo - pad},${la - pad},${lo + pad},${la + pad}`;
+  return `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${la}%2C${lo}`;
+}
+
 export default function StoreMap({ lat, lng, variant = "thumb" }: Props) {
   const c = coords(lat, lng);
   if (!c) return <span className="muted small">—</span>;
   const { la, lo } = c;
 
+  const pad = variant === "thumb" ? 0.006 : 0.01;
+  const embedSrc = osmEmbedUrl(la, lo, pad);
+
   if (variant === "thumb") {
-    const src = `https://staticmap.openstreetmap.de/staticmap.php?center=${la},${lo}&zoom=14&size=140x90&markers=${la},${lo}`;
     return (
       <a
         href={osmExternalUrl(la, lo)}
@@ -29,22 +37,16 @@ export default function StoreMap({ lat, lng, variant = "thumb" }: Props) {
         rel="noopener noreferrer"
         className="store-map-thumb-wrap"
         onClick={(e) => e.stopPropagation()}
+        title={`${la.toFixed(4)}, ${lo.toFixed(4)}`}
       >
-        <img src={src} alt="" className="store-map-thumb" loading="lazy" />
+        <iframe className="store-map-embed store-map-embed--thumb" title="Map" loading="lazy" src={embedSrc} />
       </a>
     );
   }
 
-  const pad = 0.01;
-  const bbox = `${lo - pad},${la - pad},${lo + pad},${la + pad}`;
   return (
     <div className="store-map-large-wrap">
-      <iframe
-        className="store-map-embed"
-        title="Map"
-        loading="lazy"
-        src={`https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(bbox)}&layer=mapnik&marker=${la}%2C${lo}`}
-      />
+      <iframe className="store-map-embed store-map-embed--large" title="Map" loading="lazy" src={embedSrc} />
       <a href={osmExternalUrl(la, lo)} target="_blank" rel="noopener noreferrer" className="store-map-open-link">
         OpenStreetMap ↗
       </a>

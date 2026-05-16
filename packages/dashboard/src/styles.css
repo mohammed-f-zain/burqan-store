@@ -561,11 +561,16 @@ html[dir="ltr"] .lang-switch {
   border: 1px solid var(--line);
 }
 
-.store-map-thumb {
+.store-map-embed--thumb {
   display: block;
   width: 140px;
   height: 90px;
-  object-fit: cover;
+  min-height: 90px;
+  pointer-events: none;
+}
+
+.store-map-embed--large {
+  min-height: 280px;
 }
 
 .store-map-large-wrap {
@@ -576,10 +581,14 @@ html[dir="ltr"] .lang-switch {
 
 .store-map-embed {
   width: 100%;
-  min-height: 280px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.store-map-large-wrap .store-map-embed--large {
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: var(--surface);
 }
 
 .store-map-open-link {
