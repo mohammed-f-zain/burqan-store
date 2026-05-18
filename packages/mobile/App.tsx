@@ -4,6 +4,7 @@ import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Linking,
   Modal,
@@ -20,6 +21,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { formatMarketDateTime } from "./formatMarketDateTime";
+import { getRepPosition, LocationDeniedError } from "./getDeviceLocation";
 import { resolveApiBase } from "./resolveApiBase";
 
 const API_BASE = resolveApiBase();
@@ -94,8 +96,20 @@ const t = {
   registerFailed: "فشل التسجيل",
   cancelled: "أُلغي",
   storeCreated: (id: number) => `تم إنشاء المتجر #${id}.`,
-  currency: "ر.س",
+  currency: "د.أ",
   dismissMessage: "اضغط لإخفاء الرسالة",
+  locationDenied: "يلزم تفعيل الموقع للمسح وتسجيل المتاجر.",
+  locating: "جاري تحديد موقعك…",
+  areaAuto: "المنطقة (تلقائي من الخريطة)",
+  areaDetecting: "جاري تحديد المنطقة…",
+  refreshLocation: "تحديث الموقع",
+  navHome: "الرئيسية",
+  navInventory: "مخزون السيارة",
+  navStore: "المتجر",
+  inventoryTitle: "مخزون السيارة",
+  inventoryEmpty: "لا منتجات في المخزون. يحدّثها المشرف من لوحة التحكم.",
+  stock: "المتوفر",
+  tooFar: "أنت بعيد عن المتجر. اقترب إلى أقل من 100 متر.",
 } as const;
 
 type Area = { id: number; name: string };
@@ -113,7 +127,9 @@ type Product = {
   name: string;
   price: string;
   designation?: string | null;
+  quantity: number;
 };
+type BottomTab = "home" | "inventory" | "store";
 type RepOrderRow = { id: string; payment_type: string; total_amount: string; created_at: string };
 
 async function uploadRepImage(apiBase: string, bearer: string, uri: string, mimeType: string): Promise<string> {
@@ -190,6 +206,8 @@ export default function App() {
   const [visitNote, setVisitNote] = useState("");
   const [homeRefreshing, setHomeRefreshing] = useState(false);
   const [storeRefreshing, setStoreRefreshing] = useState(false);
+  const [bottomTab, setBottomTab] = useState<BottomTab>("home");
+  const [inventory, setInventory] = useState<Product[]>([]);
 
   const headers = useMemo(() => {
     const h: Record<string, string> = { "Content-Type": "application/json" };
@@ -258,6 +276,17 @@ export default function App() {
     }
   }
 
+  const loadInventory = useCallback(async () => {
+    if (!token) return;
+    try {
+      const data = await apiGet("/api/v1/rep/inventory");
+      const rows = (data.inventory ?? []) as { id: number; name: string; price: string; quantity: number }[];
+      setInventory(rows.map((r) => ({ ...r, quantity: Number(r.quantity) || 0 })));
+    } catch {
+      /* ignore */
+    }
+  }, [apiGet, token]);
+
   async function resolveQr(raw: string) {
     if (!token) return;
     const trimmed = raw.trim();
@@ -265,19 +294,25 @@ export default function App() {
     setBusy(true);
     setMessage(null);
     try {
-      const data = await apiGet(`/api/v1/rep/qr/${encodeURIComponent(trimmed)}`);
+      const pos = await getRepPosition();
+      const data = await apiGet(
+        `/api/v1/rep/qr/${encodeURIComponent(trimmed)}?lat=${pos.lat}&lng=${pos.lng}`
+      );
       setLastScanToken(trimmed);
       if (data.status === "unassigned") {
         setActiveStore(null);
         setMode("register");
+        setBottomTab("home");
       } else {
         setActiveStore(data.store as StoreBrief);
         setMode("store");
+        setBottomTab("store");
         setStoreTab("info");
         await refreshStoreData(data.store.id);
       }
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : t.qrFailed);
+      if (e instanceof LocationDeniedError) setMessage(t.locationDenied);
+      else setMessage(e instanceof Error ? e.message : t.qrFailed);
     } finally {
       setBusy(false);
     }
@@ -322,20 +357,26 @@ export default function App() {
     setMode("scan");
   }
 
-  const refreshStoreData = useCallback(async (storeId: number) => {
-    try {
-      const [v, o, p] = await Promise.all([
-        apiGet(`/api/v1/rep/stores/${storeId}/visits`),
-        apiGet(`/api/v1/rep/stores/${storeId}/orders`),
-        apiGet("/api/v1/rep/products"),
-      ]);
-      setVisits(v.visits ?? []);
-      setOrders(o.orders ?? []);
-      setProducts(p.products ?? []);
-    } catch {
-      /* ignore */
-    }
-  }, [apiGet]);
+  const refreshStoreData = useCallback(
+    async (storeId: number) => {
+      try {
+        const [v, o, inv] = await Promise.all([
+          apiGet(`/api/v1/rep/stores/${storeId}/visits`),
+          apiGet(`/api/v1/rep/stores/${storeId}/orders`),
+          apiGet("/api/v1/rep/inventory"),
+        ]);
+        setVisits(v.visits ?? []);
+        setOrders(o.orders ?? []);
+        const rows = (inv.inventory ?? []) as { id: number; name: string; price: string; quantity: number }[];
+        const mapped = rows.map((r) => ({ ...r, quantity: Number(r.quantity) || 0 }));
+        setProducts(mapped);
+        setInventory(mapped);
+      } catch {
+        /* ignore */
+      }
+    },
+    [apiGet]
+  );
 
   const onHomeRefresh = useCallback(async () => {
     if (!token) return;
@@ -346,24 +387,36 @@ export default function App() {
       });
       const aj = await a.json();
       if (a.ok) setAreas(aj.areas ?? []);
+      await loadInventory();
       if (activeStore) await refreshStoreData(activeStore.id);
     } catch {
       /* ignore */
     } finally {
       setHomeRefreshing(false);
     }
-  }, [token, activeStore, refreshStoreData]);
+  }, [token, activeStore, refreshStoreData, loadInventory]);
+
+  useEffect(() => {
+    if (token) void loadInventory();
+  }, [token, loadInventory]);
 
   async function logVisit() {
     if (!activeStore) return;
     setBusy(true);
     try {
-      await apiPost("/api/v1/rep/visits", { storeId: activeStore.id, note: visitNote || undefined });
+      const pos = await getRepPosition();
+      await apiPost("/api/v1/rep/visits", {
+        storeId: activeStore.id,
+        note: visitNote || undefined,
+        repLat: pos.lat,
+        repLng: pos.lng,
+      });
       setVisitNote("");
       setMessage(t.visitRecorded);
       await refreshStoreData(activeStore.id);
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : t.visitFailed);
+      if (e instanceof LocationDeniedError) setMessage(t.locationDenied);
+      else setMessage(e instanceof Error ? e.message : t.visitFailed);
     } finally {
       setBusy(false);
     }
@@ -380,28 +433,33 @@ export default function App() {
     }
     setBusy(true);
     try {
+      const pos = await getRepPosition();
       await apiPost("/api/v1/rep/orders", {
         storeId: activeStore.id,
         paymentType,
         lines,
+        repLat: pos.lat,
+        repLng: pos.lng,
       });
       setCart({});
       setMessage(t.orderSaved);
       await refreshStoreData(activeStore.id);
       setStoreTab("orders");
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : t.orderFailed);
+      if (e instanceof LocationDeniedError) setMessage(t.locationDenied);
+      else setMessage(e instanceof Error ? e.message : t.orderFailed);
     } finally {
       setBusy(false);
     }
   }
 
   function setQty(pid: number, delta: number) {
+    const max = products.find((p) => p.id === pid)?.quantity ?? 0;
     setCart((c) => {
       const q = (c[pid] ?? 0) + delta;
       const next = { ...c };
       if (q <= 0) delete next[pid];
-      else next[pid] = q;
+      else next[pid] = Math.min(q, max);
       return next;
     });
   }
@@ -418,7 +476,8 @@ export default function App() {
       <SafeAreaView style={{ flex: 1, backgroundColor: bg }} edges={["top", "bottom", "left", "right"]}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
           <View style={styles.center}>
-            <StatusBar style="light" />
+            <StatusBar style="dark" />
+            <Image source={require("./assets/burqanlogo.png")} style={styles.logo} resizeMode="contain" />
             <Text style={styles.title}>{t.appTitle}</Text>
             <Text style={styles.sub}>{__DEV__ ? t.loginSub : t.loginSubProd}</Text>
             <Text style={[styles.muted, { fontSize: 11, marginTop: 6, textAlign: "center" }]} selectable>
@@ -444,10 +503,10 @@ export default function App() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: bg }} edges={["top", "left", "right"]}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <StatusBar style="light" />
+        <StatusBar style="dark" />
         <ScrollView
           style={{ flex: 1 }}
-          contentContainerStyle={[styles.page, { paddingBottom: insets.bottom + 28 }]}
+          contentContainerStyle={[styles.page, { paddingBottom: insets.bottom + 88 }]}
           keyboardShouldPersistTaps="handled"
           refreshControl={
             mode === "home" ? (
@@ -470,7 +529,7 @@ export default function App() {
           }
         >
           <View style={styles.header}>
-            <Text style={styles.title}>{t.appTitle}</Text>
+            <Image source={require("./assets/burqanlogo.png")} style={styles.logoHeader} resizeMode="contain" />
             <Pressable
               onPress={() => {
                 modernBarcodeSubRef.current?.remove();
@@ -478,6 +537,7 @@ export default function App() {
                 setToken(null);
                 setActiveStore(null);
                 setMode("home");
+                setBottomTab("home");
                 setMessage(null);
               }}
             >
@@ -485,22 +545,30 @@ export default function App() {
             </Pressable>
           </View>
 
-      {mode === "home" && (
+      {bottomTab === "home" && mode !== "store" && (
         <>
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>{t.scanTitle}</Text>
-            <Pressable style={styles.secondary} onPress={() => void openQrScanner()}>
-              <Text style={styles.secondaryText}>{t.openScanner}</Text>
-            </Pressable>
-            <Text style={styles.label}>{t.manualLabel}</Text>
-            <TextInput style={styles.input} value={manualToken} onChangeText={setManualToken} autoCapitalize="none" />
-            <Pressable style={styles.primary} onPress={() => void resolveQr(manualToken)}>
-              <Text style={styles.primaryText}>{t.lookup}</Text>
-            </Pressable>
-          </View>
+          {mode !== "register" && (
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>{t.scanTitle}</Text>
+              <Pressable style={styles.secondary} onPress={() => void openQrScanner()}>
+                <Text style={styles.secondaryText}>{t.openScanner}</Text>
+              </Pressable>
+              <Text style={styles.label}>{t.manualLabel}</Text>
+              <TextInput style={styles.input} value={manualToken} onChangeText={setManualToken} autoCapitalize="none" />
+              <Pressable style={styles.primary} onPress={() => void resolveQr(manualToken)}>
+                <Text style={styles.primaryText}>{t.lookup}</Text>
+              </Pressable>
+            </View>
+          )}
 
           {activeStore && mode === "home" && (
-            <Pressable style={styles.card} onPress={() => setMode("store")}>
+            <Pressable
+              style={styles.card}
+              onPress={() => {
+                setMode("store");
+                setBottomTab("store");
+              }}
+            >
               <Text style={styles.cardTitle}>
                 {t.resume} {activeStore.name}
               </Text>
@@ -510,7 +578,27 @@ export default function App() {
         </>
       )}
 
-      {mode === "register" && lastScanToken && token && (
+      {bottomTab === "inventory" && (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>{t.inventoryTitle}</Text>
+          {inventory.length === 0 ? (
+            <Text style={styles.muted}>{t.inventoryEmpty}</Text>
+          ) : (
+            inventory.map((item) => (
+              <View key={item.id} style={styles.productRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.body}>{item.name}</Text>
+                  <Text style={styles.muted}>
+                    {item.price} {t.currency} · {t.stock}: {item.quantity}
+                  </Text>
+                </View>
+              </View>
+            ))
+          )}
+        </View>
+      )}
+
+      {mode === "register" && lastScanToken && token && bottomTab === "home" && (
         <RegisterForm
           areas={areas}
           qrPublicToken={lastScanToken}
@@ -523,21 +611,28 @@ export default function App() {
             if (store) {
               setActiveStore(store);
               setMode("store");
+              setBottomTab("store");
               setStoreTab("info");
               await refreshStoreData(store.id);
             } else {
               setMode("home");
+              setBottomTab("home");
               setLastScanToken(null);
             }
           }}
         />
       )}
 
-      {mode === "store" && activeStore && (
+      {bottomTab === "store" && mode === "store" && activeStore && (
         <View style={styles.card}>
           <View style={styles.rowBetween}>
             <Text style={styles.cardTitle}>{activeStore.name}</Text>
-            <Pressable onPress={() => setMode("home")}>
+            <Pressable
+              onPress={() => {
+                setMode("home");
+                setBottomTab("home");
+              }}
+            >
               <Text style={styles.link}>{t.back}</Text>
             </Pressable>
           </View>
@@ -610,12 +705,13 @@ export default function App() {
               <Text style={styles.muted}>{t.sellHint}</Text>
               {products.map((item) => {
                 const q = cart[item.id] ?? 0;
+                const atMax = q >= item.quantity;
                 return (
                   <View key={item.id} style={styles.productRow}>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.body}>{item.name}</Text>
                       <Text style={styles.muted}>
-                        {item.price} {t.currency}
+                        {item.price} {t.currency} · {t.stock}: {item.quantity}
                       </Text>
                     </View>
                     <View style={styles.qtyRow}>
@@ -623,8 +719,8 @@ export default function App() {
                         <Text style={styles.qtyBtnText}>−</Text>
                       </Pressable>
                       <Text style={styles.qtyNum}>{q}</Text>
-                      <Pressable style={styles.qtyBtn} onPress={() => setQty(item.id, 1)}>
-                        <Text style={styles.qtyBtnText}>+</Text>
+                      <Pressable style={styles.qtyBtn} onPress={() => setQty(item.id, 1)} disabled={atMax}>
+                        <Text style={[styles.qtyBtnText, atMax && { opacity: 0.35 }]}>+</Text>
                       </Pressable>
                     </View>
                   </View>
@@ -739,6 +835,39 @@ export default function App() {
             <ActivityIndicator size="large" color={accent} />
           </View>
         ) : null}
+        <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+          <Pressable
+            style={[styles.bottomTab, bottomTab === "home" && styles.bottomTabOn]}
+            onPress={() => {
+              setBottomTab("home");
+              if (mode === "store") setMode("home");
+            }}
+          >
+            <Text style={[styles.bottomTabText, bottomTab === "home" && styles.bottomTabTextOn]}>{t.navHome}</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.bottomTab, bottomTab === "inventory" && styles.bottomTabOn]}
+            onPress={() => {
+              setBottomTab("inventory");
+              void loadInventory();
+            }}
+          >
+            <Text style={[styles.bottomTabText, bottomTab === "inventory" && styles.bottomTabTextOn]}>
+              {t.navInventory}
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[styles.bottomTab, bottomTab === "store" && styles.bottomTabOn, !activeStore && styles.bottomTabDisabled]}
+            disabled={!activeStore}
+            onPress={() => {
+              if (!activeStore) return;
+              setMode("store");
+              setBottomTab("store");
+            }}
+          >
+            <Text style={[styles.bottomTabText, bottomTab === "store" && styles.bottomTabTextOn]}>{t.navStore}</Text>
+          </Pressable>
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -756,13 +885,44 @@ function RegisterForm(props: {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [ownerName, setOwnerName] = useState("");
-  const [lat, setLat] = useState("24.7136");
-  const [lng, setLng] = useState("46.6753");
+  const [lat, setLat] = useState("");
+  const [lng, setLng] = useState("");
   const [address, setAddress] = useState("");
-  const [areaId, setAreaId] = useState(props.areas[0]?.id);
+  const [areaId, setAreaId] = useState<number | undefined>(props.areas[0]?.id);
+  const [areaName, setAreaName] = useState("");
+  const [locating, setLocating] = useState(true);
   const [busy, setBusy] = useState(false);
   const [uploadBusy, setUploadBusy] = useState(false);
   const [imagePath, setImagePath] = useState<string | null>(null);
+
+  const refreshLocation = useCallback(async () => {
+    setLocating(true);
+    try {
+      const pos = await getRepPosition();
+      setLat(pos.lat.toFixed(6));
+      setLng(pos.lng.toFixed(6));
+      const res = await fetch(
+        `${props.apiBase}/api/v1/rep/areas/resolve?lat=${pos.lat}&lng=${pos.lng}`,
+        { headers: props.headers }
+      );
+      const data = await res.json();
+      if (res.ok && data.areaId) {
+        setAreaId(data.areaId);
+        setAreaName(data.areaName ?? "");
+      } else {
+        props.onNotice(typeof data.error === "string" ? data.error : t.areaDetecting);
+      }
+    } catch (e) {
+      if (e instanceof LocationDeniedError) props.onNotice(t.locationDenied);
+      else props.onNotice(e instanceof Error ? e.message : t.locating);
+    } finally {
+      setLocating(false);
+    }
+  }, [props.apiBase, props.headers, props.onNotice]);
+
+  useEffect(() => {
+    void refreshLocation();
+  }, [refreshLocation]);
 
   async function pickAndUpload() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -788,6 +948,10 @@ function RegisterForm(props: {
   }
 
   async function submit() {
+    if (!areaId || !lat || !lng) {
+      props.onNotice(t.locating);
+      return;
+    }
     setBusy(true);
     try {
       const res = await fetch(`${props.apiBase}/api/v1/rep/stores/register`, {
@@ -801,7 +965,7 @@ function RegisterForm(props: {
           locationLat: parseFloat(lat),
           locationLng: parseFloat(lng),
           addressText: address || undefined,
-          areaId: areaId ?? props.areas[0]?.id,
+          areaId,
           imageUrl: imagePath ?? undefined,
         }),
       });
@@ -821,14 +985,18 @@ function RegisterForm(props: {
       <Text style={styles.muted}>
         {t.tokenPreview} {props.qrPublicToken.slice(0, 20)}…
       </Text>
-      <Text style={styles.label}>{t.area}</Text>
-      <View style={styles.chipRow}>
-        {props.areas.map((a) => (
-          <Pressable key={a.id} style={[styles.chip, areaId === a.id && styles.chipOn]} onPress={() => setAreaId(a.id)}>
-            <Text style={styles.chipText}>{a.name}</Text>
-          </Pressable>
-        ))}
-      </View>
+      <Text style={styles.label}>{t.areaAuto}</Text>
+      {locating ? (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 }}>
+          <ActivityIndicator color={accent} />
+          <Text style={styles.muted}>{t.areaDetecting}</Text>
+        </View>
+      ) : (
+        <Text style={styles.body}>{areaName || props.areas.find((a) => a.id === areaId)?.name || "—"}</Text>
+      )}
+      <Pressable style={styles.secondary} onPress={() => void refreshLocation()}>
+        <Text style={styles.secondaryText}>{t.refreshLocation}</Text>
+      </Pressable>
       <Text style={styles.label}>{t.storeName}</Text>
       <TextInput style={styles.input} value={name} onChangeText={setName} />
       <Text style={styles.label}>{t.storePhone}</Text>
@@ -859,18 +1027,20 @@ function RegisterForm(props: {
   );
 }
 
-const bg = "#0b1220";
-const card = "#121a2b";
-const line = "#22304d";
-const text = "#e8eefc";
-const muted = "#9fb0d0";
-const accent = "#5eead4";
+const bg = "#f1f5f9";
+const card = "#ffffff";
+const line = "#e2e8f0";
+const text = "#0f172a";
+const muted = "#64748b";
+const accent = "#0d9488";
 
 const styles = StyleSheet.create({
   center: { flex: 1, backgroundColor: bg, padding: 22, justifyContent: "center" },
   page: { padding: 16, paddingBottom: 48, backgroundColor: bg, flexGrow: 1 },
+  logo: { width: 160, height: 64, alignSelf: "center", marginBottom: 12 },
+  logoHeader: { width: 120, height: 44 },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
-  title: { color: text, fontSize: 26, fontWeight: "700" },
+  title: { color: text, fontSize: 22, fontWeight: "700", textAlign: "center" },
   sub: { color: muted, marginTop: 8, marginBottom: 12 },
   card: {
     backgroundColor: card,
@@ -889,7 +1059,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     color: text,
     marginTop: 6,
-    backgroundColor: "#0b1020",
+    backgroundColor: "#f8fafc",
     textAlign: "right",
     writingDirection: "rtl",
   },
@@ -902,7 +1072,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
   },
-  primaryText: { color: "#04121a", fontWeight: "800" },
+  primaryText: { color: "#ffffff", fontWeight: "800" },
   secondary: {
     marginTop: 10,
     borderColor: line,
@@ -913,7 +1083,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   secondaryText: { color: text, fontWeight: "700" },
-  error: { color: "#fb7185", marginTop: 10, textAlign: "right" },
+  error: { color: "#e11d48", marginTop: 10, textAlign: "right" },
   muted: { color: muted, marginTop: 8, fontSize: 13, textAlign: "right" },
   link: { color: accent, fontWeight: "700" },
   scannerModal: { flex: 1, backgroundColor: "#000" },
@@ -942,7 +1112,7 @@ const styles = StyleSheet.create({
   busy: { padding: 10 },
   busyOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(11,18,32,0.5)",
+    backgroundColor: "rgba(15,23,42,0.25)",
     justifyContent: "center",
     alignItems: "center",
     zIndex: 40,
@@ -952,7 +1122,7 @@ const styles = StyleSheet.create({
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
   tabs: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
   tab: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 999, borderWidth: 1, borderColor: line },
-  tabOn: { borderColor: accent, backgroundColor: "rgba(94,234,212,0.12)" },
+  tabOn: { borderColor: accent, backgroundColor: "rgba(13,148,136,0.1)" },
   tabText: { color: muted, fontWeight: "600" },
   tabTextOn: { color: accent },
   listRow: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: line },
@@ -962,7 +1132,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 8,
-    backgroundColor: "#0b1020",
+    backgroundColor: "#f8fafc",
     borderWidth: 1,
     borderColor: line,
     alignItems: "center",
@@ -972,6 +1142,25 @@ const styles = StyleSheet.create({
   qtyNum: { color: text, fontWeight: "800", minWidth: 24, textAlign: "center" },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
   chip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: line },
-  chipOn: { borderColor: accent, backgroundColor: "rgba(94,234,212,0.15)" },
+  chipOn: { borderColor: accent, backgroundColor: "rgba(13,148,136,0.12)" },
   chipText: { color: text, fontWeight: "600" },
+  bottomBar: {
+    flexDirection: "row",
+    borderTopWidth: 1,
+    borderTopColor: line,
+    backgroundColor: card,
+    paddingTop: 8,
+    paddingHorizontal: 8,
+    gap: 6,
+  },
+  bottomTab: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  bottomTabOn: { backgroundColor: "rgba(13,148,136,0.12)" },
+  bottomTabDisabled: { opacity: 0.4 },
+  bottomTabText: { color: muted, fontWeight: "600", fontSize: 12 },
+  bottomTabTextOn: { color: accent, fontWeight: "800" },
 });

@@ -124,6 +124,10 @@ export const en: Messages = {
     addFailed: "Could not add area.",
     saveFailed: "Could not save area.",
     deleteFailed: "Could not delete area.",
+    centerLat: "Center latitude",
+    centerLng: "Center longitude",
+    radiusKm: "Radius (km)",
+    geoHint: "Used to auto-assign stores from GPS. Set center near the area on the map.",
   },
 
   products: {
@@ -196,6 +200,10 @@ export const en: Messages = {
     createFailed: "Could not create rep.",
     saveFailed: "Could not save changes.",
     deleteFailed: "Could not delete rep.",
+    inventoryTitle: "Van inventory (products on car)",
+    inventoryQty: "Qty",
+    saveInventory: "Save inventory",
+    inventorySaved: "Inventory updated.",
   },
 
   stores: {

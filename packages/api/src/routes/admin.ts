@@ -422,7 +422,9 @@ router.get(
   requireAdminPermission("areas.read"),
   async (_req, res, next) => {
     try {
-      const { rows } = await query(`SELECT id, name, created_at FROM areas ORDER BY id ASC`);
+      const { rows } = await query(
+        `SELECT id, name, center_lat, center_lng, radius_km, created_at FROM areas ORDER BY id ASC`
+      );
       res.json({ areas: rows });
     } catch (e) {
       next(e);
@@ -430,7 +432,12 @@ router.get(
   }
 );
 
-const areaSchema = z.object({ name: z.string().trim().min(2).max(255) });
+const areaSchema = z.object({
+  name: z.string().trim().min(2).max(255),
+  centerLat: z.number().min(-90).max(90).optional().nullable(),
+  centerLng: z.number().min(-180).max(180).optional().nullable(),
+  radiusKm: z.number().positive().max(500).optional(),
+});
 
 router.post(
   "/areas",
@@ -440,8 +447,10 @@ router.post(
     try {
       const body = areaSchema.parse(req.body);
       const { rows } = await query(
-        `INSERT INTO areas (name) VALUES ($1) RETURNING id, name, created_at`,
-        [body.name]
+        `INSERT INTO areas (name, center_lat, center_lng, radius_km)
+         VALUES ($1, $2, $3, COALESCE($4, 25))
+         RETURNING id, name, center_lat, center_lng, radius_km, created_at`,
+        [body.name, body.centerLat ?? null, body.centerLng ?? null, body.radiusKm ?? null]
       );
       res.status(201).json({ area: rows[0] });
     } catch (e) {
@@ -462,8 +471,14 @@ router.patch(
       const id = z.coerce.number().int().positive().parse(req.params.id);
       const body = areaSchema.parse(req.body);
       const { rows } = await query(
-        `UPDATE areas SET name = $1 WHERE id = $2 RETURNING id, name, created_at`,
-        [body.name, id]
+        `UPDATE areas SET
+           name = $1,
+           center_lat = COALESCE($2, center_lat),
+           center_lng = COALESCE($3, center_lng),
+           radius_km = COALESCE($4, radius_km)
+         WHERE id = $5
+         RETURNING id, name, center_lat, center_lng, radius_km, created_at`,
+        [body.name, body.centerLat ?? null, body.centerLng ?? null, body.radiusKm ?? null, id]
       );
       if (!rows[0]) throw new HttpError(404, "المنطقة غير موجودة");
       res.json({ area: rows[0] });
@@ -814,6 +829,79 @@ router.delete(
       const { rowCount } = await query(`DELETE FROM representatives WHERE id = $1`, [id]);
       if (!rowCount) throw new HttpError(404, "المندوب غير موجود");
       res.status(204).send();
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+const inventoryItemSchema = z.object({
+  productId: z.number().int().positive(),
+  quantity: z.number().int().min(0),
+});
+
+const inventoryPutSchema = z.object({
+  items: z.array(inventoryItemSchema),
+});
+
+router.get(
+  "/representatives/:id/inventory",
+  adminAuthMiddleware,
+  requireAdminPermission("reps.read"),
+  async (req, res, next) => {
+    try {
+      const id = z.coerce.number().int().positive().parse(req.params.id);
+      const { rows } = await query(
+        `SELECT p.id AS product_id, p.name, p.price, COALESCE(ri.quantity, 0) AS quantity
+         FROM products p
+         LEFT JOIN representative_inventory ri
+           ON ri.product_id = p.id AND ri.representative_id = $1
+         WHERE p.is_active = true
+         ORDER BY p.name ASC`,
+        [id]
+      );
+      res.json({ inventory: rows });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+router.put(
+  "/representatives/:id/inventory",
+  adminAuthMiddleware,
+  requireAdminPermission("reps.write"),
+  async (req, res, next) => {
+    try {
+      const id = z.coerce.number().int().positive().parse(req.params.id);
+      const body = inventoryPutSchema.parse(req.body);
+      const repCheck = await query(`SELECT id FROM representatives WHERE id = $1`, [id]);
+      if (!repCheck.rows[0]) throw new HttpError(404, "المندوب غير موجود");
+
+      const c = await pool.connect();
+      try {
+        await c.query("BEGIN");
+        for (const item of body.items) {
+          await c.query(
+            `INSERT INTO representative_inventory (representative_id, product_id, quantity, updated_at)
+             VALUES ($1, $2, $3, now())
+             ON CONFLICT (representative_id, product_id)
+             DO UPDATE SET quantity = EXCLUDED.quantity, updated_at = now()`,
+            [id, item.productId, item.quantity]
+          );
+        }
+        await c.query("COMMIT");
+      } catch (e) {
+        await c.query("ROLLBACK");
+        throw e;
+      } finally {
+        c.release();
+      }
+      const { rows } = await query(
+        `SELECT product_id, quantity FROM representative_inventory WHERE representative_id = $1`,
+        [id]
+      );
+      res.json({ inventory: rows });
     } catch (e) {
       next(e);
     }

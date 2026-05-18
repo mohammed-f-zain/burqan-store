@@ -11,8 +11,13 @@ async function main() {
   const phRep = await hashPassword(repPassword);
 
   await query(
-    `INSERT INTO areas (name) VALUES ('Riyadh North'), ('Jeddah Central')
-     ON CONFLICT (name) DO NOTHING`
+    `INSERT INTO areas (name, center_lat, center_lng, radius_km) VALUES
+       ('عمان الشمال', 32.02, 35.88, 30),
+       ('عمان الجنوب', 31.90, 35.92, 30)
+     ON CONFLICT (name) DO UPDATE SET
+       center_lat = EXCLUDED.center_lat,
+       center_lng = EXCLUDED.center_lng,
+       radius_km = EXCLUDED.radius_km`
   );
 
   const { rows: areaRows } = await query<{ id: number }>(`SELECT id FROM areas ORDER BY id ASC LIMIT 2`);
@@ -44,7 +49,7 @@ async function main() {
     `INSERT INTO representatives (email, password_hash, full_name, phone, image_url, car_plate)
      VALUES ($1, $2, $3, $4, NULL, $5)
      ON CONFLICT (email) DO NOTHING`,
-    [repEmail, phRep, "Demo Representative", "+966500000000", "ABC 1234"]
+    [repEmail, phRep, "Demo Representative", "+962790000000", "JO 1234"]
   );
 
   const { rows: repRows } = await query<{ id: number }>(
@@ -58,6 +63,16 @@ async function main() {
         `INSERT INTO representative_areas (representative_id, area_id) VALUES ($1, $2)
          ON CONFLICT (representative_id, area_id) DO NOTHING`,
         [repId, aid]
+      );
+    }
+    const { rows: prods } = await query<{ id: number }>(`SELECT id FROM products WHERE is_active = true`);
+    for (const p of prods) {
+      await query(
+        `INSERT INTO representative_inventory (representative_id, product_id, quantity)
+         VALUES ($1, $2, 50)
+         ON CONFLICT (representative_id, product_id)
+         DO UPDATE SET quantity = GREATEST(representative_inventory.quantity, 50)`,
+        [repId, p.id]
       );
     }
   }

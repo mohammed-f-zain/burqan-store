@@ -11,6 +11,11 @@ import { hashPassword, verifyPassword } from "../utils/password.js";
 import { signRepToken } from "../utils/jwt.js";
 import { config } from "../config.js";
 import { optionalStoredImagePathSchema } from "../utils/storedImagePath.js";
+import {
+  assertWithinScanDistance,
+  repLocationSchema,
+  resolveAreaIdForRep,
+} from "../utils/geo.js";
 
 const router = Router();
 
@@ -67,13 +72,42 @@ router.get("/areas", repAuthMiddleware, async (req, res, next) => {
   try {
     const rep = req.rep!;
     const { rows } = await query(
-      `SELECT a.id, a.name FROM areas a
+      `SELECT a.id, a.name, a.center_lat, a.center_lng, a.radius_km FROM areas a
        INNER JOIN representative_areas ra ON ra.area_id = a.id
        WHERE ra.representative_id = $1
        ORDER BY a.name ASC`,
       [rep.id]
     );
     res.json({ areas: rows });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get("/areas/resolve", repAuthMiddleware, async (req, res, next) => {
+  try {
+    const lat = z.coerce.number().parse(req.query.lat);
+    const lng = z.coerce.number().parse(req.query.lng);
+    const resolved = await resolveAreaIdForRep(lat, lng, req.rep!.areaIds);
+    res.json(resolved);
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get("/inventory", repAuthMiddleware, async (req, res, next) => {
+  try {
+    const rep = req.rep!;
+    const { rows } = await query(
+      `SELECT p.id, p.name, p.designation, p.unit_label, p.price, COALESCE(ri.quantity, 0) AS quantity
+       FROM products p
+       LEFT JOIN representative_inventory ri
+         ON ri.product_id = p.id AND ri.representative_id = $1
+       WHERE p.is_active = true
+       ORDER BY p.name ASC`,
+      [rep.id]
+    );
+    res.json({ inventory: rows });
   } catch (e) {
     next(e);
   }
@@ -91,16 +125,25 @@ router.get("/products", repAuthMiddleware, async (_req, res, next) => {
   }
 });
 
+const qrQuerySchema = z.object({
+  lat: z.coerce.number().min(-90).max(90),
+  lng: z.coerce.number().min(-180).max(180),
+});
+
 /** Resolve QR token: unassigned pool code vs existing store */
 router.get("/qr/:token", repAuthMiddleware, async (req, res, next) => {
   try {
     const token = z.string().min(16).max(64).parse(req.params.token);
+    const loc = qrQuerySchema.parse(req.query);
     const { rows } = await query<{
       qr_id: string;
       public_token: string;
       store_id: number | null;
+      location_lat: number | null;
+      location_lng: number | null;
     }>(
-      `SELECT qc.id::text AS qr_id, qc.public_token, s.id AS store_id
+      `SELECT qc.id::text AS qr_id, qc.public_token, s.id AS store_id,
+              s.location_lat, s.location_lng
        FROM qr_codes qc
        LEFT JOIN stores s ON s.qr_code_id = qc.id
        WHERE qc.public_token = $1`,
@@ -114,6 +157,9 @@ router.get("/qr/:token", repAuthMiddleware, async (req, res, next) => {
         qr: { id: row.qr_id, publicToken: row.public_token },
         assignUrlHint: `${config.qrPayloadBaseUrl}/r/${row.public_token}`,
       });
+    }
+    if (row.location_lat != null && row.location_lng != null) {
+      assertWithinScanDistance(loc.lat, loc.lng, row.location_lat, row.location_lng);
     }
     const store = await loadStoreForRep(row.store_id, req.rep!);
     res.json({ status: "assigned", store });
@@ -171,14 +217,19 @@ const registerStoreSchema = z.object({
   locationLng: z.number(),
   addressText: z.string().optional(),
   imageUrl: optionalStoredImagePathSchema,
-  areaId: z.number().int().positive(),
+  areaId: z.number().int().positive().optional(),
 });
 
 router.post("/stores/register", repAuthMiddleware, async (req, res, next) => {
   try {
     const body = registerStoreSchema.parse(req.body);
     const rep = req.rep!;
-    if (!rep.areaIds.includes(body.areaId)) throw new HttpError(403, "Area not assigned to you");
+    let areaId = body.areaId;
+    if (areaId == null) {
+      const resolved = await resolveAreaIdForRep(body.locationLat, body.locationLng, rep.areaIds);
+      areaId = resolved.areaId;
+    }
+    if (!rep.areaIds.includes(areaId)) throw new HttpError(403, "Area not assigned to you");
 
     const c = await pool.connect();
     try {
@@ -208,7 +259,7 @@ router.post("/stores/register", repAuthMiddleware, async (req, res, next) => {
           body.locationLng,
           body.addressText ?? null,
           body.imageUrl || null,
-          body.areaId,
+          areaId,
           ownerToken,
           rep.id,
         ]
@@ -285,12 +336,15 @@ router.get("/stores/:id/orders", repAuthMiddleware, async (req, res, next) => {
 const visitSchema = z.object({
   storeId: z.number().int().positive(),
   note: z.string().optional(),
+  repLat: z.number().min(-90).max(90),
+  repLng: z.number().min(-180).max(180),
 });
 
 router.post("/visits", repAuthMiddleware, async (req, res, next) => {
   try {
     const body = visitSchema.parse(req.body);
-    await loadStoreForRep(body.storeId, req.rep!);
+    const storeRow = await loadStoreRowForRep(body.storeId, req.rep!);
+    assertWithinScanDistance(body.repLat, body.repLng, storeRow.location_lat, storeRow.location_lng);
     const { rows } = await query(
       `INSERT INTO visits (representative_id, store_id, note) VALUES ($1,$2,$3) RETURNING *`,
       [req.rep!.id, body.storeId, body.note ?? null]
@@ -310,12 +364,32 @@ const orderSchema = z.object({
   storeId: z.number().int().positive(),
   paymentType: z.enum(["cash", "deferred"]),
   lines: z.array(orderLineSchema).min(1),
+  repLat: z.number().min(-90).max(90),
+  repLng: z.number().min(-180).max(180),
 });
+
+async function loadStoreRowForRep(storeId: number, rep: { areaIds: number[] }) {
+  const { rows } = await query<{
+    id: number;
+    area_id: number;
+    location_lat: number;
+    location_lng: number;
+    deferred_payment_enabled: boolean;
+  }>(`SELECT id, area_id, location_lat, location_lng, deferred_payment_enabled FROM stores WHERE id = $1`, [
+    storeId,
+  ]);
+  const s = rows[0];
+  if (!s) throw new HttpError(404, "Store not found");
+  if (!rep.areaIds.includes(s.area_id)) throw new HttpError(403, "Store not in your areas");
+  return s;
+}
 
 router.post("/orders", repAuthMiddleware, async (req, res, next) => {
   try {
     const body = orderSchema.parse(req.body);
     const rep = req.rep!;
+    const storeRow = await loadStoreRowForRep(body.storeId, rep);
+    assertWithinScanDistance(body.repLat, body.repLng, storeRow.location_lat, storeRow.location_lng);
     const store = await loadStoreForRep(body.storeId, rep);
     if (body.paymentType === "deferred" && !store.deferredPaymentEnabled) {
       throw new HttpError(403, "Deferred payments not enabled for this store");
@@ -333,6 +407,16 @@ router.post("/orders", repAuthMiddleware, async (req, res, next) => {
         );
         const p = pr.rows[0];
         if (!p?.is_active) throw new HttpError(400, "Invalid product");
+        const inv = await c.query<{ quantity: number }>(
+          `SELECT quantity FROM representative_inventory
+           WHERE representative_id = $1 AND product_id = $2
+           FOR UPDATE`,
+          [rep.id, line.productId]
+        );
+        const stock = inv.rows[0]?.quantity ?? 0;
+        if (stock < line.quantity) {
+          throw new HttpError(400, `الكمية غير كافية في مخزون السيارة (متوفر: ${stock})`);
+        }
         const unit = parseFloat(p.price);
         const lineTotal = unit * line.quantity;
         total += lineTotal;
@@ -354,6 +438,12 @@ router.post("/orders", repAuthMiddleware, async (req, res, next) => {
           `INSERT INTO order_lines (order_id, product_id, quantity, unit_price, line_total)
            VALUES ($1,$2,$3,$4,$5)`,
           [orderId, l.productId, l.quantity, l.unitPrice, l.lineTotal.toFixed(2)]
+        );
+        await c.query(
+          `UPDATE representative_inventory
+           SET quantity = quantity - $1, updated_at = now()
+           WHERE representative_id = $2 AND product_id = $3`,
+          [l.quantity, rep.id, l.productId]
         );
       }
       await c.query("COMMIT");

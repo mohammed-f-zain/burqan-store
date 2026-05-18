@@ -123,6 +123,10 @@ export const ar = {
     addFailed: "تعذّر إضافة المنطقة.",
     saveFailed: "تعذّر حفظ المنطقة.",
     deleteFailed: "تعذّر حذف المنطقة.",
+    centerLat: "خط العرض (مركز المنطقة)",
+    centerLng: "خط الطول (مركز المنطقة)",
+    radiusKm: "نصف القطر (كم)",
+    geoHint: "يُستخدم لتعيين المنطقة تلقائياً من موقع الجهاز عند تسجيل المتجر.",
   },
 
   products: {
@@ -195,6 +199,10 @@ export const ar = {
     createFailed: "تعذّر إنشاء المندوب.",
     saveFailed: "تعذّر حفظ التعديلات.",
     deleteFailed: "تعذّر حذف المندوب.",
+    inventoryTitle: "مخزون السيارة (المنتجات مع المندوب)",
+    inventoryQty: "الكمية",
+    saveInventory: "حفظ المخزون",
+    inventorySaved: "تم تحديث المخزون.",
   },
 
   stores: {
