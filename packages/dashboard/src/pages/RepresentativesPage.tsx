@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
@@ -21,8 +22,6 @@ type Rep = {
   image_url: string | null;
 };
 type Area = { id: number; name: string };
-type InvRow = { product_id: number; name: string; price: string; quantity: number };
-
 function normalizeAreaIds(raw: unknown): number[] {
   if (Array.isArray(raw)) return raw.map((x) => Number(x)).filter((n) => Number.isFinite(n));
   if (typeof raw === "string") {
@@ -62,9 +61,8 @@ export default function RepresentativesPage() {
   const [eIsActive, setEIsActive] = useState(true);
   const [eNewPassword, setENewPassword] = useState("");
   const [eUploading, setEUploading] = useState(false);
-  const [eInventory, setEInventory] = useState<InvRow[]>([]);
-
   const repPgn = useClientPagination(reps);
+  const canFillCar = can("fill_car.read") || can("reps.read");
 
   const areaNameById = useMemo(() => {
     const m = new Map<number, string>();
@@ -164,11 +162,6 @@ export default function RepresentativesPage() {
     }
   }
 
-  async function loadRepInventory(repId: number) {
-    const { data } = await api.get<{ inventory: InvRow[] }>(`/representatives/${repId}/inventory`);
-    setEInventory(data.inventory ?? []);
-  }
-
   function openEdit(r: Rep) {
     setMsg(null);
     setEditId(r.id);
@@ -180,29 +173,11 @@ export default function RepresentativesPage() {
     setEImagePath(r.image_url ?? "");
     setEIsActive(r.is_active);
     setENewPassword("");
-    void loadRepInventory(r.id).catch(() => setEInventory([]));
   }
 
   function closeEdit() {
     setEditId(null);
     setENewPassword("");
-    setEInventory([]);
-  }
-
-  async function saveInventory() {
-    if (editId == null) return;
-    setMsg(null);
-    try {
-      await api.put(`/representatives/${editId}/inventory`, {
-        items: eInventory.map((row) => ({
-          productId: row.product_id,
-          quantity: Math.max(0, parseInt(String(row.quantity), 10) || 0),
-        })),
-      });
-      setMsg(t.reps.inventorySaved);
-    } catch (err) {
-      setMsg(pickAxiosErrorMessage(err, t.reps.saveFailed));
-    }
   }
 
   async function saveEdit() {
@@ -449,41 +424,11 @@ export default function RepresentativesPage() {
                 ))}
               </div>
             </div>
-            <h4 style={{ marginTop: 16 }}>{t.reps.inventoryTitle}</h4>
-            <div className="table-wrap">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>{t.orders.product}</th>
-                    <th>{t.reps.inventoryQty}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {eInventory.map((row, idx) => (
-                    <tr key={row.product_id}>
-                      <td>{row.name}</td>
-                      <td>
-                        <input
-                          type="number"
-                          min={0}
-                          value={row.quantity}
-                          onChange={(e) => {
-                            const q = parseInt(e.target.value, 10);
-                            setEInventory((rows) =>
-                              rows.map((r, i) => (i === idx ? { ...r, quantity: Number.isFinite(q) ? q : 0 } : r))
-                            );
-                          }}
-                          style={{ width: 88 }}
-                        />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <button type="button" className="secondary" style={{ marginTop: 8 }} onClick={() => void saveInventory()}>
-              {t.reps.saveInventory}
-            </button>
+            {canFillCar && (
+              <p className="muted small" style={{ marginTop: 16 }}>
+                <Link to="/app/fill-car">{t.reps.fillCarLink}</Link>
+              </p>
+            )}
             <div className="row spread" style={{ marginTop: 16 }}>
               <button type="button" className="ghost" onClick={() => closeEdit()}>
                 {t.reps.cancel}

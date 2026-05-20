@@ -8,7 +8,12 @@ import { config } from "../config.js";
 import { isSmtpConfigured, sendMail } from "../lib/mail.js";
 import { imageUpload } from "../lib/uploadConfig.js";
 import { query, pool } from "../db/pool.js";
-import { adminAuthMiddleware, loadAdmin, requireAdminPermission } from "../middleware/adminAuth.js";
+import {
+  adminAuthMiddleware,
+  loadAdmin,
+  requireAdminPermission,
+  requireAnyAdminPermission,
+} from "../middleware/adminAuth.js";
 import { HttpError } from "../utils/errors.js";
 import { hashPassword, verifyPassword } from "../utils/password.js";
 import { signAdminToken } from "../utils/jwt.js";
@@ -938,9 +943,25 @@ const inventoryPutSchema = z.object({
 });
 
 router.get(
+  "/fill-car/representatives",
+  adminAuthMiddleware,
+  requireAnyAdminPermission("fill_car.read", "reps.read"),
+  async (_req, res, next) => {
+    try {
+      const { rows } = await query(
+        `SELECT id, full_name, email, is_active FROM representatives ORDER BY full_name ASC`
+      );
+      res.json({ representatives: rows });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+router.get(
   "/representatives/:id/inventory",
   adminAuthMiddleware,
-  requireAdminPermission("reps.read"),
+  requireAnyAdminPermission("fill_car.read", "reps.read"),
   async (req, res, next) => {
     try {
       const id = z.coerce.number().int().positive().parse(req.params.id);
@@ -963,7 +984,7 @@ router.get(
 router.put(
   "/representatives/:id/inventory",
   adminAuthMiddleware,
-  requireAdminPermission("reps.write"),
+  requireAnyAdminPermission("fill_car.write", "reps.write"),
   async (req, res, next) => {
     try {
       const id = z.coerce.number().int().positive().parse(req.params.id);

@@ -76,3 +76,15 @@ export function requireAdminPermission(...perms: Permission[]): RequestHandler {
     next();
   };
 }
+
+/** Passes if the admin has at least one of the listed permissions (or is super admin). */
+export function requireAnyAdminPermission(...perms: Permission[]): RequestHandler {
+  return (req, _res, next) => {
+    const admin = req.admin;
+    if (!admin) return next(new HttpError(401, "غير مصرّح"));
+    if (admin.isSuperAdmin) return next();
+    const ok = perms.some((p) => admin.permissions.includes(p));
+    if (!ok) return next(new HttpError(403, "ليس لديك صلاحية"));
+    next();
+  };
+}

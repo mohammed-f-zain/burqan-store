@@ -9,6 +9,8 @@ export const PERMISSIONS = [
   "products.write",
   "reps.read",
   "reps.write",
+  "fill_car.read",
+  "fill_car.write",
   "stores.read",
   "stores.write",
   "stores.deferred_toggle",

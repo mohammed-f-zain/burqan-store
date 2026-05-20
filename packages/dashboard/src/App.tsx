@@ -16,6 +16,7 @@ import OverviewPage from "./pages/OverviewPage";
 import ProductsPage from "./pages/ProductsPage";
 import PublicOwner from "./pages/PublicOwner";
 import QrPoolPage from "./pages/QrPoolPage";
+import FillCarPage from "./pages/FillCarPage";
 import RepresentativesPage from "./pages/RepresentativesPage";
 import RolesPage from "./pages/RolesPage";
 import StoreDetailPage from "./pages/StoreDetailPage";
@@ -41,6 +42,7 @@ export default function App() {
                 <Route path="areas" element={<AreasPage />} />
                 <Route path="products" element={<ProductsPage />} />
                 <Route path="representatives" element={<RepresentativesPage />} />
+                <Route path="fill-car" element={<FillCarPage />} />
                 <Route path="stores" element={<StoresPage />} />
                   <Route path="stores/:id" element={<StoreDetailPage />} />
                   <Route path="orders" element={<OrdersPage />} />
