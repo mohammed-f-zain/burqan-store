@@ -312,6 +312,7 @@ export const en: Messages = {
     title: "Orders",
     colId: "Order",
     colStore: "Store",
+    colRep: "Sales rep",
     colType: "Type",
     colTotal: "Total",
     colWhen: "Date",

@@ -1224,8 +1224,21 @@ router.get(
       const storeId = req.query.storeId ? z.coerce.number().int().positive().parse(req.query.storeId) : null;
       const { rows } = await query(
         storeId
-          ? `SELECT o.* FROM orders o WHERE o.store_id = $1 ORDER BY o.id DESC LIMIT 200`
-          : `SELECT o.* FROM orders o ORDER BY o.id DESC LIMIT 200`,
+          ? `SELECT o.id, o.representative_id, o.store_id, o.payment_type, o.total_amount, o.created_at,
+                    s.name AS store_name, r.full_name AS rep_name
+             FROM orders o
+             INNER JOIN stores s ON s.id = o.store_id
+             INNER JOIN representatives r ON r.id = o.representative_id
+             WHERE o.store_id = $1
+             ORDER BY o.id DESC
+             LIMIT 200`
+          : `SELECT o.id, o.representative_id, o.store_id, o.payment_type, o.total_amount, o.created_at,
+                    s.name AS store_name, r.full_name AS rep_name
+             FROM orders o
+             INNER JOIN stores s ON s.id = o.store_id
+             INNER JOIN representatives r ON r.id = o.representative_id
+             ORDER BY o.id DESC
+             LIMIT 200`,
         storeId ? [storeId] : []
       );
       res.json({ orders: rows });
@@ -1251,7 +1264,8 @@ router.get(
         created_at: Date;
         lines: unknown;
       }>(
-        `SELECT o.*,
+        `SELECT o.id, o.representative_id, o.store_id, o.payment_type, o.total_amount, o.created_at,
+                s.name AS store_name, r.full_name AS rep_name,
           COALESCE(
             (SELECT json_agg(json_build_object(
               'productId', ol.product_id,
@@ -1265,7 +1279,10 @@ router.get(
             WHERE ol.order_id = o.id),
             '[]'::json
           ) AS lines
-         FROM orders o WHERE o.id = $1`,
+         FROM orders o
+         INNER JOIN stores s ON s.id = o.store_id
+         INNER JOIN representatives r ON r.id = o.representative_id
+         WHERE o.id = $1`,
         [id]
       );
       if (!rows[0]) throw new HttpError(404, "Order not found");

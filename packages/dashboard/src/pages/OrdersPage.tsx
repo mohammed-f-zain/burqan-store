@@ -14,6 +14,8 @@ type OrderRow = {
   id: string;
   representative_id: number;
   store_id: number;
+  store_name: string;
+  rep_name: string;
   payment_type: string;
   total_amount: string;
   created_at: string;
@@ -91,6 +93,7 @@ export default function OrdersPage() {
               <tr>
                 <th>{t.orders.colId}</th>
                 <th>{t.orders.colStore}</th>
+                <th>{t.orders.colRep}</th>
                 <th>{t.orders.colType}</th>
                 <th>{t.orders.colTotal}</th>
                 <th>{t.orders.colWhen}</th>
@@ -105,7 +108,8 @@ export default function OrdersPage() {
                       {o.id}
                     </button>
                   </td>
-                  <td>{o.store_id}</td>
+                  <td>{o.store_name}</td>
+                  <td>{o.rep_name}</td>
                   <td>{o.payment_type}</td>
                   <td>{o.total_amount}</td>
                   <td className="small muted">{formatMarketDateTime(o.created_at)}</td>
@@ -130,7 +134,8 @@ export default function OrdersPage() {
               {t.orders.detailTitle} {detail.id}
             </h3>
             <p className="muted">
-              {t.orders.colStore} {detail.store_id} · {detail.payment_type} · {detail.total_amount}
+              {t.orders.colStore}: {detail.store_name} · {t.orders.colRep}: {detail.rep_name} · {detail.payment_type}{" "}
+              · {detail.total_amount}
             </p>
             {orderLines.length > 0 && (
               <PaginationBar

@@ -311,6 +311,7 @@ export const ar = {
     title: "الطلبات",
     colId: "رقم الطلب",
     colStore: "المتجر",
+    colRep: "المندوب",
     colType: "النوع",
     colTotal: "الإجمالي",
     colWhen: "التاريخ",

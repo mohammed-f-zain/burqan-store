@@ -36,6 +36,7 @@ type OrderRow = {
   total_amount: string;
   created_at: string;
   representative_id: number;
+  rep_name: string;
 };
 
 type VisitRow = { id: string; visited_at: string; note: string | null; rep_name: string };
@@ -247,7 +248,7 @@ export default function StoreDetailPage() {
                     <td>#{o.id}</td>
                     <td>{o.payment_type}</td>
                     <td>{o.total_amount}</td>
-                    <td>{o.representative_id}</td>
+                    <td>{o.rep_name}</td>
                     <td className="small muted">{formatMarketDateTime(o.created_at)}</td>
                     {canDeleteOrder && (
                       <td>
