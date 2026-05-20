@@ -6,6 +6,7 @@ import { useAuth } from "../auth/AuthContext";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
 import { mediaUrl } from "../lib/mediaUrl";
+import { confirmSave } from "../lib/swalConfirm";
 import { toastError, toastSuccess } from "../lib/toast";
 
 type Rep = { id: number; full_name: string; email: string; is_active: boolean };
@@ -89,6 +90,13 @@ export default function FillCarPage() {
 
   async function save() {
     if (!canWrite || !repId) return;
+    const ok = await confirmSave({
+      title: t.fillCar.saveConfirmTitle,
+      text: t.fillCar.saveConfirmText,
+      confirmText: t.fillCar.save,
+      cancelText: t.fillCar.cancelSave,
+    });
+    if (!ok) return;
     setSaving(true);
     try {
       await api.put(`/representatives/${repId}/inventory`, {
