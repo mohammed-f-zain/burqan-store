@@ -7,6 +7,9 @@ name: Deploy Burqan API & Dashboard
 # Optional secrets (password is NOT stored in git — only in GitHub Secrets):
 #   ADMIN_RESET_EMAIL — e.g. super@burqan.store
 #   ADMIN_RESET_PASSWORD — new admin password (min 10 chars); applied on the VPS DB after each deploy
+#   SUPER_ADMIN_EMAIL / SUPER_ADMIN_PASSWORD / SUPER_ADMIN_NAME — create or update a super admin once on deploy
+#
+# On the VPS, add SMTP + DASHBOARD_BASE_URL to packages/api/.env (not in git) for forgot-password email.
 #
 # Variables (Settings → Secrets and variables → Actions → Variables) — optional:
 #   DASHBOARD_VITE_API_URL — e.g. https://api.burqan.store (writes packages/dashboard/.env.production before build)
@@ -45,11 +48,14 @@ jobs:
         env:
           ADMIN_RESET_EMAIL: ${{ secrets.ADMIN_RESET_EMAIL }}
           ADMIN_RESET_PASSWORD: ${{ secrets.ADMIN_RESET_PASSWORD }}
+          SUPER_ADMIN_EMAIL: ${{ secrets.SUPER_ADMIN_EMAIL }}
+          SUPER_ADMIN_PASSWORD: ${{ secrets.SUPER_ADMIN_PASSWORD }}
+          SUPER_ADMIN_NAME: ${{ secrets.SUPER_ADMIN_NAME }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          envs: ADMIN_RESET_EMAIL,ADMIN_RESET_PASSWORD
+          envs: ADMIN_RESET_EMAIL,ADMIN_RESET_PASSWORD,SUPER_ADMIN_EMAIL,SUPER_ADMIN_PASSWORD,SUPER_ADMIN_NAME
           script_stop: true
           script: |
             set -euo pipefail
@@ -58,6 +64,15 @@ jobs:
             git reset --hard origin/main
             npm ci
             npm run build -w @burqan/api
+            npm run migrate:auth -w @burqan/api
+
+            if [[ -n "${SUPER_ADMIN_EMAIL:-}" && -n "${SUPER_ADMIN_PASSWORD:-}" ]]; then
+              export SUPER_ADMIN_EMAIL SUPER_ADMIN_PASSWORD
+              export SUPER_ADMIN_NAME="${SUPER_ADMIN_NAME:-Super Admin}"
+              npm run create-super-admin -w @burqan/api
+              echo "Super admin upserted for ${SUPER_ADMIN_EMAIL}"
+            fi
+
             pm2 reload ecosystem.config.cjs --only burqan-api --update-env || pm2 start ecosystem.config.cjs --only burqan-api
 
             if [[ -n "${ADMIN_RESET_EMAIL:-}" && -n "${ADMIN_RESET_PASSWORD:-}" ]]; then

@@ -1,7 +1,11 @@
+import { createHash, randomBytes } from "node:crypto";
+
 import { Router } from "express";
 import { DatabaseError } from "pg";
 import { z } from "zod";
 
+import { config } from "../config.js";
+import { isSmtpConfigured, sendMail } from "../lib/mail.js";
 import { imageUpload } from "../lib/uploadConfig.js";
 import { query, pool } from "../db/pool.js";
 import { adminAuthMiddleware, loadAdmin, requireAdminPermission } from "../middleware/adminAuth.js";
@@ -25,6 +29,95 @@ function normalizeRoleSlug(input: string): string {
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
+});
+
+function hashResetToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+const forgotPasswordSchema = z.object({
+  email: z.string().email(),
+});
+
+router.post("/auth/forgot-password", async (req, res, next) => {
+  const okMessage = {
+    message:
+      "If an account exists for this email, you will receive a password reset link shortly.",
+  };
+  try {
+    const body = forgotPasswordSchema.parse(req.body);
+    if (!isSmtpConfigured()) {
+      throw new HttpError(503, "Password reset email is not configured on the server");
+    }
+    const { rows } = await query<{ id: number; email: string }>(
+      `SELECT id, email FROM admins WHERE lower(email) = lower($1) AND is_active = true`,
+      [body.email]
+    );
+    const admin = rows[0];
+    if (admin) {
+      const token = randomBytes(32).toString("hex");
+      const tokenHash = hashResetToken(token);
+      const expiresAt = new Date(Date.now() + config.adminResetTokenMinutes * 60_000);
+      await query(`DELETE FROM admin_password_reset_tokens WHERE admin_id = $1 AND used_at IS NULL`, [
+        admin.id,
+      ]);
+      await query(
+        `INSERT INTO admin_password_reset_tokens (admin_id, token_hash, expires_at) VALUES ($1, $2, $3)`,
+        [admin.id, tokenHash, expiresAt]
+      );
+      const resetUrl = `${config.dashboardBaseUrl}/reset-password?token=${encodeURIComponent(token)}`;
+      await sendMail({
+        to: admin.email,
+        subject: "Burqan — Reset your dashboard password",
+        html: `<p>Hello,</p><p>Click the link below to set a new password for the Burqan admin dashboard. This link expires in ${config.adminResetTokenMinutes} minutes.</p><p><a href="${resetUrl}">Reset password</a></p><p>If you did not request this, you can ignore this email.</p>`,
+      });
+    }
+    res.json(okMessage);
+  } catch (e) {
+    next(e);
+  }
+});
+
+const resetPasswordSchema = z.object({
+  token: z.string().min(32).max(128),
+  password: z.string().min(10).max(200),
+});
+
+router.post("/auth/reset-password", async (req, res, next) => {
+  try {
+    const body = resetPasswordSchema.parse(req.body);
+    const tokenHash = hashResetToken(body.token);
+    const { rows } = await query<{
+      id: number;
+      admin_id: number;
+      expires_at: Date;
+      used_at: Date | null;
+    }>(
+      `SELECT id, admin_id, expires_at, used_at
+       FROM admin_password_reset_tokens
+       WHERE token_hash = $1
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [tokenHash]
+    );
+    const row = rows[0];
+    if (!row || row.used_at || row.expires_at.getTime() < Date.now()) {
+      throw new HttpError(400, "Invalid or expired reset link");
+    }
+    const ph = await hashPassword(body.password);
+    await query(`UPDATE admins SET password_hash = $1 WHERE id = $2 AND is_active = true`, [
+      ph,
+      row.admin_id,
+    ]);
+    await query(`UPDATE admin_password_reset_tokens SET used_at = now() WHERE id = $1`, [row.id]);
+    await query(`DELETE FROM admin_password_reset_tokens WHERE admin_id = $1 AND id <> $2`, [
+      row.admin_id,
+      row.id,
+    ]);
+    res.json({ message: "Password updated. You can sign in with your new password." });
+  } catch (e) {
+    next(e);
+  }
 });
 
 router.post("/auth/login", async (req, res, next) => {

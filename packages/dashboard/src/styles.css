@@ -179,6 +179,11 @@ button.ghost {
   font-size: 14px;
 }
 
+.success {
+  color: var(--accent, #0d7a4a);
+  font-size: 14px;
+}
+
 .row.spread {
   display: flex;
   align-items: center;

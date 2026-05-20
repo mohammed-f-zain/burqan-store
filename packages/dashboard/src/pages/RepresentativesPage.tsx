@@ -81,6 +81,18 @@ export default function RepresentativesPage() {
     setAreas(a.data.areas);
   }
 
+  async function toggleRepActive(r: Rep) {
+    if (!can("reps.write")) return;
+    setMsg(null);
+    try {
+      await api.patch(`/representatives/${r.id}`, { isActive: !r.is_active });
+      await load();
+      setMsg(r.is_active ? t.reps.deactivated : t.reps.activated);
+    } catch (e) {
+      setMsg(pickAxiosErrorMessage(e, t.reps.loadFailed));
+    }
+  }
+
   useEffect(() => {
     void load().catch(() => setMsg(t.reps.loadFailed));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- initial load only
@@ -347,7 +359,19 @@ export default function RepresentativesPage() {
                   <td>{r.email}</td>
                   <td>{r.car_plate ?? "—"}</td>
                   <td className="small">{formatAreasCell(r) || "—"}</td>
-                  <td>{r.is_active ? t.products.yes : t.products.no}</td>
+                  <td>
+                    {write ? (
+                      <button
+                        type="button"
+                        className={r.is_active ? "pill on" : "pill off"}
+                        onClick={() => void toggleRepActive(r)}
+                      >
+                        {r.is_active ? t.reps.active : t.reps.disabled}
+                      </button>
+                    ) : (
+                      (r.is_active ? t.reps.active : t.reps.disabled)
+                    )}
+                  </td>
                   {write && (
                     <td>
                       <span className="row" style={{ gap: 8 }}>

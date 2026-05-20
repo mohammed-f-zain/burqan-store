@@ -32,4 +32,16 @@ export const config = {
   uploadDir: process.env.UPLOAD_DIR
     ? path.resolve(process.env.UPLOAD_DIR)
     : path.join(process.cwd(), "uploads"),
+  /** Public dashboard URL for password-reset links */
+  dashboardBaseUrl: (process.env.DASHBOARD_BASE_URL ?? process.env.OWNER_PORTAL_BASE_URL ?? "https://burqan.store")
+    .trim()
+    .replace(/\/$/, ""),
+  smtpHost: process.env.SMTP_HOST?.trim() || undefined,
+  smtpPort: parseInt(process.env.SMTP_PORT ?? "587", 10),
+  smtpSecure: process.env.SMTP_SECURE === "true",
+  smtpUser: process.env.SMTP_USER?.trim() || undefined,
+  /** Gmail app passwords are often pasted with spaces — strip them */
+  smtpPass: process.env.SMTP_PASS?.replace(/\s+/g, "") || undefined,
+  smtpFrom: process.env.SMTP_FROM?.trim() || process.env.SMTP_USER?.trim() || "noreply@burqan.store",
+  adminResetTokenMinutes: parseInt(process.env.ADMIN_RESET_TOKEN_MINUTES ?? "60", 10),
 };

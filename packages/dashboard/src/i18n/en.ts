@@ -39,6 +39,31 @@ export const en: Messages = {
     submit: "Sign in",
     loading: "Signing in…",
     error: "Invalid email or password.",
+    forgotLink: "Forgot password?",
+  },
+
+  forgotPassword: {
+    title: "Forgot password",
+    hint: "Enter your admin email. If an account exists, we will send a reset link.",
+    submit: "Send reset link",
+    loading: "Sending…",
+    sent: "If an account exists for this email, check your inbox for a reset link.",
+    back: "Back to sign in",
+    error: "Could not send reset email. Try again or contact support.",
+  },
+
+  resetPassword: {
+    title: "Set new password",
+    hint: "Choose a new password (at least 10 characters).",
+    newPassword: "New password",
+    confirm: "Confirm password",
+    submit: "Update password",
+    loading: "Updating…",
+    done: "Password updated. You can sign in now.",
+    signIn: "Go to sign in",
+    mismatch: "Passwords do not match.",
+    missingToken: "Invalid reset link. Request a new one from the forgot-password page.",
+    error: "Could not reset password. The link may have expired.",
   },
 
   overview: {
@@ -197,6 +222,10 @@ export const en: Messages = {
     updated: "Rep updated.",
     deleted: "Rep deleted.",
     loadFailed: "Failed to load.",
+    active: "Active",
+    disabled: "Disabled",
+    activated: "Rep account enabled.",
+    deactivated: "Rep account disabled — they cannot sign in on the mobile app.",
     createFailed: "Could not create rep.",
     saveFailed: "Could not save changes.",
     deleteFailed: "Could not delete rep.",

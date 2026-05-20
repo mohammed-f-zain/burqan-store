@@ -8,7 +8,9 @@ import AppLayout from "./layout/AppLayout";
 import AccountPage from "./pages/AccountPage";
 import AdminsPage from "./pages/AdminsPage";
 import AreasPage from "./pages/AreasPage";
+import ForgotPassword from "./pages/ForgotPassword";
 import Login from "./pages/Login";
+import ResetPassword from "./pages/ResetPassword";
 import OrdersPage from "./pages/OrdersPage";
 import OverviewPage from "./pages/OverviewPage";
 import ProductsPage from "./pages/ProductsPage";
@@ -28,6 +30,8 @@ export default function App() {
             <Routes>
               <Route path="/owner" element={<PublicOwner />} />
               <Route path="/login" element={<Login />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
               <Route element={<PrivateRoute />}>
                 <Route path="/app" element={<AppLayout />}>
                   <Route index element={<OverviewPage />} />

@@ -1,5 +1,5 @@
 import { FormEvent, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { api } from "../api";
 import BrandLogo from "../components/BrandLogo";
@@ -61,6 +61,9 @@ export default function Login() {
             />
           </label>
           {err && <div className="error">{err}</div>}
+          <p className="muted small">
+            <Link to="/forgot-password">{t.login.forgotLink}</Link>
+          </p>
           <button className="primary" disabled={loading} type="submit">
             {loading ? t.login.loading : t.login.submit}
           </button>
