@@ -307,8 +307,17 @@ export const ar = {
     rep: "المندوب",
   },
 
+  orderDetail: {
+    back: "العودة للطلبات",
+    loading: "جاري تحميل الطلب…",
+    loadFailed: "تعذّر تحميل هذا الطلب.",
+    linesTitle: "بنود الطلب",
+    noLines: "لا توجد بنود.",
+  },
+
   orders: {
     title: "الطلبات",
+    rowHint: "اضغط على الصف لفتح تفاصيل الطلب.",
     colId: "رقم الطلب",
     colStore: "المتجر",
     colRep: "المندوب",

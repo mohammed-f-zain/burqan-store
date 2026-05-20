@@ -11,6 +11,7 @@ import AreasPage from "./pages/AreasPage";
 import ForgotPassword from "./pages/ForgotPassword";
 import Login from "./pages/Login";
 import ResetPassword from "./pages/ResetPassword";
+import OrderDetailPage from "./pages/OrderDetailPage";
 import OrdersPage from "./pages/OrdersPage";
 import OverviewPage from "./pages/OverviewPage";
 import ProductsPage from "./pages/ProductsPage";
@@ -47,6 +48,7 @@ export default function App() {
                 <Route path="stores" element={<StoresPage />} />
                   <Route path="stores/:id" element={<StoreDetailPage />} />
                   <Route path="orders" element={<OrdersPage />} />
+                  <Route path="orders/:id" element={<OrderDetailPage />} />
                   <Route path="qr-pool" element={<QrPoolPage />} />
                 </Route>
               </Route>

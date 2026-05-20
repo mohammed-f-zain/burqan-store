@@ -308,8 +308,17 @@ export const en: Messages = {
     rep: "Rep",
   },
 
+  orderDetail: {
+    back: "Back to orders",
+    loading: "Loading order…",
+    loadFailed: "Could not load this order.",
+    linesTitle: "Order lines",
+    noLines: "No line items.",
+  },
+
   orders: {
     title: "Orders",
+    rowHint: "Click a row to open the full order details.",
     colId: "Order",
     colStore: "Store",
     colRep: "Sales rep",

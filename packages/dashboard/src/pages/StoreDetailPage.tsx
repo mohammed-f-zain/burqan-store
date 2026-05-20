@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 
 import { api } from "../api";
@@ -50,6 +50,7 @@ function ownerPortalUrl(token: string): string {
 
 export default function StoreDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { can } = useAuth();
   const { t } = useLocale();
   const [store, setStore] = useState<StoreDetail | null>(null);
@@ -244,14 +245,26 @@ export default function StoreDetailPage() {
               </thead>
               <tbody>
                 {orders.map((o) => (
-                  <tr key={o.id}>
-                    <td>#{o.id}</td>
+                  <tr
+                    key={o.id}
+                    className="store-row"
+                    onClick={() => navigate(`/app/orders/${o.id}`)}
+                    role="link"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        navigate(`/app/orders/${o.id}`);
+                      }
+                    }}
+                  >
+                    <td className="strong">#{o.id}</td>
                     <td>{o.payment_type}</td>
                     <td>{o.total_amount}</td>
                     <td>{o.rep_name}</td>
                     <td className="small muted">{formatMarketDateTime(o.created_at)}</td>
                     {canDeleteOrder && (
-                      <td>
+                      <td onClick={(e) => e.stopPropagation()}>
                         <button type="button" className="ghost danger" onClick={() => void removeOrder(o.id)}>
                           {t.orders.delete}
                         </button>
