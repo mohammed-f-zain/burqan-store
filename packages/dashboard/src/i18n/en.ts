@@ -301,12 +301,20 @@ export const en: Messages = {
     colType: "Type",
     colTotal: "Total",
     colWhen: "Date",
+    colActions: "Actions",
     detailTitle: "Order #",
     product: "Product",
     qty: "Qty",
     unit: "Unit price",
     line: "Line",
     close: "Close",
+    delete: "Delete",
+    deleteTitle: "Delete this order?",
+    confirmDelete:
+      "This permanently removes the order and its lines. Quantities sold are returned to the rep’s van inventory. This cannot be undone.",
+    cancelDelete: "Cancel",
+    deleted: "Order deleted.",
+    deleteFailed: "Could not delete order.",
   },
 
   account: {
@@ -397,6 +405,7 @@ export const en: Messages = {
     "stores.deferred_toggle": "Toggle deferred sales",
     "orders.read": "View orders",
     "orders.record_payment": "Record store payments",
+    "orders.delete": "Delete orders",
     "qr_pool.read": "View unassigned card QR codes",
   },
 };

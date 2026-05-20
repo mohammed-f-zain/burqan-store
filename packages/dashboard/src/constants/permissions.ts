@@ -17,6 +17,7 @@ export const PERMISSION_KEYS = [
   "stores.deferred_toggle",
   "orders.read",
   "orders.record_payment",
+  "orders.delete",
   "qr_pool.read",
 ] as const;
 

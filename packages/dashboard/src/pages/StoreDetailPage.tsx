@@ -6,7 +6,9 @@ import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import StoreMap from "../components/StoreMap";
 import { useLocale } from "../i18n/LocaleContext";
+import { pickAxiosErrorMessage } from "../lib/apiError";
 import { mediaUrl } from "../lib/mediaUrl";
+import { confirmDanger } from "../lib/swalConfirm";
 import { formatMarketDateTime } from "../utils/formatMarketDateTime";
 import { qrPayload } from "../utils/qrPayload";
 
@@ -56,6 +58,7 @@ export default function StoreDetailPage() {
   const [payOpen, setPayOpen] = useState(false);
   const [payAmount, setPayAmount] = useState("");
   const [payNote, setPayNote] = useState("");
+  const canDeleteOrder = can("orders.delete");
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -85,6 +88,23 @@ export default function StoreDetailPage() {
     const next = !store.deferred_payment_enabled;
     await api.patch(`/stores/${store.id}/deferred`, { enabled: next });
     await load();
+  }
+
+  async function removeOrder(orderId: string) {
+    if (!canDeleteOrder) return;
+    const ok = await confirmDanger({
+      title: t.orders.deleteTitle,
+      text: t.orders.confirmDelete,
+      confirmText: t.orders.delete,
+      cancelText: t.orders.cancelDelete,
+    });
+    if (!ok) return;
+    try {
+      await api.delete(`/orders/${orderId}`);
+      await load();
+    } catch (e) {
+      setErr(pickAxiosErrorMessage(e, t.orders.deleteFailed));
+    }
   }
 
   async function recordPayment(e: FormEvent) {
@@ -216,6 +236,7 @@ export default function StoreDetailPage() {
                   <th>{t.orders.colTotal}</th>
                   <th>{t.storeDetail.rep}</th>
                   <th>{t.orders.colWhen}</th>
+                  {canDeleteOrder && <th>{t.orders.colActions}</th>}
                 </tr>
               </thead>
               <tbody>
@@ -226,6 +247,13 @@ export default function StoreDetailPage() {
                     <td>{o.total_amount}</td>
                     <td>{o.representative_id}</td>
                     <td className="small muted">{formatMarketDateTime(o.created_at)}</td>
+                    {canDeleteOrder && (
+                      <td>
+                        <button type="button" className="ghost danger" onClick={() => void removeOrder(o.id)}>
+                          {t.orders.delete}
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

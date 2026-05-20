@@ -1197,6 +1197,59 @@ router.get(
   }
 );
 
+router.delete(
+  "/orders/:id",
+  adminAuthMiddleware,
+  requireAdminPermission("orders.delete"),
+  async (req, res, next) => {
+    try {
+      const id = z.coerce.number().int().positive().parse(req.params.id);
+      const c = await pool.connect();
+      try {
+        await c.query("BEGIN");
+        const { rows: orderRows } = await c.query<{ id: string; representative_id: number }>(
+          `SELECT id, representative_id FROM orders WHERE id = $1 FOR UPDATE`,
+          [id]
+        );
+        const order = orderRows[0];
+        if (!order) throw new HttpError(404, "Order not found");
+
+        const { rows: lines } = await c.query<{ product_id: number; quantity: number }>(
+          `SELECT product_id, quantity FROM order_lines WHERE order_id = $1`,
+          [id]
+        );
+
+        for (const line of lines) {
+          await c.query(
+            `INSERT INTO representative_inventory (representative_id, product_id, quantity, updated_at)
+             VALUES ($1, $2, $3, now())
+             ON CONFLICT (representative_id, product_id)
+             DO UPDATE SET
+               quantity = representative_inventory.quantity + EXCLUDED.quantity,
+               updated_at = now()`,
+            [order.representative_id, line.product_id, line.quantity]
+          );
+        }
+
+        await c.query(`DELETE FROM orders WHERE id = $1`, [id]);
+        await c.query("COMMIT");
+        res.json({ deleted: true, id: order.id });
+      } catch (e) {
+        try {
+          await c.query("ROLLBACK");
+        } catch {
+          /* ignore */
+        }
+        throw e;
+      } finally {
+        c.release();
+      }
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
 const paymentSchema = z.object({
   amount: z.number().positive(),
   note: z.string().optional(),

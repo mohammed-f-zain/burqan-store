@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
 
 import { api } from "../api";
+import { useAuth } from "../auth/AuthContext";
 import PaginationBar from "../components/PaginationBar";
 import { useClientPagination } from "../hooks/useClientPagination";
 import { useLocale } from "../i18n/LocaleContext";
+import { pickAxiosErrorMessage } from "../lib/apiError";
+import { confirmDanger } from "../lib/swalConfirm";
 import { formatMarketDateTime } from "../utils/formatMarketDateTime";
 
 type OrderRow = {
@@ -20,9 +23,12 @@ type OrderDetail = OrderRow & {
 };
 
 export default function OrdersPage() {
+  const { can } = useAuth();
   const { t } = useLocale();
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [detail, setDetail] = useState<OrderDetail | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const canDelete = can("orders.delete");
 
   const orderPgn = useClientPagination(orders);
   const orderLines = detail?.lines ?? [];
@@ -42,10 +48,31 @@ export default function OrdersPage() {
     setDetail(data.order);
   }
 
+  async function removeOrder(id: string | number) {
+    if (!canDelete) return;
+    const ok = await confirmDanger({
+      title: t.orders.deleteTitle,
+      text: t.orders.confirmDelete,
+      confirmText: t.orders.delete,
+      cancelText: t.orders.cancelDelete,
+    });
+    if (!ok) return;
+    setMsg(null);
+    try {
+      await api.delete(`/orders/${String(id)}`);
+      setDetail((d) => (d && String(d.id) === String(id) ? null : d));
+      await load();
+      setMsg(t.orders.deleted);
+    } catch (e) {
+      setMsg(pickAxiosErrorMessage(e, t.orders.deleteFailed));
+    }
+  }
+
   return (
     <div className="grid">
       <div className="card">
         <h2>{t.orders.title}</h2>
+        {msg && <p className="muted">{msg}</p>}
         {orders.length > 0 && (
           <PaginationBar
             className="pagination-bar--flush"
@@ -69,6 +96,7 @@ export default function OrdersPage() {
                 <th>{t.orders.colType}</th>
                 <th>{t.orders.colTotal}</th>
                 <th>{t.orders.colWhen}</th>
+                {canDelete && <th>{t.orders.colActions}</th>}
               </tr>
             </thead>
             <tbody>
@@ -83,6 +111,13 @@ export default function OrdersPage() {
                   <td>{o.payment_type}</td>
                   <td>{o.total_amount}</td>
                   <td className="small muted">{formatMarketDateTime(o.created_at)}</td>
+                  {canDelete && (
+                    <td>
+                      <button type="button" className="ghost danger" onClick={() => void removeOrder(o.id)}>
+                        {t.orders.delete}
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -135,9 +170,16 @@ export default function OrdersPage() {
                 </tbody>
               </table>
             </div>
-            <button type="button" className="ghost" style={{ marginTop: 12 }} onClick={() => setDetail(null)}>
-              {t.orders.close}
-            </button>
+            <div className="row spread" style={{ marginTop: 12, gap: 8 }}>
+              {canDelete && (
+                <button type="button" className="ghost danger" onClick={() => void removeOrder(detail.id)}>
+                  {t.orders.delete}
+                </button>
+              )}
+              <button type="button" className="ghost" onClick={() => setDetail(null)}>
+                {t.orders.close}
+              </button>
+            </div>
           </div>
         </div>
       )}

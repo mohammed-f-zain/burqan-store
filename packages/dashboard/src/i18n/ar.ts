@@ -300,12 +300,20 @@ export const ar = {
     colType: "النوع",
     colTotal: "الإجمالي",
     colWhen: "التاريخ",
+    colActions: "إجراءات",
     detailTitle: "طلب رقم",
     product: "المنتج",
     qty: "الكمية",
     unit: "سعر الوحدة",
     line: "السطر",
     close: "إغلاق",
+    delete: "حذف",
+    deleteTitle: "حذف هذا الطلب؟",
+    confirmDelete:
+      "سيُحذف الطلب وأسطره نهائياً. تُعاد الكميات المباعة إلى مخزون سيارة المندوب. لا يمكن التراجع.",
+    cancelDelete: "إلغاء",
+    deleted: "تم حذف الطلب.",
+    deleteFailed: "تعذّر حذف الطلب.",
   },
 
   account: {
@@ -395,6 +403,7 @@ export const ar = {
     "stores.deferred_toggle": "السماح بالبيع الآجل",
     "orders.read": "عرض الطلبات",
     "orders.record_payment": "تسجيل دفعات المتجر",
+    "orders.delete": "حذف الطلبات",
     "qr_pool.read": "عرض رموز البطاقات غير المربوطة",
   } as Record<PermissionKey, string>,
 } as const;
