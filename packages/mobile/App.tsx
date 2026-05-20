@@ -106,8 +106,12 @@ const t = {
   navHome: "الرئيسية",
   navInventory: "مخزون السيارة",
   navStore: "المتجر",
+  storeTabLockedTitle: "لم يُختر متجر بعد",
+  storeTabLockedHint: "امسح رمز QR للمتجر من تبويب الرئيسية أو أدخل الرمز يدوياً، ثم يُفعَّل تبويب المتجر.",
+  storeTabGoScan: "الذهاب للمسح",
   inventoryTitle: "مخزون السيارة",
-  inventoryEmpty: "لا منتجات في المخزون. يحدّثها المشرف من لوحة التحكم.",
+  inventoryEmpty: "لا منتجات في السيارة. يحدّثها المشرف من لوحة التحكم (تعبئة السيارة).",
+  sellEmpty: "لا يوجد مخزون في السيارة للبيع في هذا المتجر.",
   stock: "المتوفر",
   tooFar: "أنت بعيد عن المتجر. اقترب إلى أقل من 100 متر.",
 } as const;
@@ -281,7 +285,11 @@ export default function App() {
     try {
       const data = await apiGet("/api/v1/rep/inventory");
       const rows = (data.inventory ?? []) as { id: number; name: string; price: string; quantity: number }[];
-      setInventory(rows.map((r) => ({ ...r, quantity: Number(r.quantity) || 0 })));
+      setInventory(
+        rows
+          .map((r) => ({ ...r, quantity: Number(r.quantity) || 0 }))
+          .filter((r) => r.quantity > 0)
+      );
     } catch {
       /* ignore */
     }
@@ -368,7 +376,9 @@ export default function App() {
         setVisits(v.visits ?? []);
         setOrders(o.orders ?? []);
         const rows = (inv.inventory ?? []) as { id: number; name: string; price: string; quantity: number }[];
-        const mapped = rows.map((r) => ({ ...r, quantity: Number(r.quantity) || 0 }));
+        const mapped = rows
+          .map((r) => ({ ...r, quantity: Number(r.quantity) || 0 }))
+          .filter((r) => r.quantity > 0);
         setProducts(mapped);
         setInventory(mapped);
       } catch {
@@ -623,6 +633,22 @@ export default function App() {
         />
       )}
 
+      {bottomTab === "store" && !activeStore && (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>{t.storeTabLockedTitle}</Text>
+          <Text style={styles.muted}>{t.storeTabLockedHint}</Text>
+          <Pressable
+            style={[styles.primary, { marginTop: 12 }]}
+            onPress={() => {
+              setBottomTab("home");
+              setMode("home");
+            }}
+          >
+            <Text style={styles.primaryText}>{t.storeTabGoScan}</Text>
+          </Pressable>
+        </View>
+      )}
+
       {bottomTab === "store" && mode === "store" && activeStore && (
         <View style={styles.card}>
           <View style={styles.rowBetween}>
@@ -703,6 +729,9 @@ export default function App() {
           {storeTab === "sell" && (
             <View style={{ marginTop: 12 }}>
               <Text style={styles.muted}>{t.sellHint}</Text>
+              {products.length === 0 ? (
+                <Text style={styles.muted}>{t.sellEmpty}</Text>
+              ) : null}
               {products.map((item) => {
                 const q = cart[item.id] ?? 0;
                 const atMax = q >= item.quantity;
@@ -857,12 +886,10 @@ export default function App() {
             </Text>
           </Pressable>
           <Pressable
-            style={[styles.bottomTab, bottomTab === "store" && styles.bottomTabOn, !activeStore && styles.bottomTabDisabled]}
-            disabled={!activeStore}
+            style={[styles.bottomTab, bottomTab === "store" && styles.bottomTabOn]}
             onPress={() => {
-              if (!activeStore) return;
-              setMode("store");
               setBottomTab("store");
+              if (activeStore) setMode("store");
             }}
           >
             <Text style={[styles.bottomTabText, bottomTab === "store" && styles.bottomTabTextOn]}>{t.navStore}</Text>

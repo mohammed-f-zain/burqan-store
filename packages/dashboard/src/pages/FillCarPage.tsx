@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
@@ -10,6 +11,7 @@ type Rep = { id: number; full_name: string; email: string; is_active: boolean };
 type InvRow = { product_id: number; name: string; price: string; quantity: number };
 
 export default function FillCarPage() {
+  const [searchParams] = useSearchParams();
   const { can } = useAuth();
   const { t } = useLocale();
   const canRead = can("fill_car.read") || can("reps.read");
@@ -28,11 +30,16 @@ export default function FillCarPage() {
       .then((r) => {
         const list = r.data.representatives ?? [];
         setReps(list);
-        if (list.length && !repId) setRepId(String(list[0]!.id));
+        const fromUrl = searchParams.get("repId");
+        if (fromUrl && list.some((x) => String(x.id) === fromUrl)) {
+          setRepId(fromUrl);
+        } else if (list.length && !repId) {
+          setRepId(String(list[0]!.id));
+        }
       })
       .catch((e) => toastError(pickAxiosErrorMessage(e, t.fillCar.loadFailed)));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- initial load
-  }, [canRead]);
+  }, [canRead, searchParams]);
 
   useEffect(() => {
     if (!canRead || !repId) {

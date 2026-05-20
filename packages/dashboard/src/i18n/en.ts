@@ -26,6 +26,7 @@ export const en: Messages = {
     products: "Products",
     representatives: "Sales reps",
     fillCar: "Fill car",
+    repSales: "Rep sales",
     stores: "Stores",
     orders: "Orders",
     qrPool: "Card QR codes",
@@ -235,6 +236,24 @@ export const en: Messages = {
     saveInventory: "Save inventory",
     inventorySaved: "Inventory updated.",
     fillCarLink: "Manage van inventory on the Fill car page →",
+  },
+
+  repSales: {
+    title: "Rep sales (daily)",
+    hint: "Sales per rep for the selected day (Jordan time). Expand a row for products sold, then edit van inventory.",
+    dateLabel: "Day",
+    refresh: "Apply",
+    colRep: "Rep",
+    colOrders: "Orders",
+    colTotal: "Total sold",
+    colStatus: "Account",
+    colActions: "Actions",
+    showDetail: "Products sold",
+    hideDetail: "Hide",
+    editInventory: "Edit car inventory",
+    noSales: "No sales on this day.",
+    loadFailed: "Failed to load sales.",
+    denied: "You need permission to view rep sales.",
   },
 
   fillCar: {

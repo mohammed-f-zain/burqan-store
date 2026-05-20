@@ -807,6 +807,84 @@ router.post(
   }
 );
 
+function ammanCalendarDate(d = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Amman" }).format(d);
+}
+
+const salesDailyQuerySchema = z.object({
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+});
+
+router.get(
+  "/representatives/sales-daily",
+  adminAuthMiddleware,
+  requireAnyAdminPermission("reps.read", "fill_car.read"),
+  async (req, res, next) => {
+    try {
+      const q = salesDailyQuerySchema.parse(req.query);
+      const date = q.date ?? ammanCalendarDate();
+
+      const { rows: reps } = await query<{
+        id: number;
+        full_name: string;
+        email: string;
+        is_active: boolean;
+        order_count: number;
+        total_sales: string;
+      }>(
+        `SELECT r.id, r.full_name, r.email, r.is_active,
+                COUNT(o.id)::int AS order_count,
+                COALESCE(SUM(o.total_amount), 0)::text AS total_sales
+         FROM representatives r
+         LEFT JOIN orders o ON o.representative_id = r.id
+           AND (o.created_at AT TIME ZONE 'Asia/Amman')::date = $1::date
+         GROUP BY r.id
+         ORDER BY COALESCE(SUM(o.total_amount), 0) DESC NULLS LAST, r.full_name ASC`,
+        [date]
+      );
+
+      const { rows: lines } = await query<{
+        rep_id: number;
+        product_id: number;
+        product_name: string;
+        quantity: number;
+        line_total: string;
+      }>(
+        `SELECT o.representative_id AS rep_id, p.id AS product_id, p.name AS product_name,
+                SUM(ol.quantity)::int AS quantity,
+                COALESCE(SUM(ol.line_total), 0)::text AS line_total
+         FROM orders o
+         INNER JOIN order_lines ol ON ol.order_id = o.id
+         INNER JOIN products p ON p.id = ol.product_id
+         WHERE (o.created_at AT TIME ZONE 'Asia/Amman')::date = $1::date
+         GROUP BY o.representative_id, p.id, p.name
+         ORDER BY o.representative_id, p.name`,
+        [date]
+      );
+
+      const linesByRep = new Map<number, typeof lines>();
+      for (const line of lines) {
+        const list = linesByRep.get(line.rep_id) ?? [];
+        list.push(line);
+        linesByRep.set(line.rep_id, list);
+      }
+
+      res.json({
+        date,
+        representatives: reps.map((r) => ({
+          ...r,
+          lines: linesByRep.get(r.id) ?? [],
+        })),
+      });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
 const repPatchSchema = z.object({
   email: z.string().email().optional(),
   fullName: z.string().min(2).optional(),

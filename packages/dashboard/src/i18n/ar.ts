@@ -26,6 +26,7 @@ export const ar = {
     products: "المنتجات",
     representatives: "مندوبو المبيعات",
     fillCar: "تعبئة السيارة",
+    repSales: "مبيعات المندوبين",
     stores: "المتاجر",
     orders: "الطلبات",
     qrPool: "رموز البطاقات",
@@ -234,6 +235,24 @@ export const ar = {
     saveInventory: "حفظ المخزون",
     inventorySaved: "تم تحديث المخزون.",
     fillCarLink: "إدارة مخزون السيارة من صفحة تعبئة السيارة ←",
+  },
+
+  repSales: {
+    title: "مبيعات المندوبين (يومي)",
+    hint: "مبيعات كل مندوب لليوم المحدد (توقيت الأردن). وسّع الصف لرؤية المنتجات، ثم عدّل مخزون السيارة.",
+    dateLabel: "اليوم",
+    refresh: "تطبيق",
+    colRep: "المندوب",
+    colOrders: "الطلبات",
+    colTotal: "إجمالي المبيعات",
+    colStatus: "الحساب",
+    colActions: "إجراءات",
+    showDetail: "المنتجات المباعة",
+    hideDetail: "إخفاء",
+    editInventory: "تعديل مخزون السيارة",
+    noSales: "لا مبيعات في هذا اليوم.",
+    loadFailed: "فشل تحميل المبيعات.",
+    denied: "ليس لديك صلاحية عرض مبيعات المندوبين.",
   },
 
   fillCar: {
