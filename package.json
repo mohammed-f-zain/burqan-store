@@ -16,6 +16,7 @@
     "api:gen:qr": "npm run gen:qr -w @burqan/api",
     "api:reset-admin": "npm run reset-admin -w @burqan/api",
     "api:migrate:auth": "npm run migrate:auth -w @burqan/api",
+    "api:migrate:all": "npm run migrate:all -w @burqan/api",
     "api:create-super-admin": "npm run create-super-admin -w @burqan/api",
     "dashboard:dev": "npm run dev -w @burqan/dashboard",
     "mobile:start": "npm run start -w mobile"

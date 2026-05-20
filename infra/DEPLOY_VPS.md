@@ -80,6 +80,16 @@ bash /var/www/burqan-store/infra/bootstrap-burqan-vps.sh
 
 The script installs Node 20, nginx, PostgreSQL, pm2, UFW; creates DB/user `burqan`; clones the repo (default `https://github.com/mohammed-f-zain/burqan-store.git`); writes `packages/api/.env` once; migrates, seeds, builds API + dashboard; configures nginx; starts pm2.
 
+**After pulling new API code**, if `/admin/areas` returns **500**, the production DB may be missing geo columns. On the VPS run once:
+
+```bash
+cd /var/www/burqan-store   # or your DEPLOY_PATH
+npm run migrate:all -w @burqan/api
+pm2 reload ecosystem.config.cjs --only burqan-api --update-env
+```
+
+Deploy workflow on `main` runs `migrate:all` automatically on each deploy.
+
 **TLS (HTTPS):** DNS for `burqan.store`, `www.burqan.store`, and `api.burqan.store` must point to this server **before** you run certbot.
 
 **Option A — scripted (recommended):** on the VPS, set your email and run:

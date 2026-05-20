@@ -64,7 +64,7 @@ jobs:
             git reset --hard origin/main
             npm ci
             npm run build -w @burqan/api
-            npm run migrate:auth -w @burqan/api
+            npm run migrate:all -w @burqan/api
 
             if [[ -n "${SUPER_ADMIN_EMAIL:-}" && -n "${SUPER_ADMIN_PASSWORD:-}" ]]; then
               export SUPER_ADMIN_EMAIL SUPER_ADMIN_PASSWORD
