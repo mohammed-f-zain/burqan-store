@@ -6,6 +6,7 @@ import BrandLogo from "../components/BrandLogo";
 import LangSwitch from "../components/LangSwitch";
 import ThemeToggle from "../components/ThemeToggle";
 import { useLocale } from "../i18n/LocaleContext";
+import { pickAxiosErrorMessage } from "../lib/apiError";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -24,8 +25,8 @@ export default function Login() {
       localStorage.setItem("burqan_admin_token", data.token);
       navigate("/app", { replace: true });
       window.location.reload();
-    } catch {
-      setErr(t.login.error);
+    } catch (e) {
+      setErr(pickAxiosErrorMessage(e, t.login.error));
     } finally {
       setLoading(false);
     }

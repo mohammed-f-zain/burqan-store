@@ -25,8 +25,18 @@ async function main() {
     [hash, email]
   );
   if (!rows[0]) {
+    const { rows: any } = await query<{ email: string }>(
+      `SELECT email FROM admins ORDER BY id ASC LIMIT 5`
+    );
     // eslint-disable-next-line no-console
     console.error(`No active admin found for email: ${email}`);
+    if (any.length) {
+      // eslint-disable-next-line no-console
+      console.error("Existing admin emails:", any.map((a) => a.email).join(", "));
+    } else {
+      // eslint-disable-next-line no-console
+      console.error("No admins in database — run: npm run seed -w @burqan/api");
+    }
     process.exit(1);
   }
   // eslint-disable-next-line no-console
