@@ -14,6 +14,7 @@
     "api:migrate:geo": "npm run migrate:geo -w @burqan/api",
     "api:seed": "npm run seed -w @burqan/api",
     "api:gen:qr": "npm run gen:qr -w @burqan/api",
+    "api:reset-admin": "npm run reset-admin -w @burqan/api",
     "dashboard:dev": "npm run dev -w @burqan/dashboard",
     "mobile:start": "npm run start -w mobile"
   },
