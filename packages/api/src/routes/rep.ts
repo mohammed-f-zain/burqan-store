@@ -99,7 +99,7 @@ router.get("/inventory", repAuthMiddleware, async (req, res, next) => {
   try {
     const rep = req.rep!;
     const { rows } = await query(
-      `SELECT p.id, p.name, p.designation, p.unit_label, p.price, ri.quantity
+      `SELECT p.id, p.name, p.designation, p.unit_label, p.image_url, p.price, ri.quantity
        FROM representative_inventory ri
        INNER JOIN products p ON p.id = ri.product_id AND p.is_active = true
        WHERE ri.representative_id = $1 AND ri.quantity > 0

@@ -114,7 +114,35 @@ const t = {
   sellEmpty: "لا يوجد مخزون في السيارة للبيع في هذا المتجر.",
   stock: "المتوفر",
   tooFar: "أنت بعيد عن المتجر. اقترب إلى أقل من 100 متر.",
+  noImage: "لا صورة",
 } as const;
+
+function productImageUrl(path: string | null | undefined): string | undefined {
+  if (!path) return undefined;
+  if (/^https?:\/\//i.test(path)) return path;
+  const base = API_BASE.replace(/\/$/, "");
+  return `${base}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+function mapProductRow(r: {
+  id: number;
+  name: string;
+  price: string;
+  quantity: number;
+  designation?: string | null;
+  unit_label?: string | null;
+  image_url?: string | null;
+}): Product {
+  return {
+    id: r.id,
+    name: r.name,
+    price: String(r.price),
+    designation: r.designation ?? null,
+    unit_label: r.unit_label ?? null,
+    image_url: r.image_url ?? null,
+    quantity: Number(r.quantity) || 0,
+  };
+}
 
 type Area = { id: number; name: string };
 type StoreBrief = {
@@ -131,6 +159,8 @@ type Product = {
   name: string;
   price: string;
   designation?: string | null;
+  unit_label?: string | null;
+  image_url?: string | null;
   quantity: number;
 };
 type BottomTab = "home" | "inventory" | "store";
@@ -284,12 +314,8 @@ export default function App() {
     if (!token) return;
     try {
       const data = await apiGet("/api/v1/rep/inventory");
-      const rows = (data.inventory ?? []) as { id: number; name: string; price: string; quantity: number }[];
-      setInventory(
-        rows
-          .map((r) => ({ ...r, quantity: Number(r.quantity) || 0 }))
-          .filter((r) => r.quantity > 0)
-      );
+      const rows = (data.inventory ?? []) as Product[];
+      setInventory(rows.map(mapProductRow).filter((r) => r.quantity > 0));
     } catch {
       /* ignore */
     }
@@ -375,10 +401,8 @@ export default function App() {
         ]);
         setVisits(v.visits ?? []);
         setOrders(o.orders ?? []);
-        const rows = (inv.inventory ?? []) as { id: number; name: string; price: string; quantity: number }[];
-        const mapped = rows
-          .map((r) => ({ ...r, quantity: Number(r.quantity) || 0 }))
-          .filter((r) => r.quantity > 0);
+        const rows = (inv.inventory ?? []) as Product[];
+        const mapped = rows.map(mapProductRow).filter((r) => r.quantity > 0);
         setProducts(mapped);
         setInventory(mapped);
       } catch {
@@ -594,16 +618,7 @@ export default function App() {
           {inventory.length === 0 ? (
             <Text style={styles.muted}>{t.inventoryEmpty}</Text>
           ) : (
-            inventory.map((item) => (
-              <View key={item.id} style={styles.productRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.body}>{item.name}</Text>
-                  <Text style={styles.muted}>
-                    {item.price} {t.currency} · {t.stock}: {item.quantity}
-                  </Text>
-                </View>
-              </View>
-            ))
+            inventory.map((item) => <ProductCard key={item.id} item={item} mode="stock" />)
           )}
         </View>
       )}
@@ -736,23 +751,15 @@ export default function App() {
                 const q = cart[item.id] ?? 0;
                 const atMax = q >= item.quantity;
                 return (
-                  <View key={item.id} style={styles.productRow}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.body}>{item.name}</Text>
-                      <Text style={styles.muted}>
-                        {item.price} {t.currency} · {t.stock}: {item.quantity}
-                      </Text>
-                    </View>
-                    <View style={styles.qtyRow}>
-                      <Pressable style={styles.qtyBtn} onPress={() => setQty(item.id, -1)}>
-                        <Text style={styles.qtyBtnText}>−</Text>
-                      </Pressable>
-                      <Text style={styles.qtyNum}>{q}</Text>
-                      <Pressable style={styles.qtyBtn} onPress={() => setQty(item.id, 1)} disabled={atMax}>
-                        <Text style={[styles.qtyBtnText, atMax && { opacity: 0.35 }]}>+</Text>
-                      </Pressable>
-                    </View>
-                  </View>
+                  <ProductCard
+                    key={item.id}
+                    item={item}
+                    mode="sell"
+                    cartQty={q}
+                    atMax={atMax}
+                    onMinus={() => setQty(item.id, -1)}
+                    onPlus={() => setQty(item.id, 1)}
+                  />
                 );
               })}
               <Text style={styles.label}>{t.payment}</Text>
@@ -897,6 +904,56 @@ export default function App() {
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
+  );
+}
+
+function ProductCard(props: {
+  item: Product;
+  mode: "stock" | "sell";
+  cartQty?: number;
+  atMax?: boolean;
+  onMinus?: () => void;
+  onPlus?: () => void;
+}) {
+  const uri = productImageUrl(props.item.image_url);
+  return (
+    <View style={styles.productCard}>
+      {uri ? (
+        <Image source={{ uri }} style={styles.productImage} resizeMode="cover" />
+      ) : (
+        <View style={styles.productImagePlaceholder}>
+          <Text style={styles.productImagePlaceholderText}>{t.noImage}</Text>
+        </View>
+      )}
+      <View style={styles.productCardBody}>
+        <Text style={styles.productName}>{props.item.name}</Text>
+        {props.item.designation ? (
+          <Text style={styles.productDesc} numberOfLines={3}>
+            {props.item.designation}
+          </Text>
+        ) : null}
+        {props.item.unit_label ? <Text style={styles.productMeta}>{props.item.unit_label}</Text> : null}
+        <View style={styles.productPriceRow}>
+          <Text style={styles.productPrice}>
+            {props.item.price} {t.currency}
+          </Text>
+          <Text style={styles.productStock}>
+            {t.stock}: {props.item.quantity}
+          </Text>
+        </View>
+        {props.mode === "sell" && props.onMinus && props.onPlus ? (
+          <View style={styles.qtyRow}>
+            <Pressable style={styles.qtyBtnLg} onPress={props.onMinus}>
+              <Text style={styles.qtyBtnText}>−</Text>
+            </Pressable>
+            <Text style={styles.qtyNumLg}>{props.cartQty ?? 0}</Text>
+            <Pressable style={styles.qtyBtnLg} onPress={props.onPlus} disabled={props.atMax}>
+              <Text style={[styles.qtyBtnText, props.atMax && { opacity: 0.35 }]}>+</Text>
+            </Pressable>
+          </View>
+        ) : null}
+      </View>
+    </View>
   );
 }
 
@@ -1154,7 +1211,65 @@ const styles = StyleSheet.create({
   tabTextOn: { color: accent },
   listRow: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: line },
   productRow: { flexDirection: "row", alignItems: "center", paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: line },
-  qtyRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  productCard: {
+    flexDirection: "row-reverse",
+    alignItems: "flex-start",
+    gap: 14,
+    padding: 14,
+    marginTop: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: line,
+    backgroundColor: "#ffffff",
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  productImage: {
+    width: 88,
+    height: 88,
+    borderRadius: 14,
+    backgroundColor: "#f1f5f9",
+  },
+  productImagePlaceholder: {
+    width: 88,
+    height: 88,
+    borderRadius: 14,
+    backgroundColor: "#f1f5f9",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: line,
+  },
+  productImagePlaceholderText: { color: muted, fontSize: 11, fontWeight: "600" },
+  productCardBody: { flex: 1, minWidth: 0 },
+  productName: { color: text, fontSize: 17, fontWeight: "800", textAlign: "right" },
+  productDesc: { color: muted, fontSize: 14, lineHeight: 20, marginTop: 6, textAlign: "right" },
+  productMeta: { color: accent, fontSize: 12, fontWeight: "700", marginTop: 4, textAlign: "right" },
+  productPriceRow: {
+    flexDirection: "row-reverse",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 10,
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  productPrice: { color: accent, fontSize: 16, fontWeight: "800" },
+  productStock: { color: muted, fontSize: 13, fontWeight: "600" },
+  qtyRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 12, alignSelf: "flex-end" },
+  qtyBtnLg: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: "#f0fdfa",
+    borderWidth: 1,
+    borderColor: accent,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  qtyNumLg: { color: text, fontWeight: "800", fontSize: 18, minWidth: 28, textAlign: "center" },
   qtyBtn: {
     width: 36,
     height: 36,

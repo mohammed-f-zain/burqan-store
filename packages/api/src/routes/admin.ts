@@ -1044,7 +1044,8 @@ router.get(
     try {
       const id = z.coerce.number().int().positive().parse(req.params.id);
       const { rows } = await query(
-        `SELECT p.id AS product_id, p.name, p.price, COALESCE(ri.quantity, 0) AS quantity
+        `SELECT p.id AS product_id, p.name, p.designation, p.image_url, p.price,
+                COALESCE(ri.quantity, 0) AS quantity
          FROM products p
          LEFT JOIN representative_inventory ri
            ON ri.product_id = p.id AND ri.representative_id = $1
