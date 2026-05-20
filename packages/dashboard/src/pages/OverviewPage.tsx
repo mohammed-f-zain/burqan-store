@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import { useLocale } from "../i18n/LocaleContext";
+import { toastError } from "../lib/toast";
 
 type Counts = {
   stores?: number;
@@ -17,7 +18,6 @@ export default function OverviewPage() {
   const { me, can } = useAuth();
   const { t } = useLocale();
   const [counts, setCounts] = useState<Counts>({});
-  const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,7 +62,7 @@ export default function OverviewPage() {
       try {
         await Promise.all(tasks);
       } catch {
-        if (!cancelled) setErr(t.overview.loadErr);
+        if (!cancelled) toastError(t.overview.loadErr);
       }
     })();
     return () => {
@@ -75,7 +75,6 @@ export default function OverviewPage() {
     <div className="grid">
       <div className="card">
         <h2>{t.overview.title}</h2>
-        {err && <div className="error">{err}</div>}
         <p className="muted">
           {t.overview.signedIn} <strong>{me?.email}</strong>
           {me?.isSuperAdmin ? t.overview.superNote : t.overview.roleNote}

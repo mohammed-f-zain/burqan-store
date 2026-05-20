@@ -9,6 +9,7 @@ import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
 import { mediaUrl } from "../lib/mediaUrl";
 import { confirmDanger } from "../lib/swalConfirm";
+import { toastError, toastSuccess } from "../lib/toast";
 import { formatMarketDateTime } from "../utils/formatMarketDateTime";
 import { qrPayload } from "../utils/qrPayload";
 
@@ -54,7 +55,7 @@ export default function StoreDetailPage() {
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [visits, setVisits] = useState<VisitRow[]>([]);
   const [payments, setPayments] = useState<PaymentRow[]>([]);
-  const [err, setErr] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [payOpen, setPayOpen] = useState(false);
   const [payAmount, setPayAmount] = useState("");
   const [payNote, setPayNote] = useState("");
@@ -62,7 +63,7 @@ export default function StoreDetailPage() {
 
   const load = useCallback(async () => {
     if (!id) return;
-    setErr(null);
+    setLoadFailed(false);
     try {
       const [storeRes, ordersRes, visitsRes, paymentsRes] = await Promise.all([
         api.get<{ store: StoreDetail }>(`/stores/${id}`),
@@ -75,7 +76,8 @@ export default function StoreDetailPage() {
       setVisits(visitsRes.data.visits);
       setPayments(paymentsRes.data.payments);
     } catch {
-      setErr(t.storeDetail.loadFailed);
+      setLoadFailed(true);
+      toastError(t.storeDetail.loadFailed);
     }
   }, [id, t.storeDetail.loadFailed]);
 
@@ -103,7 +105,7 @@ export default function StoreDetailPage() {
       await api.delete(`/orders/${orderId}`);
       await load();
     } catch (e) {
-      setErr(pickAxiosErrorMessage(e, t.orders.deleteFailed));
+      toastError(pickAxiosErrorMessage(e, t.orders.deleteFailed));
     }
   }
 
@@ -117,14 +119,14 @@ export default function StoreDetailPage() {
     setPayAmount("");
     setPayNote("");
     setPayOpen(false);
-    alert(t.stores.payDone);
+    toastSuccess(t.stores.payDone);
     await load();
   }
 
-  if (err) {
+  if (loadFailed) {
     return (
       <div className="card">
-        <div className="error">{err}</div>
+        <p className="muted">{t.storeDetail.loadFailed}</p>
         <Link to="/app/stores" className="ghost" style={{ marginTop: 12, display: "inline-block" }}>
           {t.storeDetail.back}
         </Link>

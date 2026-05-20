@@ -8,6 +8,7 @@ import StoreMap from "../components/StoreMap";
 import PaginationBar from "../components/PaginationBar";
 import { useClientPagination } from "../hooks/useClientPagination";
 import { useLocale } from "../i18n/LocaleContext";
+import { toastSuccess } from "../lib/toast";
 import { qrPayload } from "../utils/qrPayload";
 
 type Store = {
@@ -58,7 +59,7 @@ export default function StoresPage() {
     setPayAmount("");
     setPayNote("");
     setPayStoreId(null);
-    alert(t.stores.payDone);
+    toastSuccess(t.stores.payDone);
   }
 
   return (

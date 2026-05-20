@@ -4,6 +4,7 @@ import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
+import { toastError, toastSuccess } from "../lib/toast";
 
 type Rep = { id: number; full_name: string; email: string; is_active: boolean };
 type InvRow = { product_id: number; name: string; price: string; quantity: number };
@@ -17,7 +18,6 @@ export default function FillCarPage() {
   const [reps, setReps] = useState<Rep[]>([]);
   const [repId, setRepId] = useState("");
   const [inventory, setInventory] = useState<InvRow[]>([]);
-  const [msg, setMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -30,7 +30,7 @@ export default function FillCarPage() {
         setReps(list);
         if (list.length && !repId) setRepId(String(list[0]!.id));
       })
-      .catch((e) => setMsg(pickAxiosErrorMessage(e, t.fillCar.loadFailed)));
+      .catch((e) => toastError(pickAxiosErrorMessage(e, t.fillCar.loadFailed)));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- initial load
   }, [canRead]);
 
@@ -40,18 +40,16 @@ export default function FillCarPage() {
       return;
     }
     setLoading(true);
-    setMsg(null);
     void api
       .get<{ inventory: InvRow[] }>(`/representatives/${repId}/inventory`)
       .then((r) => setInventory(r.data.inventory ?? []))
-      .catch((e) => setMsg(pickAxiosErrorMessage(e, t.fillCar.loadFailed)))
+      .catch((e) => toastError(pickAxiosErrorMessage(e, t.fillCar.loadFailed)))
       .finally(() => setLoading(false));
   }, [repId, canRead, t.fillCar.loadFailed]);
 
   async function save() {
     if (!canWrite || !repId) return;
     setSaving(true);
-    setMsg(null);
     try {
       await api.put(`/representatives/${repId}/inventory`, {
         items: inventory.map((row) => ({
@@ -59,9 +57,9 @@ export default function FillCarPage() {
           quantity: row.quantity,
         })),
       });
-      setMsg(t.fillCar.saved);
+      toastSuccess(t.fillCar.saved);
     } catch (e) {
-      setMsg(pickAxiosErrorMessage(e, t.fillCar.saveFailed));
+      toastError(pickAxiosErrorMessage(e, t.fillCar.saveFailed));
     } finally {
       setSaving(false);
     }
@@ -83,7 +81,6 @@ export default function FillCarPage() {
       <div className="card">
         <h2>{t.fillCar.title}</h2>
         <p className="muted">{t.fillCar.hint}</p>
-        {msg && <p className="muted">{msg}</p>}
 
         <div className="form" style={{ maxWidth: 420 }}>
           <label>

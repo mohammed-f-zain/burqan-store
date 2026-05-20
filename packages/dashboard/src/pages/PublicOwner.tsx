@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 
 import { useLocale } from "../i18n/LocaleContext";
 import { formatMarketDateTime } from "../utils/formatMarketDateTime";
+import { toastError } from "../lib/toast";
 import { publicApi } from "../publicApi";
 
 type OwnerSummary = {
@@ -33,14 +34,23 @@ export default function PublicOwner() {
     let cancelled = false;
     (async () => {
       if (!token) {
-        setErr(t.owner.missingToken);
+        if (!cancelled) {
+          setErr(t.owner.missingToken);
+          toastError(t.owner.missingToken);
+        }
         return;
       }
       try {
         const res = await publicApi.get<OwnerSummary>("/owner/summary", { params: { t: token } });
-        if (!cancelled) setData(res.data);
+        if (!cancelled) {
+          setData(res.data);
+          setErr(null);
+        }
       } catch {
-        if (!cancelled) setErr(t.owner.loadErr);
+        if (!cancelled) {
+          setErr(t.owner.loadErr);
+          toastError(t.owner.loadErr);
+        }
       }
     })();
     return () => {
@@ -51,7 +61,7 @@ export default function PublicOwner() {
   return (
     <div className="card narrow">
       <h1>{t.owner.title}</h1>
-      {err && <div className="error">{err}</div>}
+      {err && !data && <p className="muted">{err}</p>}
       {data && (
         <div style={{ marginTop: 12 }}>
           <h2 className="strong">{data.store.name}</h2>

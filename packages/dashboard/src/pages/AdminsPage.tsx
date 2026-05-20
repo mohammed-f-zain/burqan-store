@@ -5,6 +5,8 @@ import { useAuth } from "../auth/AuthContext";
 import PaginationBar from "../components/PaginationBar";
 import { useClientPagination } from "../hooks/useClientPagination";
 import { useLocale } from "../i18n/LocaleContext";
+import { pickAxiosErrorMessage } from "../lib/apiError";
+import { toastError, toastSuccess } from "../lib/toast";
 
 type Admin = {
   id: number;
@@ -25,7 +27,6 @@ export default function AdminsPage() {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [roleId, setRoleId] = useState("");
-  const [msg, setMsg] = useState<string | null>(null);
 
   const adminPgn = useClientPagination(admins);
 
@@ -36,41 +37,43 @@ export default function AdminsPage() {
   }
 
   useEffect(() => {
-    void load().catch(() => setMsg(t.admins.loadFailed));
-  }, []);
+    void load().catch(() => toastError(t.admins.loadFailed));
+  }, [t.admins.loadFailed]);
 
   async function onCreate(e: FormEvent) {
     e.preventDefault();
-    setMsg(null);
-    await api.post("/accounts", {
-      email,
-      password,
-      fullName,
-      roleId: parseInt(roleId, 10),
-    });
-    setEmail("");
-    setPassword("");
-    setFullName("");
-    setRoleId("");
-    await load();
-    setMsg(t.admins.created);
+    try {
+      await api.post("/accounts", {
+        email,
+        password,
+        fullName,
+        roleId: parseInt(roleId, 10),
+      });
+      setEmail("");
+      setPassword("");
+      setFullName("");
+      setRoleId("");
+      await load();
+      toastSuccess(t.admins.created);
+    } catch (err) {
+      toastError(pickAxiosErrorMessage(err, t.admins.loadFailed));
+    }
   }
 
   async function toggleActive(a: Admin) {
     if (a.is_super_admin) return;
-    await api.patch(`/accounts/${a.id}`, { isActive: !a.is_active });
-    await load();
+    try {
+      await api.patch(`/accounts/${a.id}`, { isActive: !a.is_active });
+      await load();
+    } catch (err) {
+      toastError(pickAxiosErrorMessage(err, t.admins.loadFailed));
+    }
   }
 
   return (
     <div className="grid">
       <div className="card">
         <h2>{t.admins.title}</h2>
-        {msg && (
-          <p className="muted">
-            {t.admins.msg} {msg}
-          </p>
-        )}
         {can("admins.write") && (
           <form onSubmit={onCreate} className="form">
             <h3 className="strong" style={{ marginBottom: 8 }}>

@@ -7,6 +7,7 @@ import { useClientPagination } from "../hooks/useClientPagination";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
 import { confirmDanger } from "../lib/swalConfirm";
+import { toastError, toastSuccess } from "../lib/toast";
 import { formatMarketDateTime } from "../utils/formatMarketDateTime";
 
 type OrderRow = {
@@ -27,7 +28,6 @@ export default function OrdersPage() {
   const { t } = useLocale();
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [detail, setDetail] = useState<OrderDetail | null>(null);
-  const [msg, setMsg] = useState<string | null>(null);
   const canDelete = can("orders.delete");
 
   const orderPgn = useClientPagination(orders);
@@ -57,14 +57,13 @@ export default function OrdersPage() {
       cancelText: t.orders.cancelDelete,
     });
     if (!ok) return;
-    setMsg(null);
     try {
       await api.delete(`/orders/${String(id)}`);
       setDetail((d) => (d && String(d.id) === String(id) ? null : d));
       await load();
-      setMsg(t.orders.deleted);
+      toastSuccess(t.orders.deleted);
     } catch (e) {
-      setMsg(pickAxiosErrorMessage(e, t.orders.deleteFailed));
+      toastError(pickAxiosErrorMessage(e, t.orders.deleteFailed));
     }
   }
 
@@ -72,7 +71,6 @@ export default function OrdersPage() {
     <div className="grid">
       <div className="card">
         <h2>{t.orders.title}</h2>
-        {msg && <p className="muted">{msg}</p>}
         {orders.length > 0 && (
           <PaginationBar
             className="pagination-bar--flush"

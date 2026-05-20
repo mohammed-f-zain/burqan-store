@@ -8,6 +8,7 @@ import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
 import { mediaUrl } from "../lib/mediaUrl";
 import { confirmDanger } from "../lib/swalConfirm";
+import { toastError, toastSuccess } from "../lib/toast";
 import { uploadAdminImage } from "../lib/uploadAdmin";
 
 type Product = {
@@ -40,7 +41,6 @@ export default function ProductsPage() {
   });
   const [uploading, setUploading] = useState(false);
   const [editUploading, setEditUploading] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
   const pgn = useClientPagination(products);
 
   async function load() {
@@ -59,7 +59,7 @@ export default function ProductsPage() {
       const path = await uploadAdminImage(file);
       setForm((f) => ({ ...f, imagePath: path }));
     } catch (e) {
-      alert(e instanceof Error ? e.message : "فشل الرفع");
+      toastError(e instanceof Error ? e.message : t.products.saveFailed);
     } finally {
       setUploading(false);
     }
@@ -72,7 +72,7 @@ export default function ProductsPage() {
       const path = await uploadAdminImage(file);
       setEdit({ ...edit, image_url: path });
     } catch (e) {
-      alert(e instanceof Error ? e.message : "فشل الرفع");
+      toastError(e instanceof Error ? e.message : t.products.saveFailed);
     } finally {
       setEditUploading(false);
     }
@@ -80,32 +80,36 @@ export default function ProductsPage() {
 
   async function onAdd(e: FormEvent) {
     e.preventDefault();
-    await api.post("/products", {
-      name: form.name,
-      designation: form.designation || undefined,
-      unitLabel: form.unitLabel || undefined,
-      cartonSpec: form.cartonSpec || undefined,
-      dimensionsCm: form.dimensionsCm || undefined,
-      cartonWeightKg: form.cartonWeightKg ? parseFloat(form.cartonWeightKg) : undefined,
-      imageUrl: form.imagePath || undefined,
-      price: parseFloat(form.price),
-    });
-    setForm({
-      name: "",
-      designation: "",
-      unitLabel: "",
-      cartonSpec: "",
-      dimensionsCm: "",
-      cartonWeightKg: "",
-      imagePath: "",
-      price: "0",
-    });
-    await load();
+    try {
+      await api.post("/products", {
+        name: form.name,
+        designation: form.designation || undefined,
+        unitLabel: form.unitLabel || undefined,
+        cartonSpec: form.cartonSpec || undefined,
+        dimensionsCm: form.dimensionsCm || undefined,
+        cartonWeightKg: form.cartonWeightKg ? parseFloat(form.cartonWeightKg) : undefined,
+        imageUrl: form.imagePath || undefined,
+        price: parseFloat(form.price),
+      });
+      setForm({
+        name: "",
+        designation: "",
+        unitLabel: "",
+        cartonSpec: "",
+        dimensionsCm: "",
+        cartonWeightKg: "",
+        imagePath: "",
+        price: "0",
+      });
+      await load();
+      toastSuccess(t.products.updated);
+    } catch (err) {
+      toastError(pickAxiosErrorMessage(err, t.products.saveFailed));
+    }
   }
 
   async function saveEdit() {
     if (!edit) return;
-    setMsg(null);
     try {
       await api.patch(`/products/${edit.id}`, {
         name: edit.name,
@@ -120,9 +124,9 @@ export default function ProductsPage() {
       });
       setEdit(null);
       await load();
-      setMsg(t.products.updated);
+      toastSuccess(t.products.updated);
     } catch (err) {
-      setMsg(pickAxiosErrorMessage(err, t.products.saveFailed));
+      toastError(pickAxiosErrorMessage(err, t.products.saveFailed));
     }
   }
 
@@ -134,27 +138,18 @@ export default function ProductsPage() {
       cancelText: t.roles.cancel,
     });
     if (!ok) return;
-    setMsg(null);
     try {
       await api.delete(`/products/${id}`);
       if (edit?.id === id) setEdit(null);
       await load();
-      setMsg(t.products.deleted);
+      toastSuccess(t.products.deleted);
     } catch (err) {
-      setMsg(pickAxiosErrorMessage(err, t.products.deleteFailed));
+      toastError(pickAxiosErrorMessage(err, t.products.deleteFailed));
     }
   }
 
   return (
     <div className="grid">
-      {msg && (
-        <p
-          className={msg === t.products.deleted || msg === t.products.updated ? "muted" : "error"}
-          style={{ gridColumn: "1 / -1" }}
-        >
-          {msg}
-        </p>
-      )}
       {can("products.write") && (
         <div className="card">
           <h2>{t.products.titleAdd}</h2>

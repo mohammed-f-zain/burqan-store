@@ -7,18 +7,17 @@ import LangSwitch from "../components/LangSwitch";
 import ThemeToggle from "../components/ThemeToggle";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
+import { toastError } from "../lib/toast";
 
 export default function Login() {
   const navigate = useNavigate();
   const { t } = useLocale();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    setErr(null);
     setLoading(true);
     try {
       const { data } = await api.post("/auth/login", { email, password });
@@ -26,7 +25,7 @@ export default function Login() {
       navigate("/app", { replace: true });
       window.location.reload();
     } catch (e) {
-      setErr(pickAxiosErrorMessage(e, t.login.error));
+      toastError(pickAxiosErrorMessage(e, t.login.error));
     } finally {
       setLoading(false);
     }
@@ -60,7 +59,6 @@ export default function Login() {
               autoComplete="current-password"
             />
           </label>
-          {err && <div className="error">{err}</div>}
           <p className="muted small">
             <Link to="/forgot-password">{t.login.forgotLink}</Link>
           </p>

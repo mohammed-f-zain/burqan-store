@@ -7,23 +7,23 @@ import LangSwitch from "../components/LangSwitch";
 import ThemeToggle from "../components/ThemeToggle";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
+import { toastError, toastSuccess } from "../lib/toast";
 
 export default function ForgotPassword() {
   const { t } = useLocale();
   const [email, setEmail] = useState("");
-  const [err, setErr] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [loading, setLoading] = useState(false);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    setErr(null);
     setLoading(true);
     try {
       await api.post("/auth/forgot-password", { email });
       setDone(true);
+      toastSuccess(t.forgotPassword.sent);
     } catch (ex) {
-      setErr(pickAxiosErrorMessage(ex, t.forgotPassword.error));
+      toastError(pickAxiosErrorMessage(ex, t.forgotPassword.error));
     } finally {
       setLoading(false);
     }
@@ -44,14 +44,13 @@ export default function ForgotPassword() {
         </div>
         <p className="muted">{t.forgotPassword.hint}</p>
         {done ? (
-          <p className="success">{t.forgotPassword.sent}</p>
+          <p className="muted">{t.forgotPassword.sent}</p>
         ) : (
           <form onSubmit={onSubmit} className="form">
             <label>
               {t.login.email}
               <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required autoComplete="email" />
             </label>
-            {err && <div className="error">{err}</div>}
             <button className="primary" disabled={loading} type="submit">
               {loading ? t.forgotPassword.loading : t.forgotPassword.submit}
             </button>

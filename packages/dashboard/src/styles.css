@@ -787,3 +787,35 @@ html[data-theme="dark"] .swal2-title {
 html[data-theme="dark"] .swal2-html-container {
   color: var(--muted);
 }
+
+.swal-toast-burqan.swal2-popup {
+  font-family: inherit;
+  font-size: 14px;
+  padding: 12px 16px;
+  margin-top: 12px;
+  margin-right: 12px;
+  margin-left: 12px;
+}
+
+html[dir="rtl"] .swal-toast-burqan.swal2-popup {
+  margin-right: 12px;
+  margin-left: 12px;
+}
+
+.swal-toast-burqan .swal2-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+  padding: 0;
+}
+
+.swal-toast-burqan .swal2-icon {
+  width: 1.75em;
+  height: 1.75em;
+  margin: 0 10px 0 0;
+  scale: 0.85;
+}
+
+html[dir="rtl"] .swal-toast-burqan .swal2-icon {
+  margin: 0 0 0 10px;
+}

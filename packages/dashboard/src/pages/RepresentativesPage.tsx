@@ -9,6 +9,7 @@ import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
 import { mediaUrl } from "../lib/mediaUrl";
 import { confirmDanger } from "../lib/swalConfirm";
+import { toastError, toastSuccess, toastWarning } from "../lib/toast";
 import { uploadAdminImage } from "../lib/uploadAdmin";
 
 type Rep = {
@@ -40,8 +41,6 @@ export default function RepresentativesPage() {
   const { t } = useLocale();
   const [reps, setReps] = useState<Rep[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
-  const [msg, setMsg] = useState<string | null>(null);
-
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -81,18 +80,17 @@ export default function RepresentativesPage() {
 
   async function toggleRepActive(r: Rep) {
     if (!can("reps.write")) return;
-    setMsg(null);
     try {
       await api.patch(`/representatives/${r.id}`, { isActive: !r.is_active });
       await load();
-      setMsg(r.is_active ? t.reps.deactivated : t.reps.activated);
+      toastSuccess(r.is_active ? t.reps.deactivated : t.reps.activated);
     } catch (e) {
-      setMsg(pickAxiosErrorMessage(e, t.reps.loadFailed));
+      toastError(pickAxiosErrorMessage(e, t.reps.loadFailed));
     }
   }
 
   useEffect(() => {
-    void load().catch(() => setMsg(t.reps.loadFailed));
+    void load().catch(() => toastError(t.reps.loadFailed));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- initial load only
   }, []);
 
@@ -111,7 +109,7 @@ export default function RepresentativesPage() {
       const path = await uploadAdminImage(file);
       setImagePath(path);
     } catch (e) {
-      setMsg(pickAxiosErrorMessage(e, t.reps.loadFailed));
+      toastError(pickAxiosErrorMessage(e, t.reps.loadFailed));
     } finally {
       setUploading(false);
     }
@@ -124,7 +122,7 @@ export default function RepresentativesPage() {
       const path = await uploadAdminImage(file);
       setEImagePath(path);
     } catch (e) {
-      setMsg(pickAxiosErrorMessage(e, t.reps.loadFailed));
+      toastError(pickAxiosErrorMessage(e, t.reps.loadFailed));
     } finally {
       setEUploading(false);
     }
@@ -132,10 +130,9 @@ export default function RepresentativesPage() {
 
   async function onCreate(e: FormEvent) {
     e.preventDefault();
-    setMsg(null);
     const areaIds = picked.length ? picked : areas.map((x) => x.id);
     if (!areaIds.length) {
-      setMsg(t.reps.loadFailed);
+      toastWarning(t.reps.loadFailed);
       return;
     }
     try {
@@ -156,14 +153,13 @@ export default function RepresentativesPage() {
       setPicked([]);
       setImagePath("");
       await load();
-      setMsg(t.reps.created);
+      toastSuccess(t.reps.created);
     } catch (err) {
-      setMsg(pickAxiosErrorMessage(err, t.reps.createFailed));
+      toastError(pickAxiosErrorMessage(err, t.reps.createFailed));
     }
   }
 
   function openEdit(r: Rep) {
-    setMsg(null);
     setEditId(r.id);
     setEEmail(r.email);
     setEFullName(r.full_name);
@@ -182,10 +178,9 @@ export default function RepresentativesPage() {
 
   async function saveEdit() {
     if (editId == null) return;
-    setMsg(null);
     const areaIds = ePicked.length ? ePicked : areas.map((x) => x.id);
     if (!areaIds.length) {
-      setMsg(t.reps.saveFailed);
+      toastWarning(t.reps.saveFailed);
       return;
     }
     try {
@@ -201,9 +196,9 @@ export default function RepresentativesPage() {
       });
       closeEdit();
       await load();
-      setMsg(t.reps.updated);
+      toastSuccess(t.reps.updated);
     } catch (err) {
-      setMsg(pickAxiosErrorMessage(err, t.reps.saveFailed));
+      toastError(pickAxiosErrorMessage(err, t.reps.saveFailed));
     }
   }
 
@@ -215,14 +210,13 @@ export default function RepresentativesPage() {
       cancelText: t.reps.cancel,
     });
     if (!ok) return;
-    setMsg(null);
     try {
       await api.delete(`/representatives/${id}`);
       if (editId === id) closeEdit();
       await load();
-      setMsg(t.reps.deleted);
+      toastSuccess(t.reps.deleted);
     } catch (err) {
-      setMsg(pickAxiosErrorMessage(err, t.reps.deleteFailed));
+      toastError(pickAxiosErrorMessage(err, t.reps.deleteFailed));
     }
   }
 
@@ -235,16 +229,6 @@ export default function RepresentativesPage() {
 
   return (
     <div className="grid">
-      {msg && (
-        <p
-          className={
-            msg === t.reps.created || msg === t.reps.updated || msg === t.reps.deleted ? "muted" : "error"
-          }
-          style={{ gridColumn: "1 / -1" }}
-        >
-          {msg}
-        </p>
-      )}
 
       {write && (
         <div className="card">

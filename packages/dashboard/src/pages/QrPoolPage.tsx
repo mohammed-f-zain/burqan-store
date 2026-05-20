@@ -6,6 +6,7 @@ import PaginationBar from "../components/PaginationBar";
 import { useClientPagination } from "../hooks/useClientPagination";
 import { useLocale } from "../i18n/LocaleContext";
 import { formatMarketDateTime } from "../utils/formatMarketDateTime";
+import { toastInfo, toastError } from "../lib/toast";
 import { qrPayload } from "../utils/qrPayload";
 
 type Item = { id: string; publicToken: string; createdAt: string };
@@ -15,13 +16,13 @@ export default function QrPoolPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [nextCursor, setNextCursor] = useState<number | null>(null);
   const [unassignedCount, setUnassignedCount] = useState<number | null>(null);
-  const [err, setErr] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const qrPgn = useClientPagination(items);
 
   const load = useCallback(async (cursor: number | null, append: boolean) => {
-    setErr(null);
+    setLoadFailed(false);
     const params: Record<string, string> = { limit: "80" };
     if (cursor != null) params.cursor = String(cursor);
     const { data } = await api.get<{ items: Item[]; nextCursor: number | null; unassignedCount: number }>("/qr-pool", {
@@ -39,7 +40,10 @@ export default function QrPoolPage() {
       try {
         await load(null, false);
       } catch {
-        if (!cancelled) setErr(t.qrPool.loadFailed);
+        if (!cancelled) {
+          setLoadFailed(true);
+          toastError(t.qrPool.loadFailed);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -53,7 +57,7 @@ export default function QrPoolPage() {
   async function copyToken(tok: string) {
     try {
       await navigator.clipboard.writeText(tok);
-      alert(t.qrPool.copied);
+      toastInfo(t.qrPool.copied);
     } catch {
       /* ignore */
     }
@@ -72,11 +76,10 @@ export default function QrPoolPage() {
             <strong>{unassignedCount}</strong> — {t.qrPool.unassignedCount}
           </p>
         )}
-        {err && <div className="error">{err}</div>}
         {loading && <p className="muted">{t.common.loading}</p>}
       </div>
 
-      {!loading && items.length === 0 && !err && (
+      {!loading && items.length === 0 && !loadFailed && (
         <div className="card">
           <p className="muted">{t.qrPool.none}</p>
         </div>

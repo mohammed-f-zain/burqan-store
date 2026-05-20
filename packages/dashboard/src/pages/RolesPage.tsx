@@ -8,6 +8,7 @@ import { useClientPagination } from "../hooks/useClientPagination";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
 import { confirmDanger } from "../lib/swalConfirm";
+import { toastError, toastSuccess } from "../lib/toast";
 
 type Role = { id: number; name: string; slug: string; permissions: string[] };
 
@@ -19,8 +20,6 @@ export default function RolesPage() {
   const [slug, setSlug] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [editing, setEditing] = useState<Role | null>(null);
-  const [msg, setMsg] = useState<string | null>(null);
-
   const rolePgn = useClientPagination(roles);
 
   async function load() {
@@ -29,7 +28,7 @@ export default function RolesPage() {
   }
 
   useEffect(() => {
-    void load().catch(() => setMsg(t.roles.loadFailed));
+    void load().catch(() => toastError(t.roles.loadFailed));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load once; t only affects error copy
   }, []);
 
@@ -39,29 +38,27 @@ export default function RolesPage() {
 
   async function onCreate(e: FormEvent) {
     e.preventDefault();
-    setMsg(null);
     try {
       await api.post("/roles", { name, slug, permissions: selected });
       setName("");
       setSlug("");
       setSelected([]);
       await load();
-      setMsg(t.roles.created);
+      toastSuccess(t.roles.created);
     } catch (err) {
-      setMsg(pickAxiosErrorMessage(err, t.roles.createFailed));
+      toastError(pickAxiosErrorMessage(err, t.roles.createFailed));
     }
   }
 
   async function saveEdit() {
     if (!editing) return;
-    setMsg(null);
     try {
       await api.patch(`/roles/${editing.id}`, { name: editing.name, permissions: editing.permissions });
       setEditing(null);
       await load();
-      setMsg(t.roles.updated);
+      toastSuccess(t.roles.updated);
     } catch (err) {
-      setMsg(pickAxiosErrorMessage(err, t.roles.saveFailed));
+      toastError(pickAxiosErrorMessage(err, t.roles.saveFailed));
     }
   }
 
@@ -73,13 +70,12 @@ export default function RolesPage() {
       cancelText: t.roles.cancel,
     });
     if (!ok) return;
-    setMsg(null);
     try {
       await api.delete(`/roles/${id}`);
       await load();
-      setMsg(t.roles.deleted);
+      toastSuccess(t.roles.deleted);
     } catch (err) {
-      setMsg(pickAxiosErrorMessage(err, t.roles.saveFailed));
+      toastError(pickAxiosErrorMessage(err, t.roles.saveFailed));
     }
   }
 
@@ -87,15 +83,6 @@ export default function RolesPage() {
     <div className="grid">
       <div className="card">
         <h2>{t.roles.title}</h2>
-        {msg && (
-          <p
-            className={
-              msg === t.roles.created || msg === t.roles.updated || msg === t.roles.deleted ? "muted" : "error"
-            }
-          >
-            {t.roles.msg} {msg}
-          </p>
-        )}
         {can("roles.write") && (
           <form onSubmit={onCreate} className="form grid2">
             <div>

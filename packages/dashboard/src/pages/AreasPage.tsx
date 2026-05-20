@@ -7,6 +7,7 @@ import { useClientPagination } from "../hooks/useClientPagination";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
 import { confirmDanger } from "../lib/swalConfirm";
+import { toastError, toastSuccess } from "../lib/toast";
 
 type Area = { id: number; name: string };
 
@@ -15,7 +16,6 @@ export default function AreasPage() {
   const { t } = useLocale();
   const [areas, setAreas] = useState<Area[]>([]);
   const [name, setName] = useState("");
-  const [msg, setMsg] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
 
@@ -27,25 +27,23 @@ export default function AreasPage() {
   }
 
   useEffect(() => {
-    void load().catch(() => setMsg(t.areas.addFailed));
+    void load().catch(() => toastError(t.areas.addFailed));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- initial load only
   }, []);
 
   async function onAdd(e: FormEvent) {
     e.preventDefault();
-    setMsg(null);
     try {
       await api.post("/areas", { name: name.trim() });
       setName("");
       await load();
-      setMsg(t.areas.added);
+      toastSuccess(t.areas.added);
     } catch (err) {
-      setMsg(pickAxiosErrorMessage(err, t.areas.addFailed));
+      toastError(pickAxiosErrorMessage(err, t.areas.addFailed));
     }
   }
 
   function startEdit(a: Area) {
-    setMsg(null);
     setEditingId(a.id);
     setEditName(a.name);
   }
@@ -57,15 +55,14 @@ export default function AreasPage() {
 
   async function saveEdit() {
     if (editingId == null) return;
-    setMsg(null);
     try {
       await api.patch(`/areas/${editingId}`, { name: editName.trim() });
       setEditingId(null);
       setEditName("");
       await load();
-      setMsg(t.areas.updated);
+      toastSuccess(t.areas.updated);
     } catch (err) {
-      setMsg(pickAxiosErrorMessage(err, t.areas.saveFailed));
+      toastError(pickAxiosErrorMessage(err, t.areas.saveFailed));
     }
   }
 
@@ -77,14 +74,13 @@ export default function AreasPage() {
       cancelText: t.areas.cancel,
     });
     if (!ok) return;
-    setMsg(null);
     try {
       await api.delete(`/areas/${id}`);
       if (editingId === id) cancelEdit();
       await load();
-      setMsg(t.areas.deleted);
+      toastSuccess(t.areas.deleted);
     } catch (err) {
-      setMsg(pickAxiosErrorMessage(err, t.areas.deleteFailed));
+      toastError(pickAxiosErrorMessage(err, t.areas.deleteFailed));
     }
   }
 
@@ -94,15 +90,6 @@ export default function AreasPage() {
     <div className="grid">
       <div className="card">
         <h2>{t.areas.title}</h2>
-        {msg && (
-          <p
-            className={
-              msg === t.areas.updated || msg === t.areas.deleted || msg === t.areas.added ? "muted" : "error"
-            }
-          >
-            {t.areas.msg} {msg}
-          </p>
-        )}
         {write && (
           <form onSubmit={onAdd} className="row spread" style={{ gap: 12, alignItems: "flex-end" }}>
             <label style={{ flex: 1 }}>
