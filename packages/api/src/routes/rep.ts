@@ -48,7 +48,43 @@ router.post("/auth/login", async (req, res, next) => {
 
 router.get("/me", repAuthMiddleware, async (req, res, next) => {
   try {
-    res.json({ representative: req.rep });
+    const rep = req.rep!;
+    const { rows: profileRows } = await query<{
+      phone: string;
+      image_url: string | null;
+      car_plate: string | null;
+    }>(`SELECT phone, image_url, car_plate FROM representatives WHERE id = $1`, [rep.id]);
+    const profile = profileRows[0];
+    const { rows: areaRows } = await query<{ id: number; name: string }>(
+      `SELECT a.id, a.name FROM areas a
+       INNER JOIN representative_areas ra ON ra.area_id = a.id
+       WHERE ra.representative_id = $1
+       ORDER BY a.name ASC`,
+      [rep.id]
+    );
+    const { rows: invRows } = await query<{ sku_count: string; total_units: string }>(
+      `SELECT COUNT(*)::text AS sku_count,
+              COALESCE(SUM(quantity), 0)::text AS total_units
+       FROM representative_inventory
+       WHERE representative_id = $1 AND quantity > 0`,
+      [rep.id]
+    );
+    const inv = invRows[0];
+    res.json({
+      representative: {
+        id: rep.id,
+        email: rep.email,
+        fullName: rep.fullName,
+        phone: profile?.phone ?? "",
+        imageUrl: profile?.image_url ?? null,
+        carPlate: profile?.car_plate ?? null,
+        areas: areaRows,
+        inventory: {
+          skuCount: parseInt(inv?.sku_count ?? "0", 10),
+          totalUnits: parseInt(inv?.total_units ?? "0", 10),
+        },
+      },
+    });
   } catch (e) {
     next(e);
   }

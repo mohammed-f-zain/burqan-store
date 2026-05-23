@@ -28,6 +28,8 @@ import { toArabicUserMessage } from "./arabicMessage";
 import ProductDetailModal, { type Product } from "./ProductDetailModal";
 import ProductGridCard from "./ProductGridCard";
 import { productImageUrl } from "./productImage";
+import ProfileScreen, { type RepProfile } from "./ProfileScreen";
+import { clearRepToken, loadStoredRepToken, saveRepToken } from "./repSession";
 import ToastOverlay, { type ToastKind } from "./ToastOverlay";
 import { theme } from "./theme";
 
@@ -40,7 +42,6 @@ const t = {
   email: "البريد",
   password: "كلمة المرور",
   signIn: "دخول",
-  signOut: "خروج",
   openScanner: "مسح الرمز",
   manualToken: "رمز البطاقة",
   lookup: "تأكيد",
@@ -100,8 +101,23 @@ const t = {
   areaDetecting: "جاري تحديد المنطقة…",
   refreshLocation: "تحديث الموقع",
   navHome: "الرئيسية",
-  navInventory: "مخزون السيارة",
+  navInventory: "مخزون",
   navStore: "المنتجات",
+  navProfile: "حسابي",
+  profileTitle: "الملف الشخصي",
+  profilePhone: "الهاتف",
+  profileEmail: "البريد",
+  profileCar: "لوحة السيارة",
+  profileAreas: "مناطق العمل",
+  profileInventory: "مخزون السيارة",
+  profileSku: "أصناف",
+  profileUnits: "وحدات",
+  profileSignOut: "تسجيل الخروج",
+  profileNoAreas: "لا مناطق مربوطة",
+  profileNoCar: "—",
+  profileLoadFailed: "تعذّر تحميل الملف الشخصي",
+  welcome: (name: string) => `مرحباً، ${name}`,
+  homeSubtitle: "امسح رمز المتجر لبدء الزيارة والبيع",
   productsBadge: (n: number) => String(n),
   inventoryTitle: "مخزون السيارة",
   inventoryEmpty: "لا منتجات",
@@ -149,7 +165,7 @@ type StoreBrief = {
   deferredPaymentEnabled: boolean;
   ownerPortalUrl?: string;
 };
-type BottomTab = "home" | "inventory" | "store";
+type BottomTab = "home" | "inventory" | "store" | "profile";
 type RepOrderRow = { id: string; payment_type: string; total_amount: string; created_at: string };
 
 async function uploadRepImage(apiBase: string, bearer: string, uri: string, mimeType: string): Promise<string> {
@@ -178,6 +194,9 @@ export default function App() {
   const embeddedCameraHeight = Math.max(360, winH - (insets.top + scanTopMargin) - scanBottomChrome);
 
   const [token, setToken] = useState<string | null>(null);
+  const [sessionRestoring, setSessionRestoring] = useState(true);
+  const [repProfile, setRepProfile] = useState<RepProfile | null>(null);
+  const [profileRefreshing, setProfileRefreshing] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -288,6 +307,7 @@ export default function App() {
       clearTimeout(timer);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? t.loginFailed);
+      await saveRepToken(data.token);
       setToken(data.token);
       const a = await fetch(`${API_BASE}/api/v1/rep/areas`, {
         headers: { Authorization: `Bearer ${data.token}` },
@@ -320,6 +340,67 @@ export default function App() {
       /* ignore */
     }
   }, [apiGet, token]);
+
+  const loadProfile = useCallback(async () => {
+    if (!token) return;
+    try {
+      const data = await apiGet("/api/v1/rep/me");
+      const r = data.representative as Partial<RepProfile> | undefined;
+      if (!r?.id) {
+        setRepProfile(null);
+        return;
+      }
+      setRepProfile({
+        id: r.id,
+        email: r.email ?? "",
+        fullName: r.fullName ?? "",
+        phone: r.phone ?? "",
+        imageUrl: r.imageUrl ?? null,
+        carPlate: r.carPlate ?? null,
+        areas: Array.isArray(r.areas) ? r.areas : [],
+        inventory: {
+          skuCount: r.inventory?.skuCount ?? 0,
+          totalUnits: r.inventory?.totalUnits ?? 0,
+        },
+      });
+    } catch {
+      showToast(t.profileLoadFailed, "error");
+    }
+  }, [apiGet, token, showToast]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const stored = await loadStoredRepToken();
+      if (cancelled) return;
+      if (stored) setToken(stored);
+      setSessionRestoring(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!token) {
+      setRepProfile(null);
+      return;
+    }
+    void loadProfile();
+    void loadInventory();
+  }, [token, loadProfile, loadInventory]);
+
+  const signOut = useCallback(() => {
+    modernBarcodeSubRef.current?.remove();
+    modernBarcodeSubRef.current = null;
+    void clearRepToken();
+    setToken(null);
+    setRepProfile(null);
+    setActiveStore(null);
+    setMode("home");
+    setBottomTab("home");
+    hideToast();
+  }, [hideToast]);
 
   async function resolveQr(raw: string) {
     if (!token) return;
@@ -422,14 +503,14 @@ export default function App() {
       });
       const aj = await a.json();
       if (a.ok) setAreas(aj.areas ?? []);
-      await loadInventory();
+      await Promise.all([loadInventory(), loadProfile()]);
       if (activeStore) await refreshStoreData(activeStore.id);
     } catch {
       /* ignore */
     } finally {
       setHomeRefreshing(false);
     }
-  }, [token, activeStore, refreshStoreData, loadInventory]);
+  }, [token, activeStore, refreshStoreData, loadInventory, loadProfile]);
 
   useEffect(() => {
     if (token) void loadInventory();
@@ -517,6 +598,17 @@ export default function App() {
     []
   );
 
+  if (sessionRestoring) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: bg }} edges={["top", "bottom", "left", "right"]}>
+        <View style={styles.center}>
+          <StatusBar style="dark" />
+          <ActivityIndicator size="large" color={accent} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (!token) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: bg }} edges={["top", "bottom", "left", "right"]}>
@@ -528,7 +620,7 @@ export default function App() {
             <View style={styles.loginCard}>
             <TextInput style={styles.input} autoCapitalize="none" value={email} onChangeText={setEmail} placeholder={t.email} placeholderTextColor={muted} />
             <TextInput style={styles.input} secureTextEntry value={password} onChangeText={setPassword} placeholder={t.password} placeholderTextColor={muted} />
-            <Pressable style={[styles.primary, styles.primaryLg]} onPress={login} disabled={busy}>
+            <Pressable style={[styles.primary, styles.primaryLg]} onPress={() => void login()} disabled={busy}>
               {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>{t.signIn}</Text>}
             </Pressable>
             </View>
@@ -538,6 +630,11 @@ export default function App() {
       </SafeAreaView>
     );
   }
+
+  const profileAvatarUri = productImageUrl(repProfile?.imageUrl);
+  const profileInitials = repProfile?.fullName
+    ? repProfile.fullName.trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join("") || "?"
+    : "?";
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: bg }} edges={["top", "left", "right"]}>
@@ -582,19 +679,31 @@ export default function App() {
           }
         >
           <View style={styles.header}>
-            <Image source={require("./assets/burqanlogo.png")} style={styles.logoHeader} resizeMode="contain" />
-            <Pressable style={styles.signOutBtn}
+            <View style={styles.headerStart}>
+              <Image source={require("./assets/burqanlogo.png")} style={styles.logoHeader} resizeMode="contain" />
+              {bottomTab === "home" && repProfile?.fullName ? (
+                <View style={styles.headerText}>
+                  <Text style={styles.headerGreeting}>
+                    {t.welcome(repProfile.fullName.trim().split(/\s+/)[0] ?? repProfile.fullName)}
+                  </Text>
+                  <Text style={styles.headerSub}>{t.homeSubtitle}</Text>
+                </View>
+              ) : null}
+            </View>
+            <Pressable
+              style={styles.profileBtn}
               onPress={() => {
-                modernBarcodeSubRef.current?.remove();
-                modernBarcodeSubRef.current = null;
-                setToken(null);
-                setActiveStore(null);
-                setMode("home");
-                setBottomTab("home");
-                hideToast();
+                setBottomTab("profile");
+                if (mode === "store") setMode("home");
               }}
             >
-              <Text style={styles.signOutText}>{t.signOut}</Text>
+              {profileAvatarUri ? (
+                <Image source={{ uri: profileAvatarUri }} style={styles.profileBtnImg} />
+              ) : (
+                <View style={styles.profileBtnPlaceholder}>
+                  <Text style={styles.profileBtnInitials}>{profileInitials}</Text>
+                </View>
+              )}
             </Pressable>
           </View>
 
@@ -667,7 +776,9 @@ export default function App() {
             <View style={styles.panel}>
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>{t.phone}</Text>
-                <Text style={styles.infoValue}>{activeStore.phone}</Text>
+                <Pressable onPress={() => void Linking.openURL(`tel:${activeStore.phone}`)}>
+                  <Text style={[styles.infoValue, styles.link]}>{activeStore.phone}</Text>
+                </Pressable>
               </View>
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>{t.location}</Text>
@@ -789,6 +900,41 @@ export default function App() {
               setBottomTab("home");
               setLastScanToken(null);
             }
+          }}
+        />
+      )}
+
+      {bottomTab === "profile" && (
+        <ProfileScreen
+          profile={repProfile}
+          loading={!repProfile && !!token}
+          refreshing={profileRefreshing}
+          labels={{
+            title: t.profileTitle,
+            email: t.profileEmail,
+            phone: t.profilePhone,
+            carPlate: t.profileCar,
+            areas: t.profileAreas,
+            inventory: t.profileInventory,
+            sku: t.profileSku,
+            units: t.profileUnits,
+            signOut: t.profileSignOut,
+            viewInventory: t.navInventory,
+            noAreas: t.profileNoAreas,
+            noCarPlate: t.profileNoCar,
+          }}
+          onRefresh={async () => {
+            setProfileRefreshing(true);
+            try {
+              await Promise.all([loadProfile(), loadInventory()]);
+            } finally {
+              setProfileRefreshing(false);
+            }
+          }}
+          onSignOut={signOut}
+          onOpenInventory={() => {
+            setBottomTab("inventory");
+            void loadInventory();
           }}
         />
       )}
@@ -933,6 +1079,16 @@ export default function App() {
             }}
           >
             <Text style={[styles.bottomTabText, bottomTab === "store" && styles.bottomTabTextOn]}>{t.navStore}</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.bottomTab, bottomTab === "profile" && styles.bottomTabOn]}
+            onPress={() => {
+              setBottomTab("profile");
+              if (mode === "store") setMode("home");
+              void loadProfile();
+            }}
+          >
+            <Text style={[styles.bottomTabText, bottomTab === "profile" && styles.bottomTabTextOn]}>{t.navProfile}</Text>
           </Pressable>
         </View>
       </KeyboardAvoidingView>
@@ -1170,14 +1326,35 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 8,
     paddingVertical: 4,
+    gap: 12,
   },
-  signOutBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: theme.radius.pill,
+  headerStart: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    minWidth: 0,
+  },
+  headerText: { flex: 1, minWidth: 0 },
+  headerGreeting: { color: text, fontSize: 17, fontWeight: "800", textAlign: "right" },
+  headerSub: { color: muted, fontSize: 12, marginTop: 2, textAlign: "right" },
+  profileBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    overflow: "hidden",
+    borderWidth: 2,
+    borderColor: theme.accentSoft,
+  },
+  profileBtnImg: { width: "100%", height: "100%" },
+  profileBtnPlaceholder: {
+    width: "100%",
+    height: "100%",
     backgroundColor: theme.accentSoft,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  signOutText: { color: accent, fontWeight: "800", fontSize: 14 },
+  profileBtnInitials: { color: accent, fontWeight: "800", fontSize: 15 },
   title: { color: text, fontSize: 24, fontWeight: "800", textAlign: "center", letterSpacing: -0.3 },
   loginCard: {
     width: "100%",
@@ -1440,6 +1617,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   bottomTabOn: { backgroundColor: theme.accentSoft },
-  bottomTabText: { color: muted, fontWeight: "600", fontSize: 12 },
-  bottomTabTextOn: { color: accent, fontWeight: "800", fontSize: 12 },
+  bottomTabText: { color: muted, fontWeight: "600", fontSize: 11 },
+  bottomTabTextOn: { color: accent, fontWeight: "800", fontSize: 11 },
 });
