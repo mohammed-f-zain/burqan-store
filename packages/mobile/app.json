@@ -9,7 +9,7 @@
     "splash": {
       "image": "./assets/burqanlogo.png",
       "resizeMode": "contain",
-      "backgroundColor": "#000000"
+      "backgroundColor": "#ffffff"
     },
     "ios": {
       "supportsTablet": true,

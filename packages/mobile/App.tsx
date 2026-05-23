@@ -715,7 +715,7 @@ export default function App() {
   if (showSplash) {
     return (
       <View style={{ flex: 1, backgroundColor: theme.bgSplash }}>
-        <StatusBar style="light" />
+        <StatusBar style="dark" />
         <SplashScreen />
       </View>
     );

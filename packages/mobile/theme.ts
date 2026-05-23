@@ -9,8 +9,7 @@ export const brand = {
 
 export const theme = {
   bg: "#eef4fc",
-  /** Matches logo PNG background so the mark reads clearly. */
-  bgSplash: brand.black,
+  bgSplash: "#ffffff",
   card: "#ffffff",
   text: brand.navyDark,
   muted: "#64748b",
