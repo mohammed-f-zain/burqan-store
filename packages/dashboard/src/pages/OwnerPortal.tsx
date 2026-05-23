@@ -2,9 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import LoyaltyBadge from "../components/LoyaltyBadge";
-import LoyaltyIcon from "../components/LoyaltyIcon";
+import OwnerOverviewTab from "../components/OwnerOverviewTab";
 import OwnerProductDetailSheet, { type OwnerCatalogProduct } from "../components/OwnerProductDetailSheet";
-import SectionTitleWithIcon from "../components/SectionTitleWithIcon";
 import { mediaUrl } from "../lib/mediaUrl";
 import { openOwnerOrder, ownerFormatMoney } from "../owner/ownerFormat";
 import { useOwnerArabic } from "../owner/useOwnerArabic";
@@ -163,10 +162,13 @@ export default function OwnerPortal() {
           )}
           <div className="owner-store-meta">
             <h1 className="owner-store-name">{data.store.name}</h1>
-            <p className="owner-store-sub">
-              {data.store.ownerName} · {data.store.phone}
-            </p>
-            <span className="owner-badge">
+            <p className="owner-store-sub">{data.store.ownerName}</p>
+            <a href={`tel:${data.store.phone}`} className="owner-store-phone">
+              {data.store.phone}
+            </a>
+            <span
+              className={`owner-badge${data.store.deferredPaymentEnabled ? " owner-badge--on" : " owner-badge--off"}`}
+            >
               {data.store.deferredPaymentEnabled ? t.owner.deferredOn : t.owner.deferredOff}
             </span>
           </div>
@@ -182,113 +184,7 @@ export default function OwnerPortal() {
       </nav>
 
       <main className="owner-main">
-        {tab === "overview" && (
-          <>
-            <div className="owner-stats">
-              <div className="owner-stat">
-                <div className="owner-stat-label">{t.owner.statOrders}</div>
-                <div className="owner-stat-value">{data.stats.orderCount}</div>
-              </div>
-              <div className="owner-stat">
-                <div className="owner-stat-label">{t.owner.statVisits}</div>
-                <div className="owner-stat-value">{data.stats.visitCount}</div>
-              </div>
-              <div className="owner-stat">
-                <div className="owner-stat-label">{t.owner.statMonthOrders}</div>
-                <div className="owner-stat-value owner-stat-value--accent">{data.stats.monthOrderCount}</div>
-              </div>
-              <div className="owner-stat">
-                <div className="owner-stat-label">{t.owner.statMonthTotal}</div>
-                <div className="owner-stat-value owner-stat-value--accent">
-                  {ownerFormatMoney(data.stats.monthOrderTotal, t.owner.currency)}
-                </div>
-              </div>
-            </div>
-
-            <section className="owner-loyalty-panel" aria-label={t.owner.loyaltyBalance}>
-              <div className="owner-loyalty-card owner-loyalty-card--balance">
-                <div className="owner-loyalty-card-icon" aria-hidden>
-                  <LoyaltyIcon kind="balance" size={32} />
-                </div>
-                <div className="owner-loyalty-card-body">
-                  <p className="owner-loyalty-card-label">{t.owner.loyaltyBalance}</p>
-                  <p className="owner-loyalty-card-value">{t.owner.loyaltyPoints(data.loyalty.balance)}</p>
-                </div>
-              </div>
-            </section>
-
-            <div className="owner-stats" style={{ marginTop: 12 }}>
-              <div className="owner-stat">
-                <div className="owner-stat-label">{t.owner.deferredPurchases}</div>
-                <div className="owner-stat-value">{ownerFormatMoney(data.totals.deferredPurchases, t.owner.currency)}</div>
-              </div>
-              <div className="owner-stat">
-                <div className="owner-stat-label">{t.owner.cashPurchases}</div>
-                <div className="owner-stat-value">{ownerFormatMoney(data.totals.cashPurchases, t.owner.currency)}</div>
-              </div>
-              <div className="owner-stat">
-                <div className="owner-stat-label">{t.owner.payments}</div>
-                <div className="owner-stat-value">{ownerFormatMoney(data.totals.paymentsRecorded, t.owner.currency)}</div>
-              </div>
-              <div className="owner-stat">
-                <div className="owner-stat-label">{t.owner.balance}</div>
-                <div className="owner-stat-value owner-stat-value--danger">
-                  {ownerFormatMoney(data.totals.balanceDue, t.owner.currency)}
-                </div>
-              </div>
-            </div>
-
-            {data.loyaltyRecent.length > 0 && (
-              <section className="owner-section">
-                <SectionTitleWithIcon icon={<LoyaltyIcon kind="earn" size={22} />} className="owner-section-title">
-                  {t.owner.loyaltyRecentTitle}
-                </SectionTitleWithIcon>
-                <ul className="owner-loyalty-list">
-                  {data.loyaltyRecent.map((row, i) => (
-                    <li key={`${row.orderId}-${i}`} className="owner-loyalty-item">
-                      <span className="owner-loyalty-item-icon" aria-hidden>
-                        <LoyaltyIcon kind="plus" size={20} />
-                      </span>
-                      <div className="owner-loyalty-main">
-                        <span className="owner-loyalty-product">{row.productName}</span>
-                        <span className="owner-loyalty-meta">
-                          {t.owner.lineQty(row.quantity)} · {formatMarketDateTime(row.createdAt, "ar")}
-                        </span>
-                      </div>
-                      <LoyaltyBadge text={t.owner.loyaltyLinePoints(row.points)} variant="inline" icon="star" />
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-
-            {data.topProducts.length > 0 && (
-              <section className="owner-section">
-                <h2 className="owner-section-title">{t.owner.topProducts}</h2>
-                <ul className="owner-top-list">
-                  {data.topProducts.map((p) => {
-                    const img = mediaUrl(p.imageUrl);
-                    return (
-                      <li key={p.productId} className="owner-top-item">
-                        {img ? (
-                          <img src={img} alt="" className="owner-top-thumb" />
-                        ) : (
-                          <div className="owner-top-thumb owner-top-thumb--empty" />
-                        )}
-                        <div className="owner-top-body">
-                          <div className="owner-top-name">{p.name}</div>
-                          <div className="owner-top-sub">
-                            {t.owner.qtyUnits(p.quantity)} · {ownerFormatMoney(p.total, t.owner.currency)}
-                          </div>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </section>
-            )}
-          </>
-        )}
+        {tab === "overview" && <OwnerOverviewTab data={data} strings={t.owner} />}
 
         {tab === "orders" && (
           <section className="owner-section owner-section--flush">

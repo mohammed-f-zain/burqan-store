@@ -1,0 +1,184 @@
+import LoyaltyBadge from "./LoyaltyBadge";
+import LoyaltyIcon from "./LoyaltyIcon";
+import SectionTitleWithIcon from "./SectionTitleWithIcon";
+import type { ar } from "../i18n/ar";
+import { mediaUrl } from "../lib/mediaUrl";
+import { ownerFormatMoney } from "../owner/ownerFormat";
+import { formatMarketDateTime } from "../utils/formatMarketDateTime";
+
+type OverviewData = {
+  loyalty: { balance: number };
+  totals: {
+    deferredPurchases: number;
+    cashPurchases: number;
+    paymentsRecorded: number;
+    balanceDue: number;
+  };
+  stats: {
+    orderCount: number;
+    visitCount: number;
+    monthOrderCount: number;
+    monthOrderTotal: number;
+  };
+  loyaltyRecent: {
+    orderId: string;
+    createdAt: string;
+    productName: string;
+    quantity: number;
+    points: number;
+  }[];
+  topProducts: { productId: number; name: string; imageUrl: string | null; quantity: number; total: number }[];
+};
+
+type OwnerStrings = (typeof ar)["owner"];
+
+type Props = {
+  data: OverviewData;
+  strings: OwnerStrings;
+};
+
+function DashMetric({
+  label,
+  value,
+  tone = "default",
+}: {
+  label: string;
+  value: string | number;
+  tone?: "default" | "accent" | "danger";
+}) {
+  return (
+    <div className={`owner-metric owner-metric--${tone}`}>
+      <span className="owner-metric-label">{label}</span>
+      <span className="owner-metric-value">{value}</span>
+    </div>
+  );
+}
+
+export default function OwnerOverviewTab({ data, strings: o }: Props) {
+  const currency = o.currency;
+  const balanceDue = data.totals.balanceDue;
+
+  return (
+    <div className="owner-dashboard">
+      <div className="owner-dash-hero">
+        <article className="owner-dash-hero-card owner-dash-hero-card--month">
+          <div className="owner-dash-hero-card-top">
+            <span className="owner-dash-hero-kicker">{o.statMonthTotal}</span>
+            <span className="owner-dash-hero-icon" aria-hidden>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M4 7h16M4 12h10M4 17h6"
+                  stroke="currentColor"
+                  strokeWidth="1.75"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </span>
+          </div>
+          <p className="owner-dash-hero-value">{ownerFormatMoney(data.stats.monthOrderTotal, currency)}</p>
+          <p className="owner-dash-hero-meta">{o.monthOrdersMeta(data.stats.monthOrderCount)}</p>
+        </article>
+
+        <article className="owner-dash-hero-card owner-dash-hero-card--loyalty">
+          <div className="owner-dash-hero-card-top">
+            <span className="owner-dash-hero-kicker">{o.loyaltyBalance}</span>
+            <span className="owner-dash-hero-icon owner-dash-hero-icon--loyalty" aria-hidden>
+              <LoyaltyIcon kind="balance" size={22} />
+            </span>
+          </div>
+          <p className="owner-dash-hero-value">{o.loyaltyPoints(data.loyalty.balance)}</p>
+        </article>
+      </div>
+
+      <section className="owner-dash-panel" aria-labelledby="owner-dash-activity">
+        <h2 id="owner-dash-activity" className="owner-dash-panel-title">
+          {o.overviewActivity}
+        </h2>
+        <div className="owner-dash-metrics">
+          <DashMetric label={o.statOrders} value={data.stats.orderCount} />
+          <DashMetric label={o.statVisits} value={data.stats.visitCount} tone="accent" />
+        </div>
+      </section>
+
+      <section className="owner-dash-panel owner-dash-panel--finance" aria-labelledby="owner-dash-finance">
+        <h2 id="owner-dash-finance" className="owner-dash-panel-title">
+          {o.overviewFinance}
+        </h2>
+        <div className="owner-dash-finance-grid">
+          <div className="owner-finance-item">
+            <span className="owner-finance-label">{o.deferredPurchases}</span>
+            <span className="owner-finance-value">{ownerFormatMoney(data.totals.deferredPurchases, currency)}</span>
+          </div>
+          <div className="owner-finance-item">
+            <span className="owner-finance-label">{o.cashPurchases}</span>
+            <span className="owner-finance-value">{ownerFormatMoney(data.totals.cashPurchases, currency)}</span>
+          </div>
+          <div className="owner-finance-item">
+            <span className="owner-finance-label">{o.payments}</span>
+            <span className="owner-finance-value owner-finance-value--positive">
+              {ownerFormatMoney(data.totals.paymentsRecorded, currency)}
+            </span>
+          </div>
+        </div>
+        <div
+          className={`owner-dash-balance${balanceDue > 0 ? " owner-dash-balance--due" : " owner-dash-balance--clear"}`}
+        >
+          <span className="owner-dash-balance-label">{o.balance}</span>
+          <span className="owner-dash-balance-value">{ownerFormatMoney(balanceDue, currency)}</span>
+          {balanceDue <= 0 ? <span className="owner-dash-balance-hint">{o.balanceClearHint}</span> : null}
+        </div>
+      </section>
+
+      {data.loyaltyRecent.length > 0 && (
+        <section className="owner-dash-panel">
+          <SectionTitleWithIcon icon={<LoyaltyIcon kind="earn" size={22} />} className="owner-dash-panel-title owner-dash-panel-title--icon">
+            {o.loyaltyRecentTitle}
+          </SectionTitleWithIcon>
+          <ul className="owner-loyalty-list owner-loyalty-list--dash">
+            {data.loyaltyRecent.map((row, i) => (
+              <li key={`${row.orderId}-${i}`} className="owner-loyalty-item">
+                <span className="owner-loyalty-item-icon" aria-hidden>
+                  <LoyaltyIcon kind="plus" size={20} />
+                </span>
+                <div className="owner-loyalty-main">
+                  <span className="owner-loyalty-product">{row.productName}</span>
+                  <span className="owner-loyalty-meta">
+                    {o.lineQty(row.quantity)} · {formatMarketDateTime(row.createdAt, "ar")}
+                  </span>
+                </div>
+                <LoyaltyBadge text={o.loyaltyLinePoints(row.points)} variant="inline" icon="star" />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {data.topProducts.length > 0 && (
+        <section className="owner-dash-panel">
+          <h2 className="owner-dash-panel-title">{o.topProducts}</h2>
+          <ul className="owner-top-list owner-top-list--ranked">
+            {data.topProducts.map((p, index) => {
+              const img = mediaUrl(p.imageUrl);
+              return (
+                <li key={p.productId} className="owner-top-item">
+                  <span className={`owner-top-rank${index < 3 ? ` owner-top-rank--${index + 1}` : ""}`}>{index + 1}</span>
+                  {img ? (
+                    <img src={img} alt="" className="owner-top-thumb" />
+                  ) : (
+                    <div className="owner-top-thumb owner-top-thumb--empty" />
+                  )}
+                  <div className="owner-top-body">
+                    <div className="owner-top-name">{p.name}</div>
+                    <div className="owner-top-sub">
+                      {o.qtyUnits(p.quantity)} · {ownerFormatMoney(p.total, currency)}
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+    </div>
+  );
+}

@@ -19,6 +19,7 @@
   --card-grad-b: #f8fafc;
   --shadow-card: 0 12px 40px rgba(15, 23, 42, 0.08);
   --accent-soft: rgba(13, 148, 136, 0.12);
+  --on-accent: #ffffff;
   color-scheme: light;
   min-height: 100vh;
   min-height: 100dvh;
@@ -78,21 +79,33 @@ html[data-theme="light"] body:has(.owner-shell) {
 }
 
 .owner-store-card {
+  position: relative;
   display: flex;
   flex-direction: row-reverse;
   align-items: center;
-  gap: 16px;
-  padding: 20px;
-  border-radius: 20px;
-  background: linear-gradient(135deg, var(--card-grad-a), var(--card-grad-b));
-  border: 1px solid var(--line);
-  box-shadow: var(--shadow-card);
+  gap: 18px;
+  padding: 22px 20px 20px;
+  border-radius: 22px;
+  background: var(--card);
+  border: 1px solid rgba(13, 148, 136, 0.2);
+  box-shadow: 0 16px 48px rgba(15, 23, 42, 0.08), 0 2px 8px rgba(13, 148, 136, 0.06);
+  overflow: hidden;
+}
+
+.owner-store-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--accent2), var(--accent));
 }
 
 .owner-store-avatar {
-  width: 64px;
-  height: 64px;
-  border-radius: 16px;
+  width: 72px;
+  height: 72px;
+  border-radius: 18px;
   object-fit: cover;
   background: var(--surface);
   border: 1px solid var(--line);
@@ -122,30 +135,59 @@ html[data-theme="light"] body:has(.owner-shell) {
 }
 
 .owner-store-sub {
-  margin: 4px 0 0;
-  color: var(--muted);
-  font-size: 0.9rem;
+  margin: 6px 0 0;
+  color: var(--text);
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.owner-store-phone {
+  display: inline-block;
+  margin-top: 4px;
+  color: var(--accent2);
+  font-size: 0.88rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.owner-store-phone:hover {
+  text-decoration: underline;
 }
 
 .owner-badge {
   display: inline-block;
-  margin-top: 8px;
-  padding: 4px 10px;
+  margin-top: 10px;
+  padding: 5px 12px;
   border-radius: 999px;
-  font-size: 0.75rem;
-  font-weight: 700;
-  background: rgba(13, 148, 136, 0.12);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.owner-badge--on {
+  background: rgba(13, 148, 136, 0.14);
   color: var(--accent);
+  border: 1px solid rgba(13, 148, 136, 0.25);
+}
+
+.owner-badge--off {
+  background: var(--surface);
+  color: var(--muted);
+  border: 1px solid var(--line);
 }
 
 .owner-tabs {
   display: flex;
   flex-direction: row-reverse;
   flex-wrap: nowrap;
-  gap: 8px;
+  gap: 6px;
   max-width: 960px;
-  margin: 16px auto 0;
-  padding: 4px max(16px, env(safe-area-inset-right, 0)) 8px max(16px, env(safe-area-inset-left, 0));
+  margin: 18px auto 0;
+  padding: 6px max(16px, env(safe-area-inset-right, 0)) 6px max(16px, env(safe-area-inset-left, 0));
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.05);
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
@@ -156,35 +198,344 @@ html[data-theme="light"] body:has(.owner-shell) {
 }
 
 .owner-tab {
+  flex: 1;
   flex-shrink: 0;
-  padding: 10px 16px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--card);
+  min-width: max-content;
+  padding: 11px 14px;
+  border-radius: 12px;
+  border: none;
+  background: transparent;
   color: var(--muted);
   font-weight: 700;
-  font-size: 0.88rem;
+  font-size: 0.86rem;
   cursor: pointer;
   font-family: inherit;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
 }
 
 .owner-tab:hover {
-  border-color: var(--accent);
   color: var(--text);
+  background: var(--surface);
 }
 
 .owner-tab--on {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--on-accent);
+  background: var(--card);
+  color: var(--accent);
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.08);
 }
 
 .owner-main {
   max-width: 960px;
   margin: 0 auto;
-  padding: 12px max(16px, env(safe-area-inset-right, 0)) max(32px, env(safe-area-inset-bottom, 0))
+  padding: 16px max(16px, env(safe-area-inset-right, 0)) max(32px, env(safe-area-inset-bottom, 0))
     max(16px, env(safe-area-inset-left, 0));
+}
+
+/* —— Overview dashboard —— */
+.owner-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.owner-dash-hero {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+@media (min-width: 520px) {
+  .owner-dash-hero {
+    grid-template-columns: 1.15fr 1fr;
+  }
+}
+
+.owner-dash-hero-card {
+  padding: 18px 16px;
+  border-radius: 20px;
+  text-align: right;
+  border: 1px solid transparent;
+  box-shadow: 0 10px 32px rgba(15, 23, 42, 0.07);
+}
+
+.owner-dash-hero-card--month {
+  background: linear-gradient(145deg, #0d9488 0%, #0f766e 48%, #115e59 100%);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.owner-dash-hero-card--loyalty {
+  background: linear-gradient(145deg, #ffffff 0%, #f0fdfa 55%, #ecfdf5 100%);
+  border-color: rgba(13, 148, 136, 0.28);
+}
+
+.owner-dash-hero-card-top {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.owner-dash-hero-kicker {
+  font-size: 0.78rem;
+  font-weight: 700;
+  opacity: 0.92;
+}
+
+.owner-dash-hero-card--loyalty .owner-dash-hero-kicker {
+  color: var(--muted);
+  opacity: 1;
+}
+
+.owner-dash-hero-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+
+.owner-dash-hero-icon--loyalty {
+  background: var(--loyalty-soft);
+  color: var(--loyalty);
+}
+
+.owner-dash-hero-value {
+  margin: 12px 0 0;
+  font-size: clamp(1.45rem, 5.5vw, 1.9rem);
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.owner-dash-hero-card--loyalty .owner-dash-hero-value {
+  color: var(--loyalty);
+}
+
+.owner-dash-hero-meta {
+  margin: 8px 0 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  opacity: 0.88;
+}
+
+.owner-dash-panel {
+  padding: 18px 16px;
+  border-radius: 20px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.05);
+}
+
+.owner-dash-panel-title {
+  margin: 0 0 14px;
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: var(--text);
+  text-align: right;
+}
+
+.owner-dash-panel-title--icon {
+  margin-bottom: 12px;
+}
+
+.owner-dash-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.owner-metric {
+  padding: 14px 12px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  text-align: right;
+}
+
+.owner-metric-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.owner-metric-value {
+  display: block;
+  margin-top: 6px;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1.15;
+}
+
+.owner-metric--accent .owner-metric-value {
+  color: var(--accent);
+}
+
+.owner-dash-finance-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+@media (min-width: 480px) {
+  .owner-dash-finance-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.owner-finance-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 14px;
+  text-align: right;
+  border-bottom: 1px solid var(--line);
+}
+
+@media (min-width: 480px) {
+  .owner-finance-item {
+    border-bottom: none;
+    border-left: 1px solid var(--line);
+  }
+
+  html[dir="rtl"] .owner-finance-item {
+    border-left: none;
+    border-right: 1px solid var(--line);
+  }
+
+  html[dir="rtl"] .owner-finance-item:first-child {
+    border-right: none;
+  }
+
+  .owner-finance-item:first-child {
+    border-left: none;
+  }
+}
+
+.owner-finance-item:last-child {
+  border-bottom: none;
+}
+
+.owner-finance-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.owner-finance-value {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.owner-finance-value--positive {
+  color: var(--accent);
+}
+
+.owner-dash-balance {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 16px 16px;
+  border-radius: 14px;
+  text-align: right;
+}
+
+.owner-dash-balance--due {
+  background: linear-gradient(135deg, #fff1f2, #ffe4e6);
+  border: 1px solid rgba(225, 29, 72, 0.25);
+}
+
+.owner-dash-balance--clear {
+  background: linear-gradient(135deg, #f0fdf4, #ecfdf5);
+  border: 1px solid rgba(13, 148, 136, 0.2);
+}
+
+.owner-dash-balance-label {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.owner-dash-balance--due .owner-dash-balance-label {
+  color: #9f1239;
+}
+
+.owner-dash-balance-value {
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.owner-dash-balance--due .owner-dash-balance-value {
+  color: var(--danger);
+}
+
+.owner-dash-balance--clear .owner-dash-balance-value {
+  color: var(--accent);
+}
+
+.owner-dash-balance-hint {
+  width: 100%;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-align: right;
+}
+
+.owner-loyalty-list--dash {
+  gap: 8px;
+}
+
+.owner-top-list--ranked .owner-top-item {
+  padding: 12px 0;
+}
+
+.owner-top-rank {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+.owner-top-rank--1 {
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  color: #92400e;
+  border-color: #fcd34d;
+}
+
+.owner-top-rank--2 {
+  background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
+  color: #475569;
+  border-color: #cbd5e1;
+}
+
+.owner-top-rank--3 {
+  background: linear-gradient(135deg, #ffedd5, #fed7aa);
+  color: #9a3412;
+  border-color: #fdba74;
 }
 
 .owner-stats {
