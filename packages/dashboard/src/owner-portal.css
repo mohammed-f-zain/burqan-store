@@ -1,9 +1,26 @@
 /* Store owner public portal — standalone layout (no admin chrome) */
 
 .owner-shell {
+  --bg: #e8edf7;
+  --panel: #ffffff;
+  --card: #ffffff;
+  --text: #0f172a;
+  --muted: #64748b;
+  --line: #cbd5e1;
+  --accent: #0d9488;
+  --accent2: #0284c7;
+  --danger: #e11d48;
+  --surface: #f1f5f9;
+  --surface-deep: #e2e8f0;
+  --card-grad-a: #ffffff;
+  --card-grad-b: #f8fafc;
+  --shadow-card: 0 12px 40px rgba(15, 23, 42, 0.08);
+  --accent-soft: rgba(13, 148, 136, 0.12);
+  color-scheme: light;
   min-height: 100vh;
-  background: radial-gradient(1100px 520px at 85% -5%, rgba(13, 148, 136, 0.14) 0%, var(--bg) 50%);
+  background: radial-gradient(1100px 520px at 85% -5%, rgba(13, 148, 136, 0.1) 0%, var(--bg) 50%);
   font-family: "Tajawal", "Segoe UI", system-ui, sans-serif;
+  color: var(--text);
 }
 
 html[dir="rtl"] .owner-shell {
@@ -14,9 +31,9 @@ html[dir="rtl"] .owner-shell {
   display: flex;
   flex-direction: row-reverse;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 16px;
-  padding: 20px 20px 12px;
+  padding: 24px 20px 16px;
   max-width: 960px;
   margin: 0 auto;
 }
@@ -25,19 +42,20 @@ html[dir="rtl"] .owner-shell {
   display: flex;
   flex-direction: row-reverse;
   align-items: center;
-  gap: 12px;
+  justify-content: center;
 }
 
 .owner-brand img {
-  height: 40px;
+  height: 64px;
   width: auto;
+  max-width: min(320px, 88vw);
 }
 
-.owner-brand-title {
-  font-size: 1rem;
-  font-weight: 800;
-  color: var(--text);
-  margin: 0;
+@media (min-width: 768px) {
+  .owner-brand img {
+    height: 80px;
+    max-width: 400px;
+  }
 }
 
 .owner-store-hero {
@@ -865,6 +883,90 @@ html[dir="rtl"] .owner-shell {
 
 .owner-muted {
   color: var(--muted);
+}
+
+.owner-stats--loyalty {
+  grid-template-columns: 1fr 1fr;
+}
+
+.owner-stat--wide {
+  grid-column: 1 / -1;
+}
+
+.owner-stat-value--loyalty {
+  color: #0d9488;
+  font-size: 1.75rem;
+}
+
+.owner-loyalty-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.owner-loyalty-item {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--card);
+  border: 1px solid var(--line);
+}
+
+.owner-loyalty-main {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+}
+
+.owner-loyalty-product {
+  display: block;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.owner-loyalty-meta {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.owner-loyalty-points {
+  font-weight: 800;
+  font-size: 1rem;
+  color: #0d9488;
+  white-space: nowrap;
+}
+
+.owner-product-loyalty {
+  margin: 6px 0 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #0d9488;
+}
+
+.owner-line-end {
+  text-align: left;
+  flex-shrink: 0;
+}
+
+.owner-line-loyalty {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #0d9488;
+  text-align: left;
+}
+
+.owner-detail-sum--loyalty strong {
+  color: #0d9488;
 }
 
 .owner-empty {

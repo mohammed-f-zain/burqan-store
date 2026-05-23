@@ -21,6 +21,7 @@ type Product = {
   carton_weight_kg: string | null;
   image_url: string | null;
   price: string;
+  loyalty_points_per_unit: number;
   is_active: boolean;
 };
 
@@ -38,6 +39,7 @@ export default function ProductsPage() {
     cartonWeightKg: "",
     imagePath: "" as string,
     price: "0",
+    loyaltyPoints: "0",
   });
   const [uploading, setUploading] = useState(false);
   const [editUploading, setEditUploading] = useState(false);
@@ -90,6 +92,7 @@ export default function ProductsPage() {
         cartonWeightKg: form.cartonWeightKg ? parseFloat(form.cartonWeightKg) : undefined,
         imageUrl: form.imagePath || undefined,
         price: parseFloat(form.price),
+        loyaltyPointsPerUnit: parseInt(form.loyaltyPoints, 10) || 0,
       });
       setForm({
         name: "",
@@ -98,6 +101,7 @@ export default function ProductsPage() {
         cartonSpec: "",
         dimensionsCm: "",
         cartonWeightKg: "",
+        loyaltyPoints: "0",
         imagePath: "",
         price: "0",
       });
@@ -120,6 +124,7 @@ export default function ProductsPage() {
         cartonWeightKg: edit.carton_weight_kg != null ? parseFloat(String(edit.carton_weight_kg)) : null,
         imageUrl: edit.image_url === null || edit.image_url === "" ? null : edit.image_url,
         price: parseFloat(edit.price),
+        loyaltyPointsPerUnit: edit.loyalty_points_per_unit ?? 0,
         isActive: edit.is_active,
       });
       setEdit(null);
@@ -161,6 +166,17 @@ export default function ProductsPage() {
             <label>
               {t.products.price}
               <input value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} type="number" step="0.01" />
+            </label>
+            <label>
+              {t.products.loyaltyPoints}
+              <input
+                value={form.loyaltyPoints}
+                onChange={(e) => setForm({ ...form, loyaltyPoints: e.target.value })}
+                type="number"
+                min={0}
+                step={1}
+              />
+              <span className="muted small">{t.products.loyaltyPointsHint}</span>
             </label>
             <label>
               {t.products.designation}
@@ -232,6 +248,7 @@ export default function ProductsPage() {
               <tr>
                 <th>{t.products.colName}</th>
                 <th>{t.products.colPrice}</th>
+                <th>{t.products.colLoyalty}</th>
                 <th>{t.products.colActive}</th>
                 <th>{t.products.colActions}</th>
               </tr>
@@ -251,6 +268,7 @@ export default function ProductsPage() {
                     </div>
                   </td>
                   <td>{p.price}</td>
+                  <td>{p.loyalty_points_per_unit ?? 0}</td>
                   <td>{p.is_active ? t.products.yes : t.products.no}</td>
                   <td>
                     {can("products.write") && (
@@ -283,6 +301,18 @@ export default function ProductsPage() {
               <label>
                 {t.products.price}
                 <input value={edit.price} onChange={(e) => setEdit({ ...edit, price: e.target.value })} />
+              </label>
+              <label>
+                {t.products.loyaltyPoints}
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={edit.loyalty_points_per_unit ?? 0}
+                  onChange={(e) =>
+                    setEdit({ ...edit, loyalty_points_per_unit: parseInt(e.target.value, 10) || 0 })
+                  }
+                />
               </label>
               <label>
                 {t.products.colActive}{" "}

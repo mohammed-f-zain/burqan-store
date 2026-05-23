@@ -55,7 +55,16 @@ type Analytics = {
     orderCount: number;
     revenue: number;
   }[];
-  monthly: { month: string; revenue: number; orderCount: number }[];
+  loyalty: {
+    totalPointsIssued: number;
+    monthPointsEarned: number;
+  };
+  topStoresLoyalty: {
+    storeId: number;
+    name: string;
+    areaName: string;
+    balance: number;
+  }[];
   recentOrders: {
     id: string;
     storeId: number;
@@ -66,11 +75,6 @@ type Analytics = {
     repName: string;
   }[];
 };
-
-function formatMonthLabel(iso: string, locale: string) {
-  const d = new Date(`${iso}T12:00:00`);
-  return d.toLocaleDateString(locale === "ar" ? "ar-JO" : "en-GB", { month: "short", year: "2-digit" });
-}
 
 export default function OverviewPage() {
   const { me, can } = useAuth();
@@ -159,16 +163,11 @@ export default function OverviewPage() {
     };
   }, [can, t.overview.analyticsLoadErr]);
 
-  const chartMax = useMemo(() => {
-    if (!analytics?.monthly.length) return 1;
-    return Math.max(...analytics.monthly.map((m) => m.revenue), 1);
-  }, [analytics]);
-
   const hasAnalyticsData =
     analytics &&
     (analytics.totals.orderCount > 0 ||
       analytics.topProducts.length > 0 ||
-      analytics.monthly.length > 0);
+      analytics.loyalty.totalPointsIssued > 0);
 
   return (
     <div className="grid">
@@ -274,25 +273,38 @@ export default function OverviewPage() {
 
               {!hasAnalyticsData && <p className="muted">{t.overview.noAnalytics}</p>}
 
-              {analytics.monthly.length > 0 && (
-                <section className="dash-section">
-                  <h4 className="dash-section-title">{t.overview.chartTitle}</h4>
-                  <div className="dash-chart">
-                    {analytics.monthly.map((m) => (
-                      <div key={m.month} className="dash-chart-col">
-                        <div className="dash-chart-bar-wrap">
-                          <div
-                            className="dash-chart-bar"
-                            style={{ height: `${Math.max(6, (m.revenue / chartMax) * 100)}%` }}
-                            title={`${money(m.revenue)} · ${t.overview.ordersCount(m.orderCount)}`}
-                          />
-                        </div>
-                        <span className="dash-chart-label">{formatMonthLabel(m.month, locale)}</span>
-                      </div>
-                    ))}
+              <section className="dash-section">
+                <h4 className="dash-section-title">{t.overview.loyaltyTitle}</h4>
+                <div className="dash-kpi-grid" style={{ marginBottom: 12 }}>
+                  <div className="dash-kpi dash-kpi--accent">
+                    <div className="dash-kpi-label">{t.overview.loyaltyTotalIssued}</div>
+                    <div className="dash-kpi-value">{t.overview.loyaltyPoints(analytics.loyalty.totalPointsIssued)}</div>
                   </div>
-                </section>
-              )}
+                  <div className="dash-kpi">
+                    <div className="dash-kpi-label">{t.overview.loyaltyMonthEarned}</div>
+                    <div className="dash-kpi-value">{t.overview.loyaltyPoints(analytics.loyalty.monthPointsEarned)}</div>
+                  </div>
+                </div>
+                {analytics.topStoresLoyalty.length > 0 ? (
+                  <ul className="dash-rank-list">
+                    {analytics.topStoresLoyalty.map((s, i) => (
+                      <li key={s.storeId} className="dash-rank-item">
+                        <span className="dash-rank-num">{i + 1}</span>
+                        <div className="dash-rank-body">
+                          <Link to={`/app/stores/${s.storeId}`} className="dash-rank-name linkish">
+                            {s.name}
+                          </Link>
+                          <div className="dash-rank-sub">
+                            {s.areaName} · {t.overview.loyaltyPoints(s.balance)}
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="muted">{t.overview.loyaltyNoData}</p>
+                )}
+              </section>
 
               <div className="dash-two-col">
                 {analytics.topProducts.length > 0 && (

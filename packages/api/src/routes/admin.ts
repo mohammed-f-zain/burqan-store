@@ -176,7 +176,8 @@ router.get(
         { rows: topProducts },
         { rows: topStores },
         { rows: topReps },
-        { rows: monthly },
+        { rows: loyaltyTotals },
+        { rows: topStoresLoyalty },
         { rows: recentOrders },
       ] = await Promise.all([
         query<{
@@ -257,14 +258,22 @@ router.get(
            ORDER BY SUM(o.total_amount) DESC NULLS LAST
            LIMIT 6`
         ),
-        query<{ month: string; revenue: string; order_count: string }>(
-          `SELECT date_trunc('month', created_at AT TIME ZONE 'Asia/Amman')::date::text AS month,
-                  COALESCE(SUM(total_amount), 0)::text AS revenue,
-                  COUNT(*)::text AS order_count
-           FROM orders
-           WHERE created_at >= (now() - interval '6 months')
-           GROUP BY 1
-           ORDER BY 1 ASC`
+        query<{ total_points: string; month_points: string }>(
+          `SELECT
+             COALESCE(SUM(ol.loyalty_points_earned), 0)::text AS total_points,
+             COALESCE(SUM(ol.loyalty_points_earned) FILTER (
+               WHERE o.created_at >= date_trunc('month', timezone('Asia/Amman', now()))
+             ), 0)::text AS month_points
+           FROM order_lines ol
+           JOIN orders o ON o.id = ol.order_id`
+        ),
+        query<{ store_id: number; name: string; area_name: string; balance: string }>(
+          `SELECT s.id AS store_id, s.name, a.name AS area_name,
+                  s.loyalty_points_balance::text AS balance
+           FROM stores s
+           JOIN areas a ON a.id = s.area_id
+           ORDER BY s.loyalty_points_balance DESC, s.name ASC
+           LIMIT 10`
         ),
         query<{
           id: string;
@@ -327,10 +336,15 @@ router.get(
           orderCount: parseInt(row.order_count, 10),
           revenue: parseFloat(row.revenue),
         })),
-        monthly: monthly.map((row) => ({
-          month: row.month,
-          revenue: parseFloat(row.revenue),
-          orderCount: parseInt(row.order_count, 10),
+        loyalty: {
+          totalPointsIssued: parseInt(loyaltyTotals[0]?.total_points ?? "0", 10),
+          monthPointsEarned: parseInt(loyaltyTotals[0]?.month_points ?? "0", 10),
+        },
+        topStoresLoyalty: topStoresLoyalty.map((row) => ({
+          storeId: row.store_id,
+          name: row.name,
+          areaName: row.area_name,
+          balance: parseInt(row.balance, 10),
         })),
         recentOrders: recentOrders.map((row) => ({
           id: row.id,
@@ -872,6 +886,7 @@ const productSchema = z.object({
   cartonWeightKg: z.number().optional(),
   imageUrl: optionalStoredImagePathSchema,
   price: z.number().nonnegative(),
+  loyaltyPointsPerUnit: z.number().int().min(0).optional(),
 });
 
 router.get(
@@ -881,7 +896,8 @@ router.get(
   async (_req, res, next) => {
     try {
       const { rows } = await query(
-        `SELECT id, name, designation, unit_label, carton_spec, dimensions_cm, carton_weight_kg, image_url, price, is_active, created_at
+        `SELECT id, name, designation, unit_label, carton_spec, dimensions_cm, carton_weight_kg, image_url, price,
+                loyalty_points_per_unit, is_active, created_at
          FROM products ORDER BY id DESC`
       );
       res.json({ products: rows });
@@ -899,8 +915,8 @@ router.post(
     try {
       const body = productSchema.parse(req.body);
       const { rows } = await query(
-        `INSERT INTO products (name, designation, unit_label, carton_spec, dimensions_cm, carton_weight_kg, image_url, price)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+        `INSERT INTO products (name, designation, unit_label, carton_spec, dimensions_cm, carton_weight_kg, image_url, price, loyalty_points_per_unit)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
          RETURNING *`,
         [
           body.name,
@@ -911,6 +927,7 @@ router.post(
           body.cartonWeightKg ?? null,
           body.imageUrl || null,
           body.price,
+          body.loyaltyPointsPerUnit ?? 0,
         ]
       );
       res.status(201).json({ product: rows[0] });
@@ -929,6 +946,7 @@ const productPatchSchema = z.object({
   cartonWeightKg: z.number().nullable().optional(),
   imageUrl: optionalStoredImagePathNullableSchema,
   price: z.number().nonnegative().optional(),
+  loyaltyPointsPerUnit: z.number().int().min(0).optional(),
   isActive: z.boolean().optional(),
 });
 
@@ -949,6 +967,9 @@ router.patch(
       if (body.cartonWeightKg !== undefined) map.push(["carton_weight_kg", body.cartonWeightKg]);
       if (body.imageUrl !== undefined) map.push(["image_url", body.imageUrl === "" ? null : body.imageUrl]);
       if (body.price !== undefined) map.push(["price", body.price]);
+      if (body.loyaltyPointsPerUnit !== undefined) {
+        map.push(["loyalty_points_per_unit", body.loyaltyPointsPerUnit]);
+      }
       if (body.isActive !== undefined) map.push(["is_active", body.isActive]);
       if (map.length === 0) throw new HttpError(400, "No fields to update");
       const sets = map.map(([col], idx) => `${col} = $${idx + 1}`).join(", ");

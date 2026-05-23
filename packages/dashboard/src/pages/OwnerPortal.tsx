@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { mediaUrl } from "../lib/mediaUrl";
@@ -17,6 +17,11 @@ type OwnerSummary = {
     phone: string;
     imageUrl: string | null;
     deferredPaymentEnabled: boolean;
+    loyaltyPointsBalance: number;
+  };
+  loyalty: {
+    balance: number;
+    monthPointsEarned: number;
   };
   totals: {
     deferredPurchases: number;
@@ -51,7 +56,13 @@ type OwnerSummary = {
     rep_phone: string;
   }[];
   topProducts: { productId: number; name: string; imageUrl: string | null; quantity: number; total: number }[];
-  monthly: { month: string; total: number; count: number }[];
+  loyaltyRecent: {
+    orderId: string;
+    createdAt: string;
+    productName: string;
+    quantity: number;
+    points: number;
+  }[];
 };
 
 type CatalogProduct = {
@@ -61,17 +72,8 @@ type CatalogProduct = {
   unit_label: string | null;
   image_url: string | null;
   price: string;
+  loyalty_points_per_unit: number;
 };
-
-function formatMonthLabel(isoMonth: string) {
-  const d = new Date(isoMonth.includes("T") ? isoMonth : `${isoMonth}T12:00:00`);
-  return new Intl.DateTimeFormat("ar-JO", {
-    month: "short",
-    year: "2-digit",
-    calendar: "gregory",
-    numberingSystem: "latn",
-  }).format(d);
-}
 
 export default function OwnerPortal() {
   const [params] = useSearchParams();
@@ -127,11 +129,6 @@ export default function OwnerPortal() {
     };
   }, [tab, token, products.length]);
 
-  const chartMax = useMemo(() => {
-    if (!data?.monthly.length) return 1;
-    return Math.max(...data.monthly.map((m) => m.total), 1);
-  }, [data?.monthly]);
-
   const storeImage = data?.store.imageUrl ? mediaUrl(data.store.imageUrl) : undefined;
 
   if (loading) {
@@ -158,8 +155,7 @@ export default function OwnerPortal() {
     <div className="owner-shell">
       <header className="owner-header">
         <div className="owner-brand">
-          <img src="/assets/burqanlogo.png" alt="Burqan" />
-          <p className="owner-brand-title">{t.owner.portalBrand}</p>
+          <img src="/assets/burqanlogo.png" alt="برقان" />
         </div>
       </header>
 
@@ -214,6 +210,21 @@ export default function OwnerPortal() {
               </div>
             </div>
 
+            <div className="owner-stats owner-stats--loyalty" style={{ marginTop: 12 }}>
+              <div className="owner-stat owner-stat--wide">
+                <div className="owner-stat-label">{t.owner.loyaltyBalance}</div>
+                <div className="owner-stat-value owner-stat-value--loyalty">
+                  {t.owner.loyaltyPoints(data.loyalty.balance)}
+                </div>
+              </div>
+              <div className="owner-stat">
+                <div className="owner-stat-label">{t.owner.loyaltyMonthEarned}</div>
+                <div className="owner-stat-value owner-stat-value--accent">
+                  {t.owner.loyaltyPoints(data.loyalty.monthPointsEarned)}
+                </div>
+              </div>
+            </div>
+
             <div className="owner-stats" style={{ marginTop: 12 }}>
               <div className="owner-stat">
                 <div className="owner-stat-label">{t.owner.deferredPurchases}</div>
@@ -235,23 +246,22 @@ export default function OwnerPortal() {
               </div>
             </div>
 
-            {data.monthly.length > 0 && (
+            {data.loyaltyRecent.length > 0 && (
               <section className="owner-section">
-                <h2 className="owner-section-title">{t.owner.chartTitle}</h2>
-                <div className="owner-chart">
-                  {data.monthly.map((m) => (
-                    <div key={m.month} className="owner-chart-col">
-                      <div className="owner-chart-bar-wrap">
-                        <div
-                          className="owner-chart-bar"
-                          style={{ height: `${Math.max(4, (m.total / chartMax) * 100)}%` }}
-                          title={ownerFormatMoney(m.total, t.owner.currency)}
-                        />
+                <h2 className="owner-section-title">{t.owner.loyaltyRecentTitle}</h2>
+                <ul className="owner-loyalty-list">
+                  {data.loyaltyRecent.map((row, i) => (
+                    <li key={`${row.orderId}-${i}`} className="owner-loyalty-item">
+                      <div className="owner-loyalty-main">
+                        <span className="owner-loyalty-product">{row.productName}</span>
+                        <span className="owner-loyalty-meta">
+                          {t.owner.lineQty(row.quantity)} · {formatMarketDateTime(row.createdAt, "ar")}
+                        </span>
                       </div>
-                      <span className="owner-chart-label">{formatMonthLabel(m.month)}</span>
-                    </div>
+                      <span className="owner-loyalty-points">{t.owner.loyaltyLinePoints(row.points)}</span>
+                    </li>
                   ))}
-                </div>
+                </ul>
               </section>
             )}
 
@@ -366,6 +376,9 @@ export default function OwnerPortal() {
                       <div className="owner-product-body">
                         <h3 className="owner-product-name">{p.name}</h3>
                         <p className="owner-product-price">{ownerFormatMoney(parseFloat(p.price), t.owner.currency)}</p>
+                        {p.loyalty_points_per_unit > 0 ? (
+                          <p className="owner-product-loyalty">{t.owner.loyaltyPerUnit(p.loyalty_points_per_unit)}</p>
+                        ) : null}
                         {p.designation ? <p className="owner-product-desc">{p.designation}</p> : null}
                         {p.unit_label ? <p className="owner-product-desc">{p.unit_label}</p> : null}
                       </div>

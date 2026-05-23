@@ -571,10 +571,17 @@ router.post("/orders", repAuthMiddleware, async (req, res, next) => {
     try {
       await c.query("BEGIN");
       let total = 0;
-      const priced: { productId: number; quantity: number; unitPrice: number; lineTotal: number }[] = [];
+      const priced: {
+        productId: number;
+        quantity: number;
+        unitPrice: number;
+        lineTotal: number;
+        loyaltyPoints: number;
+      }[] = [];
+      let orderLoyaltyTotal = 0;
       for (const line of body.lines) {
-        const pr = await c.query<{ price: string; is_active: boolean }>(
-          `SELECT price, is_active FROM products WHERE id = $1`,
+        const pr = await c.query<{ price: string; is_active: boolean; loyalty_points_per_unit: number }>(
+          `SELECT price, is_active, loyalty_points_per_unit FROM products WHERE id = $1`,
           [line.productId]
         );
         const p = pr.rows[0];
@@ -591,12 +598,15 @@ router.post("/orders", repAuthMiddleware, async (req, res, next) => {
         }
         const unit = parseFloat(p.price);
         const lineTotal = unit * line.quantity;
+        const loyaltyPoints = Math.max(0, Number(p.loyalty_points_per_unit) || 0) * line.quantity;
         total += lineTotal;
+        orderLoyaltyTotal += loyaltyPoints;
         priced.push({
           productId: line.productId,
           quantity: line.quantity,
           unitPrice: unit,
           lineTotal,
+          loyaltyPoints,
         });
       }
       const ord = await c.query<{ id: string }>(
@@ -607,9 +617,9 @@ router.post("/orders", repAuthMiddleware, async (req, res, next) => {
       const orderId = ord.rows[0]!.id;
       for (const l of priced) {
         await c.query(
-          `INSERT INTO order_lines (order_id, product_id, quantity, unit_price, line_total)
-           VALUES ($1,$2,$3,$4,$5)`,
-          [orderId, l.productId, l.quantity, l.unitPrice, l.lineTotal.toFixed(2)]
+          `INSERT INTO order_lines (order_id, product_id, quantity, unit_price, line_total, loyalty_points_earned)
+           VALUES ($1,$2,$3,$4,$5,$6)`,
+          [orderId, l.productId, l.quantity, l.unitPrice, l.lineTotal.toFixed(2), l.loyaltyPoints]
         );
         await c.query(
           `UPDATE representative_inventory
@@ -618,8 +628,15 @@ router.post("/orders", repAuthMiddleware, async (req, res, next) => {
           [l.quantity, rep.id, l.productId]
         );
       }
+      if (orderLoyaltyTotal > 0) {
+        await c.query(
+          `UPDATE stores SET loyalty_points_balance = loyalty_points_balance + $1, updated_at = now()
+           WHERE id = $2`,
+          [orderLoyaltyTotal, body.storeId]
+        );
+      }
       await c.query("COMMIT");
-      res.status(201).json({ orderId, totalAmount: total });
+      res.status(201).json({ orderId, totalAmount: total, loyaltyPointsEarned: orderLoyaltyTotal });
     } catch (e) {
       await c.query("ROLLBACK");
       throw e;

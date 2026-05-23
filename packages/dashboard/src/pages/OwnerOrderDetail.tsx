@@ -24,7 +24,9 @@ type OrderDetail = {
     quantity: number;
     unitPrice: number;
     lineTotal: number;
+    loyaltyPointsEarned: number;
   }[];
+  loyaltyPointsEarned?: number;
 };
 
 function formatMoney(n: number, currency: string) {
@@ -155,7 +157,12 @@ export default function OwnerOrderDetail() {
                       {o.lineQty(line.quantity)} × {formatMoney(line.unitPrice, o.currency)}
                     </p>
                   </div>
-                  <p className="owner-line-total">{formatMoney(line.lineTotal, o.currency)}</p>
+                  <div className="owner-line-end">
+                    <p className="owner-line-total">{formatMoney(line.lineTotal, o.currency)}</p>
+                    {line.loyaltyPointsEarned > 0 ? (
+                      <p className="owner-line-loyalty">{o.loyaltyLinePoints(line.loyaltyPointsEarned)}</p>
+                    ) : null}
+                  </div>
                 </li>
               );
             })}
@@ -164,6 +171,12 @@ export default function OwnerOrderDetail() {
             <span>{o.orderTotal}</span>
             <strong>{formatMoney(order.totalAmount, o.currency)}</strong>
           </div>
+          {(order.loyaltyPointsEarned ?? 0) > 0 ? (
+            <div className="owner-detail-sum owner-detail-sum--loyalty">
+              <span>{o.orderLoyaltyTotal}</span>
+              <strong>{o.loyaltyLinePoints(order.loyaltyPointsEarned ?? 0)}</strong>
+            </div>
+          ) : null}
         </section>
       </main>
     </div>

@@ -17,8 +17,9 @@ async function storeByOwnerToken(token: string) {
     phone: string;
     image_url: string | null;
     deferred_payment_enabled: boolean;
+    loyalty_points_balance: number;
   }>(
-    `SELECT id, name, owner_name, phone, image_url, deferred_payment_enabled
+    `SELECT id, name, owner_name, phone, image_url, deferred_payment_enabled, loyalty_points_balance
      FROM stores WHERE owner_portal_token = $1`,
     [token]
   );
@@ -60,7 +61,8 @@ router.get("/owner/summary", async (req, res, next) => {
       { rows: orders },
       { rows: visits },
       { rows: topProducts },
-      { rows: monthly },
+      { rows: monthLoyalty },
+      { rows: loyaltyRecent },
     ] = await Promise.all([
       query<{ deferred_total: string; cash_total: string }>(
         `SELECT
@@ -147,14 +149,29 @@ router.get("/owner/summary", async (req, res, next) => {
          LIMIT 8`,
         [store.id]
       ),
-      query<{ month: string; total: string; count: string }>(
-        `SELECT date_trunc('month', created_at AT TIME ZONE 'Asia/Amman')::date::text AS month,
-                COALESCE(SUM(total_amount), 0)::text AS total,
-                COUNT(*)::text AS count
-         FROM orders
-         WHERE store_id = $1 AND created_at >= (now() - interval '6 months')
-         GROUP BY 1
-         ORDER BY 1 ASC`,
+      query<{ month_points: string }>(
+        `SELECT COALESCE(SUM(ol.loyalty_points_earned), 0)::text AS month_points
+         FROM order_lines ol
+         JOIN orders o ON o.id = ol.order_id
+         WHERE o.store_id = $1
+           AND o.created_at >= date_trunc('month', timezone('Asia/Amman', now()))`,
+        [store.id]
+      ),
+      query<{
+        order_id: string;
+        created_at: string;
+        product_name: string;
+        quantity: number;
+        points: number;
+      }>(
+        `SELECT o.id::text AS order_id, o.created_at, p.name AS product_name,
+                ol.quantity, ol.loyalty_points_earned AS points
+         FROM order_lines ol
+         JOIN orders o ON o.id = ol.order_id
+         JOIN products p ON p.id = ol.product_id
+         WHERE o.store_id = $1 AND ol.loyalty_points_earned > 0
+         ORDER BY o.id DESC, ol.id DESC
+         LIMIT 20`,
         [store.id]
       ),
     ]);
@@ -171,6 +188,11 @@ router.get("/owner/summary", async (req, res, next) => {
         phone: store.phone,
         imageUrl: store.image_url,
         deferredPaymentEnabled: store.deferred_payment_enabled,
+        loyaltyPointsBalance: store.loyalty_points_balance,
+      },
+      loyalty: {
+        balance: store.loyalty_points_balance,
+        monthPointsEarned: parseInt(monthLoyalty[0]?.month_points ?? "0", 10),
       },
       totals: {
         deferredPurchases: deferredTotal,
@@ -211,10 +233,12 @@ router.get("/owner/summary", async (req, res, next) => {
         quantity: parseInt(r.qty, 10),
         total: parseFloat(r.total),
       })),
-      monthly: monthly.map((r) => ({
-        month: r.month,
-        total: parseFloat(r.total),
-        count: parseInt(r.count, 10),
+      loyaltyRecent: loyaltyRecent.map((r) => ({
+        orderId: r.order_id,
+        createdAt: r.created_at,
+        productName: r.product_name,
+        quantity: r.quantity,
+        points: r.points,
       })),
     });
   } catch (e) {
@@ -259,9 +283,11 @@ router.get("/owner/orders/:orderId", async (req, res, next) => {
       quantity: number;
       unit_price: string;
       line_total: string;
+      loyalty_points_earned: number;
     }>(
       `SELECT ol.product_id, p.name AS product_name, p.designation, p.unit_label, p.image_url,
-              ol.quantity, ol.unit_price::text AS unit_price, ol.line_total::text AS line_total
+              ol.quantity, ol.unit_price::text AS unit_price, ol.line_total::text AS line_total,
+              ol.loyalty_points_earned
        FROM order_lines ol
        JOIN products p ON p.id = ol.product_id
        WHERE ol.order_id = $1
@@ -286,7 +312,9 @@ router.get("/owner/orders/:orderId", async (req, res, next) => {
           quantity: l.quantity,
           unitPrice: parseFloat(l.unit_price),
           lineTotal: parseFloat(l.line_total),
+          loyaltyPointsEarned: l.loyalty_points_earned,
         })),
+        loyaltyPointsEarned: lines.reduce((s, l) => s + l.loyalty_points_earned, 0),
       },
     });
   } catch (e) {
@@ -309,7 +337,7 @@ router.get("/owner/products", async (req, res, next) => {
       image_url: string | null;
       price: string;
     }>(
-      `SELECT id, name, designation, unit_label, image_url, price::text AS price
+      `SELECT id, name, designation, unit_label, image_url, price::text AS price, loyalty_points_per_unit
        FROM products
        WHERE is_active = true
        ORDER BY name ASC`
