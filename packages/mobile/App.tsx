@@ -5,7 +5,6 @@ import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Image,
   KeyboardAvoidingView,
   Linking,
@@ -149,6 +148,9 @@ const t = {
   visitEndStay: "متابعة الزيارة",
   visitEndGoCart: "الذهاب إلى السلة",
   visitEndConfirm: "إنهاء الزيارة",
+  visitEndNoteLabel: "ملاحظة الزيارة (اختياري)",
+  visitEndNotePlaceholder: "اكتب ملاحظة عن الزيارة…",
+  visitEndNoteFailed: "تعذّر حفظ ملاحظة الزيارة",
 } as const;
 
 function formatPaymentType(type: string): string {
@@ -178,6 +180,7 @@ function mapProductRow(r: {
 }
 
 type Area = { id: number; name: string };
+import EndVisitModal from "./EndVisitModal";
 import StorePeekModal from "./StorePeekModal";
 import type { DailyStoreCard, StoreBrief } from "./storeTypes";
 export type { StoreBrief } from "./storeTypes";
@@ -276,6 +279,8 @@ export default function App() {
   const [dailyStores, setDailyStores] = useState<DailyStoreCard[]>([]);
   const [dailyStoresLoading, setDailyStoresLoading] = useState(false);
   const [peekStore, setPeekStore] = useState<DailyStoreCard | null>(null);
+  const [endVisitOpen, setEndVisitOpen] = useState(false);
+  const [endVisitBusy, setEndVisitBusy] = useState(false);
   const [storeRefreshing, setStoreRefreshing] = useState(false);
   const [bottomTab, setBottomTab] = useState<BottomTab>("home");
   const [inventory, setInventory] = useState<Product[]>([]);
@@ -301,6 +306,20 @@ export default function App() {
     async (path: string, body: unknown) => {
       const res = await fetch(`${API_BASE}${path}`, {
         method: "POST",
+        headers,
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? res.statusText);
+      return data;
+    },
+    [headers]
+  );
+
+  const apiPatch = useCallback(
+    async (path: string, body: unknown) => {
+      const res = await fetch(`${API_BASE}${path}`, {
+        method: "PATCH",
         headers,
         body: JSON.stringify(body),
       });
@@ -647,31 +666,26 @@ export default function App() {
     setActiveStore(null);
     setCart({});
     setMode("home");
+    setEndVisitOpen(false);
     void loadDailyStores();
   }, [loadDailyStores]);
 
-  const promptEndVisit = useCallback(
-    (onEnd: () => void) => {
-      const message = cartItemCount > 0 ? t.visitEndMessageCart(cartItemCount) : t.visitEndMessage;
-      const buttons: {
-        text: string;
-        style?: "default" | "cancel" | "destructive";
-        onPress?: () => void;
-      }[] = [{ text: t.visitEndStay, style: "cancel" }];
-      if (cartItemCount > 0) {
-        buttons.push({
-          text: t.visitEndGoCart,
-          onPress: () => {
-            setBottomTab("home");
-            setMode("store");
-            setStoreTab("sell");
-          },
-        });
+  const confirmEndVisit = useCallback(
+    async (note: string) => {
+      if (!activeStore) return;
+      setEndVisitBusy(true);
+      try {
+        if (note) {
+          await apiPatch(`/api/v1/rep/stores/${activeStore.id}/today-visit-note`, { note });
+        }
+        endStoreSession();
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : t.visitEndNoteFailed, "error");
+      } finally {
+        setEndVisitBusy(false);
       }
-      buttons.push({ text: t.visitEndConfirm, style: "destructive", onPress: onEnd });
-      Alert.alert(t.visitEndTitle, message, buttons, { cancelable: true });
     },
-    [cartItemCount]
+    [activeStore, apiPatch, endStoreSession, showToast]
   );
 
   const cartLines = useMemo(() => {
@@ -866,7 +880,7 @@ export default function App() {
         <View style={styles.card}>
           <View style={styles.rowBetween}>
             <Text style={styles.cardTitle}>{activeStore.name}</Text>
-            <Pressable onPress={() => promptEndVisit(endStoreSession)}>
+            <Pressable onPress={() => setEndVisitOpen(true)}>
               <Text style={styles.link}>{t.close}</Text>
             </Pressable>
           </View>
@@ -1243,6 +1257,29 @@ export default function App() {
         onClose={() => setSelectedProduct(null)}
         onMinus={() => selectedProduct && setQty(selectedProduct.id, -1)}
         onPlus={() => selectedProduct && setQty(selectedProduct.id, 1)}
+      />
+      <EndVisitModal
+        visible={endVisitOpen}
+        cartItemCount={cartItemCount}
+        busy={endVisitBusy}
+        labels={{
+          title: t.visitEndTitle,
+          message: t.visitEndMessage,
+          messageCart: t.visitEndMessageCart,
+          noteLabel: t.visitEndNoteLabel,
+          notePlaceholder: t.visitEndNotePlaceholder,
+          stay: t.visitEndStay,
+          goCart: t.visitEndGoCart,
+          confirm: t.visitEndConfirm,
+        }}
+        onStay={() => setEndVisitOpen(false)}
+        onGoCart={() => {
+          setEndVisitOpen(false);
+          setBottomTab("home");
+          setMode("store");
+          setStoreTab("sell");
+        }}
+        onConfirm={(note) => void confirmEndVisit(note)}
       />
       <StorePeekModal
         visible={peekStore != null}

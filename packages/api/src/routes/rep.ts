@@ -426,6 +426,38 @@ router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
   }
 });
 
+const visitNoteSchema = z.object({
+  note: z.string().max(2000).optional().nullable(),
+});
+
+/** Attach note to today's latest visit for this rep at the store (from QR scan). */
+router.patch("/stores/:id/today-visit-note", repAuthMiddleware, async (req, res, next) => {
+  try {
+    const storeId = z.coerce.number().int().positive().parse(req.params.id);
+    const body = visitNoteSchema.parse(req.body);
+    const rep = req.rep!;
+    await loadStoreForRep(storeId, rep);
+    const note = body.note?.trim() ? body.note.trim() : null;
+    const { rows } = await query<{ id: string; visited_at: string; note: string | null }>(
+      `UPDATE visits SET note = $1
+       WHERE id = (
+         SELECT id FROM visits
+         WHERE representative_id = $2 AND store_id = $3
+           AND (visited_at AT TIME ZONE 'Asia/Amman')::date =
+               (NOW() AT TIME ZONE 'Asia/Amman')::date
+         ORDER BY visited_at DESC
+         LIMIT 1
+       )
+       RETURNING id, visited_at, note`,
+      [note, rep.id, storeId]
+    );
+    if (!rows[0]) throw new HttpError(404, "لا توجد زيارة مسجّلة اليوم لهذا المتجر");
+    res.json({ visit: rows[0] });
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.get("/stores/:id/visits", repAuthMiddleware, async (req, res, next) => {
   try {
     const id = z.coerce.number().int().positive().parse(req.params.id);
