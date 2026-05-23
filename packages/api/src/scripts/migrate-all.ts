@@ -10,7 +10,11 @@ import { query, pool } from "../db/pool.js";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const sqlDir = join(__dirname, "../../sql");
 
-const FILES = ["002_geo_inventory.sql", "003_admin_password_reset.sql"] as const;
+const FILES = [
+  "002_geo_inventory.sql",
+  "003_admin_password_reset.sql",
+  "004_area_governorate.sql",
+] as const;
 
 async function main() {
   for (const file of FILES) {

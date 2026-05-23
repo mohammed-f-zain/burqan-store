@@ -27,9 +27,9 @@ type JordanArea = {
 
 const labels = {
   title: "تسجيل متجر جديد",
-  areaAuto: "المحافظة (تلقائي من موقعك)",
-  areaDetecting: "جاري تحديد المحافظة…",
-  areaNotAssigned: "هذه المحافظة غير مخصصة لك",
+  areaAuto: "المنطقة (تلقائي من موقعك)",
+  areaDetecting: "جاري تحديد المنطقة…",
+  areaNotAssigned: "هذه المنطقة غير مخصصة لك",
   refreshLocation: "تحديث الموقع",
   storeName: "اسم المتجر",
   storePhone: "هاتف المتجر",
@@ -98,6 +98,21 @@ export default function RegisterStoreForm(props: Props) {
   const [uploadBusy, setUploadBusy] = useState(false);
   const [imagePath, setImagePath] = useState<string | null>(null);
 
+  const mapAreas = useMemo(() => {
+    if (lat == null || lng == null) return jordanAreas;
+    const maxM = 18_000;
+    return jordanAreas.filter((a) => {
+      const R = 6371000;
+      const toRad = (d: number) => (d * Math.PI) / 180;
+      const dLat = toRad(a.centerLat - lat);
+      const dLng = toRad(a.centerLng - lng);
+      const x =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRad(lat)) * Math.cos(toRad(a.centerLat)) * Math.sin(dLng / 2) ** 2;
+      return 2 * R * Math.asin(Math.sqrt(x)) <= maxM;
+    });
+  }, [jordanAreas, lat, lng]);
+
   const mapRegion = useMemo((): Region => {
     if (lat != null && lng != null) {
       return {
@@ -130,7 +145,9 @@ export default function RegisterStoreForm(props: Props) {
       const data = await res.json();
       if (res.ok && data.areaId) {
         setAreaId(data.areaId);
-        setAreaName(data.areaName ?? "");
+        const gov = typeof data.governorate === "string" ? data.governorate : "";
+        const nm = data.areaName ?? "";
+        setAreaName(gov && nm ? `${nm} · ${gov}` : nm);
         setAreaAllowed(true);
       } else {
         setAreaAllowed(false);
@@ -261,7 +278,7 @@ export default function RegisterStoreForm(props: Props) {
           showsUserLocation
           showsMyLocationButton
         >
-          {jordanAreas.map((a) => (
+          {mapAreas.map((a) => (
             <Circle
               key={a.id}
               center={{ latitude: a.centerLat, longitude: a.centerLng }}

@@ -40,9 +40,16 @@ export function assertWithinScanDistance(
 type AreaGeo = {
   id: number;
   name: string;
+  governorate: string | null;
   center_lat: number | null;
   center_lng: number | null;
   radius_km: string | number;
+};
+
+export type ResolvedArea = {
+  areaId: number;
+  areaName: string;
+  governorate: string | null;
 };
 
 /** Pick best area among rep assignments for a GPS point (nearest center within radius, else nearest). */
@@ -50,11 +57,11 @@ export async function resolveAreaIdForRep(
   lat: number,
   lng: number,
   repAreaIds: number[]
-): Promise<{ areaId: number; areaName: string }> {
+): Promise<ResolvedArea> {
   if (!repAreaIds.length) throw new HttpError(403, "لا مناطق مخصصة لك");
 
   const { rows } = await query<AreaGeo>(
-    `SELECT id, name, center_lat, center_lng, radius_km FROM areas WHERE id = ANY($1::int[])`,
+    `SELECT id, name, governorate, center_lat, center_lng, radius_km FROM areas WHERE id = ANY($1::int[])`,
     [repAreaIds]
   );
   if (!rows.length) throw new HttpError(403, "لا مناطق مخصصة لك");
@@ -62,7 +69,11 @@ export async function resolveAreaIdForRep(
   const withCenter = rows.filter((a) => a.center_lat != null && a.center_lng != null);
   if (!withCenter.length) {
     const fallback = rows[0]!;
-    return { areaId: fallback.id, areaName: fallback.name };
+    return {
+      areaId: fallback.id,
+      areaName: fallback.name,
+      governorate: fallback.governorate,
+    };
   }
 
   const scored = withCenter.map((a) => {
@@ -73,26 +84,27 @@ export async function resolveAreaIdForRep(
 
   const inside = scored.filter((s) => s.inside).sort((a, b) => a.distM - b.distM);
   if (inside[0]) {
-    return { areaId: inside[0].area.id, areaName: inside[0].area.name };
+    const a = inside[0].area;
+    return { areaId: a.id, areaName: a.name, governorate: a.governorate };
   }
 
   scored.sort((a, b) => a.distM - b.distM);
-  const nearest = scored[0]!;
-  return { areaId: nearest.area.id, areaName: nearest.area.name };
+  const nearest = scored[0]!.area;
+  return { areaId: nearest.id, areaName: nearest.name, governorate: nearest.governorate };
 }
 
 /** Pick governorate from all Jordan areas in DB (store registration). */
 export async function resolveAreaIdFromAllAreas(
   lat: number,
   lng: number
-): Promise<{ areaId: number; areaName: string }> {
+): Promise<ResolvedArea> {
   const { rows } = await query<AreaGeo>(
-    `SELECT id, name, center_lat, center_lng, radius_km
+    `SELECT id, name, governorate, center_lat, center_lng, radius_km
      FROM areas
      WHERE center_lat IS NOT NULL AND center_lng IS NOT NULL
      ORDER BY id ASC`
   );
-  if (!rows.length) throw new HttpError(500, "لم تُعرَّف مناطق الأردن على الخادم");
+  if (!rows.length) throw new HttpError(500, "لم تُعرَّف المناطق التفصيلية على الخادم — شغّل seed:jordan-areas");
 
   const scored = rows.map((a) => {
     const distM = haversineMeters(lat, lng, a.center_lat!, a.center_lng!);
@@ -102,10 +114,11 @@ export async function resolveAreaIdFromAllAreas(
 
   const inside = scored.filter((s) => s.inside).sort((a, b) => a.distM - b.distM);
   if (inside[0]) {
-    return { areaId: inside[0].area.id, areaName: inside[0].area.name };
+    const a = inside[0].area;
+    return { areaId: a.id, areaName: a.name, governorate: a.governorate };
   }
 
   scored.sort((a, b) => a.distM - b.distM);
-  const nearest = scored[0]!;
-  return { areaId: nearest.area.id, areaName: nearest.area.name };
+  const nearest = scored[0]!.area;
+  return { areaId: nearest.id, areaName: nearest.name, governorate: nearest.governorate };
 }

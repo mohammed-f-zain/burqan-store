@@ -149,19 +149,21 @@ router.get("/areas/jordan", repAuthMiddleware, async (_req, res, next) => {
     const { rows } = await query<{
       id: number;
       name: string;
+      governorate: string | null;
       center_lat: number;
       center_lng: number;
       radius_km: string;
     }>(
-      `SELECT id, name, center_lat, center_lng, radius_km
+      `SELECT id, name, governorate, center_lat, center_lng, radius_km
        FROM areas
        WHERE center_lat IS NOT NULL AND center_lng IS NOT NULL
-       ORDER BY name ASC`
+       ORDER BY governorate NULLS LAST, name ASC`
     );
     res.json({
       areas: rows.map((r) => ({
         id: r.id,
         name: r.name,
+        governorate: r.governorate,
         centerLat: r.center_lat,
         centerLng: r.center_lng,
         radiusKm: parseFloat(r.radius_km),

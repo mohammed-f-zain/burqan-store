@@ -10,16 +10,17 @@ async function main() {
   const phSuper = await hashPassword(superPassword);
   const phRep = await hashPassword(repPassword);
 
-  const { JORDAN_GOVERNORATES } = await import("../data/jordanGovernorates.js");
-  for (const g of JORDAN_GOVERNORATES) {
+  const { JORDAN_DETAILED_AREAS } = await import("../data/jordanDetailedAreas.js");
+  for (const a of JORDAN_DETAILED_AREAS) {
     await query(
-      `INSERT INTO areas (name, center_lat, center_lng, radius_km)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO areas (name, center_lat, center_lng, radius_km, governorate)
+       VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (name) DO UPDATE SET
          center_lat = EXCLUDED.center_lat,
          center_lng = EXCLUDED.center_lng,
-         radius_km = EXCLUDED.radius_km`,
-      [g.name, g.centerLat, g.centerLng, g.radiusKm]
+         radius_km = EXCLUDED.radius_km,
+         governorate = EXCLUDED.governorate`,
+      [a.name, a.centerLat, a.centerLng, a.radiusKm, a.governorate]
     );
   }
 

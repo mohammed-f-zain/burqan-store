@@ -756,7 +756,7 @@ router.get(
   async (_req, res, next) => {
     try {
       const { rows } = await query(
-        `SELECT id, name, center_lat, center_lng, radius_km, created_at FROM areas ORDER BY id ASC`
+        `SELECT id, name, governorate, center_lat, center_lng, radius_km, created_at FROM areas ORDER BY governorate NULLS LAST, name ASC`
       );
       res.json({ areas: rows });
     } catch (e) {
@@ -767,6 +767,7 @@ router.get(
 
 const areaSchema = z.object({
   name: z.string().trim().min(2).max(255),
+  governorate: z.string().trim().min(2).max(64).optional().nullable(),
   centerLat: z.number().min(-90).max(90).optional().nullable(),
   centerLng: z.number().min(-180).max(180).optional().nullable(),
   radiusKm: z.number().positive().max(500).optional(),
@@ -780,10 +781,16 @@ router.post(
     try {
       const body = areaSchema.parse(req.body);
       const { rows } = await query(
-        `INSERT INTO areas (name, center_lat, center_lng, radius_km)
-         VALUES ($1, $2, $3, COALESCE($4, 25))
-         RETURNING id, name, center_lat, center_lng, radius_km, created_at`,
-        [body.name, body.centerLat ?? null, body.centerLng ?? null, body.radiusKm ?? null]
+        `INSERT INTO areas (name, governorate, center_lat, center_lng, radius_km)
+         VALUES ($1, $2, $3, $4, COALESCE($5, 2.5))
+         RETURNING id, name, governorate, center_lat, center_lng, radius_km, created_at`,
+        [
+          body.name,
+          body.governorate ?? null,
+          body.centerLat ?? null,
+          body.centerLng ?? null,
+          body.radiusKm ?? null,
+        ]
       );
       res.status(201).json({ area: rows[0] });
     } catch (e) {
@@ -806,12 +813,20 @@ router.patch(
       const { rows } = await query(
         `UPDATE areas SET
            name = $1,
-           center_lat = COALESCE($2, center_lat),
-           center_lng = COALESCE($3, center_lng),
-           radius_km = COALESCE($4, radius_km)
-         WHERE id = $5
-         RETURNING id, name, center_lat, center_lng, radius_km, created_at`,
-        [body.name, body.centerLat ?? null, body.centerLng ?? null, body.radiusKm ?? null, id]
+           governorate = COALESCE($2, governorate),
+           center_lat = COALESCE($3, center_lat),
+           center_lng = COALESCE($4, center_lng),
+           radius_km = COALESCE($5, radius_km)
+         WHERE id = $6
+         RETURNING id, name, governorate, center_lat, center_lng, radius_km, created_at`,
+        [
+          body.name,
+          body.governorate ?? null,
+          body.centerLat ?? null,
+          body.centerLng ?? null,
+          body.radiusKm ?? null,
+          id,
+        ]
       );
       if (!rows[0]) throw new HttpError(404, "المنطقة غير موجودة");
       res.json({ area: rows[0] });
