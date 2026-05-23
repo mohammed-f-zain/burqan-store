@@ -126,9 +126,11 @@ const t = {
   welcome: (name: string) => `مرحباً، ${name}`,
   homeSubtitle: "امسح رمز المتجر لبدء الزيارة والبيع",
   dailyStoresTitle: "متاجر مناطقي اليوم",
-  dailyStoresHint: "تختفي بعد الزيارة وتعود في اليوم التالي",
-  dailyStoresEmpty: "لا متاجر متبقية اليوم — أحسنت!",
-  dailyStoresCount: (n: number) => `${n} متجر`,
+  dailyStoresHint: "بعد الزيارة يظهر ✓ تمت زيارته — تبقى في القائمة حتى اليوم التالي",
+  dailyStoresEmpty: "لا متاجر في مناطقك",
+  dailyStoresAllVisited: "تمت زيارة كل المتاجر اليوم — أحسنت!",
+  dailyStoresCount: (visited: number, total: number) => `${visited} / ${total} تمت زيارته`,
+  dailyStoresVisited: "تمت زيارته",
   storeOwner: "صاحب المتجر",
   callStore: "اتصال بالمتجر",
   productsBadge: (n: number) => String(n),
@@ -149,7 +151,11 @@ const t = {
   visitEndGoCart: "الذهاب إلى السلة",
   visitEndConfirm: "إنهاء الزيارة",
   visitEndNoteLabel: "ملاحظة الزيارة (اختياري)",
+  visitEndNoBuyNoteLabel: "سبب عدم الشراء (مطلوب)",
   visitEndNotePlaceholder: "اكتب ملاحظة عن الزيارة…",
+  visitEndNoBuyNotePlaceholder: "لماذا لم يشتِ صاحب المتجر؟ (مثال: لا حاجة، مخزون كافٍ، سعر…)",
+  visitEndNoBuyNoteRequired: "يرجى توضيح سبب عدم الشراء قبل إنهاء الزيارة",
+  visitEndNoBuyMessage: "لم تُسجَّل أي مشتريات. اذكر سبب عدم الشراء قبل إغلاق الزيارة.",
   visitEndNoteFailed: "تعذّر حفظ ملاحظة الزيارة",
 } as const;
 
@@ -281,6 +287,7 @@ export default function App() {
   const [peekStore, setPeekStore] = useState<DailyStoreCard | null>(null);
   const [endVisitOpen, setEndVisitOpen] = useState(false);
   const [endVisitBusy, setEndVisitBusy] = useState(false);
+  const [visitHadOrder, setVisitHadOrder] = useState(false);
   const [storeRefreshing, setStoreRefreshing] = useState(false);
   const [bottomTab, setBottomTab] = useState<BottomTab>("home");
   const [inventory, setInventory] = useState<Product[]>([]);
@@ -499,6 +506,7 @@ export default function App() {
         setBottomTab("home");
       } else {
         setActiveStore(data.store as StoreBrief);
+        setVisitHadOrder(false);
         setMode("store");
         setBottomTab("home");
         setStoreTab("info");
@@ -628,6 +636,7 @@ export default function App() {
         repLng: pos.lng,
       });
       setCart({});
+      setVisitHadOrder(true);
       showToast(t.orderSaved, "success");
       await refreshStoreData(activeStore.id);
       setStoreTab("orders");
@@ -665,18 +674,26 @@ export default function App() {
   const endStoreSession = useCallback(() => {
     setActiveStore(null);
     setCart({});
+    setVisitHadOrder(false);
     setMode("home");
     setEndVisitOpen(false);
     void loadDailyStores();
   }, [loadDailyStores]);
 
+  const noPurchaseEndVisit = cartItemCount === 0 && !visitHadOrder;
+
   const confirmEndVisit = useCallback(
     async (note: string) => {
       if (!activeStore) return;
+      const trimmed = note.trim();
+      if (noPurchaseEndVisit && !trimmed) {
+        showToast(t.visitEndNoBuyNoteRequired, "error");
+        return;
+      }
       setEndVisitBusy(true);
       try {
-        if (note) {
-          await apiPatch(`/api/v1/rep/stores/${activeStore.id}/today-visit-note`, { note });
+        if (trimmed) {
+          await apiPatch(`/api/v1/rep/stores/${activeStore.id}/today-visit-note`, { note: trimmed });
         }
         endStoreSession();
       } catch (e) {
@@ -685,7 +702,7 @@ export default function App() {
         setEndVisitBusy(false);
       }
     },
-    [activeStore, apiPatch, endStoreSession, showToast]
+    [activeStore, apiPatch, endStoreSession, noPurchaseEndVisit, showToast]
   );
 
   const cartLines = useMemo(() => {
@@ -850,7 +867,12 @@ export default function App() {
             <View style={styles.rowBetween}>
               <Text style={styles.cardTitle}>{t.dailyStoresTitle}</Text>
               {!dailyStoresLoading && dailyStores.length > 0 ? (
-                <Text style={styles.dailyCount}>{t.dailyStoresCount(dailyStores.length)}</Text>
+                <Text style={styles.dailyCount}>
+                  {t.dailyStoresCount(
+                    dailyStores.filter((s) => s.visitedToday).length,
+                    dailyStores.length
+                  )}
+                </Text>
               ) : null}
             </View>
             <Text style={styles.muted}>{t.dailyStoresHint}</Text>
@@ -859,18 +881,39 @@ export default function App() {
             ) : dailyStores.length === 0 ? (
               <Text style={styles.emptyText}>{t.dailyStoresEmpty}</Text>
             ) : (
-              dailyStores.map((s) => (
-                <Pressable key={s.id} style={styles.dailyStoreCard} onPress={() => setPeekStore(s)}>
-                  <View style={styles.dailyStoreBody}>
-                    <Text style={styles.dailyStoreName}>{s.name}</Text>
-                    <Text style={styles.dailyStoreMeta}>
-                      {s.areaName ? `${s.areaName} · ` : ""}
-                      {s.ownerName}
-                    </Text>
-                  </View>
-                  <Text style={styles.resumeArrow}>‹</Text>
-                </Pressable>
-              ))
+              <>
+                {dailyStores.every((s) => s.visitedToday) ? (
+                  <Text style={styles.dailyAllDone}>{t.dailyStoresAllVisited}</Text>
+                ) : null}
+                {dailyStores.map((s) => (
+                  <Pressable
+                    key={s.id}
+                    style={[styles.dailyStoreCard, s.visitedToday && styles.dailyStoreCardVisited]}
+                    onPress={() => setPeekStore(s)}
+                  >
+                    <View style={styles.dailyStoreBody}>
+                      <Text style={styles.dailyStoreName}>{s.name}</Text>
+                      <Text style={styles.dailyStoreMeta}>
+                        {s.areaName ? `${s.areaName} · ` : ""}
+                        {s.ownerName}
+                      </Text>
+                      {s.visitedToday && s.visitNote ? (
+                        <Text style={styles.dailyStoreNote} numberOfLines={2}>
+                          {s.visitNote}
+                        </Text>
+                      ) : null}
+                    </View>
+                    {s.visitedToday ? (
+                      <View style={styles.dailyVisitedBadge}>
+                        <Text style={styles.dailyVisitedCheck}>✓</Text>
+                        <Text style={styles.dailyVisitedText}>{t.dailyStoresVisited}</Text>
+                      </View>
+                    ) : (
+                      <Text style={styles.resumeArrow}>‹</Text>
+                    )}
+                  </Pressable>
+                ))}
+              </>
             )}
           </View>
         </>
@@ -1261,13 +1304,14 @@ export default function App() {
       <EndVisitModal
         visible={endVisitOpen}
         cartItemCount={cartItemCount}
+        noteRequired={noPurchaseEndVisit}
         busy={endVisitBusy}
         labels={{
           title: t.visitEndTitle,
-          message: t.visitEndMessage,
+          message: noPurchaseEndVisit ? t.visitEndNoBuyMessage : t.visitEndMessage,
           messageCart: t.visitEndMessageCart,
-          noteLabel: t.visitEndNoteLabel,
-          notePlaceholder: t.visitEndNotePlaceholder,
+          noteLabel: noPurchaseEndVisit ? t.visitEndNoBuyNoteLabel : t.visitEndNoteLabel,
+          notePlaceholder: noPurchaseEndVisit ? t.visitEndNoBuyNotePlaceholder : t.visitEndNotePlaceholder,
           stay: t.visitEndStay,
           goCart: t.visitEndGoCart,
           confirm: t.visitEndConfirm,
@@ -1501,6 +1545,37 @@ const styles = StyleSheet.create({
   dailyStoreBody: { flex: 1, minWidth: 0 },
   dailyStoreName: { color: text, fontSize: 16, fontWeight: "800", textAlign: "right" },
   dailyStoreMeta: { color: muted, fontSize: 13, marginTop: 4, textAlign: "right" },
+  dailyStoreNote: { color: muted, fontSize: 12, marginTop: 6, textAlign: "right", fontStyle: "italic" },
+  dailyStoreCardVisited: {
+    backgroundColor: "#f0fdf4",
+    borderColor: "rgba(22, 163, 74, 0.35)",
+  },
+  dailyVisitedBadge: {
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 56,
+    gap: 2,
+  },
+  dailyVisitedCheck: {
+    color: "#16a34a",
+    fontSize: 18,
+    fontWeight: "800",
+    lineHeight: 20,
+  },
+  dailyVisitedText: {
+    color: "#16a34a",
+    fontSize: 10,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  dailyAllDone: {
+    color: "#16a34a",
+    fontSize: 14,
+    fontWeight: "700",
+    textAlign: "right",
+    marginTop: 12,
+    marginBottom: 4,
+  },
   metaChips: { flexDirection: "row-reverse", flexWrap: "wrap", gap: 8, marginTop: 8, marginBottom: 4 },
   metaChip: {
     paddingVertical: 6,

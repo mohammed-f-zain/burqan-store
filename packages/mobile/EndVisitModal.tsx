@@ -27,6 +27,7 @@ export type EndVisitLabels = {
 type Props = {
   visible: boolean;
   cartItemCount: number;
+  noteRequired?: boolean;
   busy?: boolean;
   labels: EndVisitLabels;
   onStay: () => void;
@@ -35,7 +36,7 @@ type Props = {
 };
 
 export default function EndVisitModal(props: Props) {
-  const { visible, cartItemCount, busy, labels } = props;
+  const { visible, cartItemCount, noteRequired, busy, labels } = props;
   const [note, setNote] = useState("");
 
   useEffect(() => {
@@ -43,6 +44,7 @@ export default function EndVisitModal(props: Props) {
   }, [visible]);
 
   const message = cartItemCount > 0 ? labels.messageCart(cartItemCount) : labels.message;
+  const canConfirm = !noteRequired || note.trim().length > 0;
 
   return (
     <Modal visible={visible} animationType="fade" transparent onRequestClose={props.onStay}>
@@ -56,7 +58,7 @@ export default function EndVisitModal(props: Props) {
             <Text style={styles.title}>{labels.title}</Text>
             <Text style={styles.message}>{message}</Text>
 
-            <Text style={styles.noteLabel}>{labels.noteLabel}</Text>
+            <Text style={[styles.noteLabel, noteRequired && styles.noteLabelRequired]}>{labels.noteLabel}</Text>
             <TextInput
               style={styles.noteInput}
               value={note}
@@ -79,9 +81,9 @@ export default function EndVisitModal(props: Props) {
                 </Pressable>
               ) : null}
               <Pressable
-                style={[styles.confirmBtn, busy && styles.btnDisabled]}
+                style={[styles.confirmBtn, (busy || !canConfirm) && styles.btnDisabled]}
                 onPress={() => props.onConfirm(note.trim())}
-                disabled={busy}
+                disabled={busy || !canConfirm}
               >
                 <Text style={styles.confirmBtnText}>{labels.confirm}</Text>
               </Pressable>
@@ -131,6 +133,10 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textAlign: "right",
     marginBottom: 8,
+  },
+  noteLabelRequired: {
+    color: theme.danger,
+    fontWeight: "700",
   },
   noteInput: {
     minHeight: 88,

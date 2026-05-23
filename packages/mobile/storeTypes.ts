@@ -7,6 +7,8 @@ export type DailyStoreCard = {
   addressText?: string | null;
   areaName?: string | null;
   deferredPaymentEnabled: boolean;
+  visitedToday?: boolean;
+  visitNote?: string | null;
 };
 
 export type StoreBrief = {

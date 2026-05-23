@@ -376,7 +376,7 @@ router.post("/stores/register", repAuthMiddleware, async (req, res, next) => {
   }
 });
 
-/** Stores in rep areas not yet visited today (Asia/Amman calendar day). */
+/** All stores in rep areas; includes visit status for today (Asia/Amman calendar day). */
 router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
   try {
     const rep = req.rep!;
@@ -393,20 +393,31 @@ router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
       address_text: string | null;
       deferred_payment_enabled: boolean;
       area_name: string;
+      visited_today: boolean;
+      visit_note: string | null;
     }>(
       `SELECT s.id, s.name, s.phone, s.owner_name, s.location_lat, s.location_lng,
-              s.address_text, s.deferred_payment_enabled, a.name AS area_name
+              s.address_text, s.deferred_payment_enabled, a.name AS area_name,
+              EXISTS (
+                SELECT 1 FROM visits v
+                WHERE v.store_id = s.id
+                  AND v.representative_id = $2
+                  AND (v.visited_at AT TIME ZONE 'Asia/Amman')::date =
+                      (NOW() AT TIME ZONE 'Asia/Amman')::date
+              ) AS visited_today,
+              (
+                SELECT v.note FROM visits v
+                WHERE v.store_id = s.id
+                  AND v.representative_id = $2
+                  AND (v.visited_at AT TIME ZONE 'Asia/Amman')::date =
+                      (NOW() AT TIME ZONE 'Asia/Amman')::date
+                ORDER BY v.visited_at DESC
+                LIMIT 1
+              ) AS visit_note
        FROM stores s
        JOIN areas a ON a.id = s.area_id
        WHERE s.area_id = ANY($1::int[])
-         AND NOT EXISTS (
-           SELECT 1 FROM visits v
-           WHERE v.store_id = s.id
-             AND v.representative_id = $2
-             AND (v.visited_at AT TIME ZONE 'Asia/Amman')::date =
-                 (NOW() AT TIME ZONE 'Asia/Amman')::date
-         )
-       ORDER BY a.name ASC, s.name ASC`,
+       ORDER BY visited_today ASC, a.name ASC, s.name ASC`,
       [rep.areaIds, rep.id]
     );
     res.json({
@@ -419,6 +430,8 @@ router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
         addressText: s.address_text,
         areaName: s.area_name,
         deferredPaymentEnabled: s.deferred_payment_enabled,
+        visitedToday: s.visited_today,
+        visitNote: s.visit_note,
       })),
     });
   } catch (e) {
