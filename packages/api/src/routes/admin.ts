@@ -160,6 +160,194 @@ router.get("/me", adminAuthMiddleware, async (req, res, next) => {
   }
 });
 
+/** Management dashboard KPIs, charts, and rankings (Jordan month boundaries). */
+router.get(
+  "/analytics/overview",
+  adminAuthMiddleware,
+  requireAdminPermission("orders.read"),
+  async (_req, res, next) => {
+    try {
+      const monthStart = `date_trunc('month', timezone('Asia/Amman', now()))`;
+      const weekStart = `timezone('Asia/Amman', now()) - interval '7 days'`;
+
+      const [
+        { rows: totals },
+        { rows: period },
+        { rows: topProducts },
+        { rows: topStores },
+        { rows: topReps },
+        { rows: monthly },
+        { rows: recentOrders },
+      ] = await Promise.all([
+        query<{
+          order_count: string;
+          visit_count: string;
+          revenue: string;
+          cash_revenue: string;
+          deferred_revenue: string;
+          payments_recorded: string;
+        }>(
+          `SELECT
+             (SELECT COUNT(*)::text FROM orders) AS order_count,
+             (SELECT COUNT(*)::text FROM visits) AS visit_count,
+             (SELECT COALESCE(SUM(total_amount), 0)::text FROM orders) AS revenue,
+             (SELECT COALESCE(SUM(CASE WHEN payment_type = 'cash' THEN total_amount ELSE 0 END), 0)::text FROM orders) AS cash_revenue,
+             (SELECT COALESCE(SUM(CASE WHEN payment_type = 'deferred' THEN total_amount ELSE 0 END), 0)::text FROM orders) AS deferred_revenue,
+             (SELECT COALESCE(SUM(amount), 0)::text FROM store_payments) AS payments_recorded`
+        ),
+        query<{
+          month_orders: string;
+          month_revenue: string;
+          month_visits: string;
+          week_orders: string;
+        }>(
+          `SELECT
+             (SELECT COUNT(*)::text FROM orders WHERE created_at >= ${monthStart}) AS month_orders,
+             (SELECT COALESCE(SUM(total_amount), 0)::text FROM orders WHERE created_at >= ${monthStart}) AS month_revenue,
+             (SELECT COUNT(*)::text FROM visits WHERE visited_at >= ${monthStart}) AS month_visits,
+             (SELECT COUNT(*)::text FROM orders WHERE created_at >= ${weekStart}) AS week_orders`
+        ),
+        query<{
+          product_id: number;
+          name: string;
+          image_url: string | null;
+          quantity: string;
+          revenue: string;
+        }>(
+          `SELECT p.id AS product_id, p.name, p.image_url,
+                  SUM(ol.quantity)::text AS quantity,
+                  SUM(ol.line_total)::text AS revenue
+           FROM order_lines ol
+           JOIN orders o ON o.id = ol.order_id
+           JOIN products p ON p.id = ol.product_id
+           GROUP BY p.id, p.name, p.image_url
+           ORDER BY SUM(ol.quantity) DESC
+           LIMIT 10`
+        ),
+        query<{
+          store_id: number;
+          name: string;
+          area_name: string;
+          order_count: string;
+          revenue: string;
+        }>(
+          `SELECT s.id AS store_id, s.name, a.name AS area_name,
+                  COUNT(o.id)::text AS order_count,
+                  COALESCE(SUM(o.total_amount), 0)::text AS revenue
+           FROM orders o
+           JOIN stores s ON s.id = o.store_id
+           JOIN areas a ON a.id = s.area_id
+           GROUP BY s.id, s.name, a.name
+           ORDER BY SUM(o.total_amount) DESC NULLS LAST
+           LIMIT 8`
+        ),
+        query<{
+          rep_id: number;
+          name: string;
+          image_url: string | null;
+          order_count: string;
+          revenue: string;
+        }>(
+          `SELECT r.id AS rep_id, r.full_name AS name, r.image_url,
+                  COUNT(o.id)::text AS order_count,
+                  COALESCE(SUM(o.total_amount), 0)::text AS revenue
+           FROM orders o
+           JOIN representatives r ON r.id = o.representative_id
+           GROUP BY r.id, r.full_name, r.image_url
+           ORDER BY SUM(o.total_amount) DESC NULLS LAST
+           LIMIT 6`
+        ),
+        query<{ month: string; revenue: string; order_count: string }>(
+          `SELECT date_trunc('month', created_at AT TIME ZONE 'Asia/Amman')::date::text AS month,
+                  COALESCE(SUM(total_amount), 0)::text AS revenue,
+                  COUNT(*)::text AS order_count
+           FROM orders
+           WHERE created_at >= (now() - interval '6 months')
+           GROUP BY 1
+           ORDER BY 1 ASC`
+        ),
+        query<{
+          id: string;
+          store_id: number;
+          store_name: string;
+          payment_type: string;
+          total_amount: string;
+          created_at: string;
+          rep_name: string;
+        }>(
+          `SELECT o.id::text, o.store_id, s.name AS store_name, o.payment_type,
+                  o.total_amount::text AS total_amount, o.created_at, r.full_name AS rep_name
+           FROM orders o
+           JOIN stores s ON s.id = o.store_id
+           JOIN representatives r ON r.id = o.representative_id
+           ORDER BY o.id DESC
+           LIMIT 8`
+        ),
+      ]);
+
+      const t = totals[0];
+      const p = period[0];
+      const deferredRevenue = parseFloat(t?.deferred_revenue ?? "0");
+      const paymentsRecorded = parseFloat(t?.payments_recorded ?? "0");
+
+      res.json({
+        totals: {
+          orderCount: parseInt(t?.order_count ?? "0", 10),
+          visitCount: parseInt(t?.visit_count ?? "0", 10),
+          revenue: parseFloat(t?.revenue ?? "0"),
+          cashRevenue: parseFloat(t?.cash_revenue ?? "0"),
+          deferredRevenue,
+          paymentsRecorded,
+          deferredOutstanding: Math.max(0, deferredRevenue - paymentsRecorded),
+        },
+        period: {
+          monthOrderCount: parseInt(p?.month_orders ?? "0", 10),
+          monthRevenue: parseFloat(p?.month_revenue ?? "0"),
+          monthVisitCount: parseInt(p?.month_visits ?? "0", 10),
+          weekOrderCount: parseInt(p?.week_orders ?? "0", 10),
+        },
+        topProducts: topProducts.map((row) => ({
+          productId: row.product_id,
+          name: row.name,
+          imageUrl: row.image_url,
+          quantity: parseInt(row.quantity, 10),
+          revenue: parseFloat(row.revenue),
+        })),
+        topStores: topStores.map((row) => ({
+          storeId: row.store_id,
+          name: row.name,
+          areaName: row.area_name,
+          orderCount: parseInt(row.order_count, 10),
+          revenue: parseFloat(row.revenue),
+        })),
+        topReps: topReps.map((row) => ({
+          repId: row.rep_id,
+          name: row.name,
+          imageUrl: row.image_url,
+          orderCount: parseInt(row.order_count, 10),
+          revenue: parseFloat(row.revenue),
+        })),
+        monthly: monthly.map((row) => ({
+          month: row.month,
+          revenue: parseFloat(row.revenue),
+          orderCount: parseInt(row.order_count, 10),
+        })),
+        recentOrders: recentOrders.map((row) => ({
+          id: row.id,
+          storeId: row.store_id,
+          storeName: row.store_name,
+          paymentType: row.payment_type,
+          totalAmount: parseFloat(row.total_amount),
+          createdAt: row.created_at,
+          repName: row.rep_name,
+        })),
+      });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
 const patchMeSchema = z
   .object({
     fullName: z.string().min(2).max(255).optional(),

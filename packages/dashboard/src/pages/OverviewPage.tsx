@@ -1,9 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import { useLocale } from "../i18n/LocaleContext";
+import { mediaUrl } from "../lib/mediaUrl";
 import { toastError } from "../lib/toast";
+import { ownerFormatMoney } from "../owner/ownerFormat";
+import { formatMarketDateTime } from "../utils/formatMarketDateTime";
 
 type Counts = {
   stores?: number;
@@ -14,10 +18,69 @@ type Counts = {
   qrUnassigned?: number;
 };
 
+type Analytics = {
+  totals: {
+    orderCount: number;
+    visitCount: number;
+    revenue: number;
+    cashRevenue: number;
+    deferredRevenue: number;
+    paymentsRecorded: number;
+    deferredOutstanding: number;
+  };
+  period: {
+    monthOrderCount: number;
+    monthRevenue: number;
+    monthVisitCount: number;
+    weekOrderCount: number;
+  };
+  topProducts: {
+    productId: number;
+    name: string;
+    imageUrl: string | null;
+    quantity: number;
+    revenue: number;
+  }[];
+  topStores: {
+    storeId: number;
+    name: string;
+    areaName: string;
+    orderCount: number;
+    revenue: number;
+  }[];
+  topReps: {
+    repId: number;
+    name: string;
+    imageUrl: string | null;
+    orderCount: number;
+    revenue: number;
+  }[];
+  monthly: { month: string; revenue: number; orderCount: number }[];
+  recentOrders: {
+    id: string;
+    storeId: number;
+    storeName: string;
+    paymentType: string;
+    totalAmount: number;
+    createdAt: string;
+    repName: string;
+  }[];
+};
+
+function formatMonthLabel(iso: string, locale: string) {
+  const d = new Date(`${iso}T12:00:00`);
+  return d.toLocaleDateString(locale === "ar" ? "ar-JO" : "en-GB", { month: "short", year: "2-digit" });
+}
+
 export default function OverviewPage() {
   const { me, can } = useAuth();
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const [counts, setCounts] = useState<Counts>({});
+  const [analytics, setAnalytics] = useState<Analytics | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+
+  const currency = t.overview.currency;
+  const money = (n: number) => ownerFormatMoney(n, currency);
 
   useEffect(() => {
     let cancelled = false;
@@ -71,6 +134,42 @@ export default function OverviewPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refetch when permissions change only
   }, [can]);
 
+  useEffect(() => {
+    if (!can("orders.read")) {
+      setAnalytics(null);
+      return;
+    }
+    let cancelled = false;
+    setAnalyticsLoading(true);
+    (async () => {
+      try {
+        const { data } = await api.get<Analytics>("/analytics/overview");
+        if (!cancelled) setAnalytics(data);
+      } catch {
+        if (!cancelled) {
+          setAnalytics(null);
+          toastError(t.overview.analyticsLoadErr);
+        }
+      } finally {
+        if (!cancelled) setAnalyticsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [can, t.overview.analyticsLoadErr]);
+
+  const chartMax = useMemo(() => {
+    if (!analytics?.monthly.length) return 1;
+    return Math.max(...analytics.monthly.map((m) => m.revenue), 1);
+  }, [analytics]);
+
+  const hasAnalyticsData =
+    analytics &&
+    (analytics.totals.orderCount > 0 ||
+      analytics.topProducts.length > 0 ||
+      analytics.monthly.length > 0);
+
   return (
     <div className="grid">
       <div className="card">
@@ -118,6 +217,190 @@ export default function OverviewPage() {
           )}
         </div>
       </div>
+
+      {can("orders.read") && (
+        <div className="card">
+          <h3 style={{ marginTop: 0 }}>{t.overview.analyticsTitle}</h3>
+          {analyticsLoading && <p className="muted">{t.common.loading}</p>}
+          {!analyticsLoading && analytics && (
+            <>
+              <div className="dash-kpi-grid">
+                <div className="dash-kpi dash-kpi--accent">
+                  <div className="dash-kpi-label">{t.overview.monthRevenue}</div>
+                  <div className="dash-kpi-value">{money(analytics.period.monthRevenue)}</div>
+                </div>
+                <div className="dash-kpi">
+                  <div className="dash-kpi-label">{t.overview.monthOrders}</div>
+                  <div className="dash-kpi-value">{analytics.period.monthOrderCount}</div>
+                </div>
+                <div className="dash-kpi">
+                  <div className="dash-kpi-label">{t.overview.weekOrders}</div>
+                  <div className="dash-kpi-value">{analytics.period.weekOrderCount}</div>
+                </div>
+                <div className="dash-kpi">
+                  <div className="dash-kpi-label">{t.overview.monthVisits}</div>
+                  <div className="dash-kpi-value">{analytics.period.monthVisitCount}</div>
+                </div>
+                <div className="dash-kpi">
+                  <div className="dash-kpi-label">{t.overview.totalRevenue}</div>
+                  <div className="dash-kpi-value dash-kpi-value--sm">{money(analytics.totals.revenue)}</div>
+                </div>
+                <div className="dash-kpi">
+                  <div className="dash-kpi-label">{t.overview.deferredOutstanding}</div>
+                  <div className="dash-kpi-value dash-kpi-value--sm dash-kpi-value--danger">
+                    {money(analytics.totals.deferredOutstanding)}
+                  </div>
+                </div>
+              </div>
+
+              <div className="dash-kpi-grid dash-kpi-grid--sub" style={{ marginTop: 12 }}>
+                <div className="dash-kpi dash-kpi--compact">
+                  <div className="dash-kpi-label">{t.overview.cashSales}</div>
+                  <div className="dash-kpi-value dash-kpi-value--sm">{money(analytics.totals.cashRevenue)}</div>
+                </div>
+                <div className="dash-kpi dash-kpi--compact">
+                  <div className="dash-kpi-label">{t.overview.deferredSales}</div>
+                  <div className="dash-kpi-value dash-kpi-value--sm">{money(analytics.totals.deferredRevenue)}</div>
+                </div>
+                <div className="dash-kpi dash-kpi--compact">
+                  <div className="dash-kpi-label">{t.overview.paymentsRecorded}</div>
+                  <div className="dash-kpi-value dash-kpi-value--sm">{money(analytics.totals.paymentsRecorded)}</div>
+                </div>
+                <div className="dash-kpi dash-kpi--compact">
+                  <div className="dash-kpi-label">{t.overview.totalVisits}</div>
+                  <div className="dash-kpi-value dash-kpi-value--sm">{analytics.totals.visitCount}</div>
+                </div>
+              </div>
+
+              {!hasAnalyticsData && <p className="muted">{t.overview.noAnalytics}</p>}
+
+              {analytics.monthly.length > 0 && (
+                <section className="dash-section">
+                  <h4 className="dash-section-title">{t.overview.chartTitle}</h4>
+                  <div className="dash-chart">
+                    {analytics.monthly.map((m) => (
+                      <div key={m.month} className="dash-chart-col">
+                        <div className="dash-chart-bar-wrap">
+                          <div
+                            className="dash-chart-bar"
+                            style={{ height: `${Math.max(6, (m.revenue / chartMax) * 100)}%` }}
+                            title={`${money(m.revenue)} · ${t.overview.ordersCount(m.orderCount)}`}
+                          />
+                        </div>
+                        <span className="dash-chart-label">{formatMonthLabel(m.month, locale)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              <div className="dash-two-col">
+                {analytics.topProducts.length > 0 && (
+                  <section className="dash-section">
+                    <h4 className="dash-section-title">{t.overview.topProducts}</h4>
+                    <ul className="dash-rank-list">
+                      {analytics.topProducts.map((p, i) => {
+                        const img = mediaUrl(p.imageUrl);
+                        return (
+                          <li key={p.productId} className="dash-rank-item">
+                            <span className="dash-rank-num">{i + 1}</span>
+                            {img ? (
+                              <img src={img} alt="" className="dash-rank-thumb" />
+                            ) : (
+                              <div className="dash-rank-thumb dash-rank-thumb--empty" />
+                            )}
+                            <div className="dash-rank-body">
+                              <div className="dash-rank-name">{p.name}</div>
+                              <div className="dash-rank-sub">
+                                {t.overview.qtyUnits(p.quantity)} · {money(p.revenue)}
+                              </div>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </section>
+                )}
+
+                {analytics.topStores.length > 0 && (
+                  <section className="dash-section">
+                    <h4 className="dash-section-title">{t.overview.topStores}</h4>
+                    <ul className="dash-rank-list">
+                      {analytics.topStores.map((s, i) => (
+                        <li key={s.storeId} className="dash-rank-item">
+                          <span className="dash-rank-num">{i + 1}</span>
+                          <div className="dash-rank-body">
+                            <Link to={`/app/stores/${s.storeId}`} className="dash-rank-name linkish">
+                              {s.name}
+                            </Link>
+                            <div className="dash-rank-sub">
+                              {s.areaName} · {t.overview.ordersCount(s.orderCount)} · {money(s.revenue)}
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+              </div>
+
+              {analytics.topReps.length > 0 && (
+                <section className="dash-section">
+                  <h4 className="dash-section-title">{t.overview.topReps}</h4>
+                  <ul className="dash-rank-list dash-rank-list--inline">
+                    {analytics.topReps.map((r, i) => {
+                      const img = mediaUrl(r.imageUrl);
+                      return (
+                        <li key={r.repId} className="dash-rank-item">
+                          <span className="dash-rank-num">{i + 1}</span>
+                          {img ? (
+                            <img src={img} alt="" className="dash-rank-thumb dash-rank-thumb--round" />
+                          ) : (
+                            <div className="dash-rank-thumb dash-rank-thumb--round dash-rank-thumb--empty" />
+                          )}
+                          <div className="dash-rank-body">
+                            <div className="dash-rank-name">{r.name}</div>
+                            <div className="dash-rank-sub">
+                              {t.overview.ordersCount(r.orderCount)} · {money(r.revenue)}
+                            </div>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </section>
+              )}
+
+              {analytics.recentOrders.length > 0 && (
+                <section className="dash-section">
+                  <h4 className="dash-section-title">{t.overview.recentOrders}</h4>
+                  <ul className="dash-recent-list">
+                    {analytics.recentOrders.map((o) => (
+                      <li key={o.id}>
+                        <Link to={`/app/orders/${o.id}`} className="dash-recent-row">
+                          <div>
+                            <span className="dash-recent-id">#{o.id}</span>
+                            <span className="dash-recent-store">{o.storeName}</span>
+                          </div>
+                          <div className="dash-recent-meta">
+                            <span
+                              className={`dash-pay-pill${o.paymentType === "cash" ? " dash-pay-pill--cash" : ""}`}
+                            >
+                              {o.paymentType === "cash" ? t.overview.payCash : t.overview.payDeferred}
+                            </span>
+                            <strong>{money(o.totalAmount)}</strong>
+                            <span className="muted small">{formatMarketDateTime(o.createdAt)}</span>
+                          </div>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
