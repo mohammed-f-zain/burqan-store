@@ -1,7 +1,8 @@
+import { Ionicons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
 import { StatusBar } from "expo-status-bar";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -1051,45 +1052,47 @@ export default function App() {
           </View>
         ) : null}
         <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 10) }]}>
-          <Pressable
-            style={[styles.bottomTab, bottomTab === "home" && styles.bottomTabOn]}
+          <BottomNavItem
+            active={bottomTab === "home"}
+            label={t.navHome}
+            icon="home-outline"
+            iconActive="home"
             onPress={() => {
               setBottomTab("home");
               if (mode === "store") setMode("home");
             }}
-          >
-            <Text style={[styles.bottomTabText, bottomTab === "home" && styles.bottomTabTextOn]}>{t.navHome}</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.bottomTab, bottomTab === "inventory" && styles.bottomTabOn]}
+          />
+          <BottomNavItem
+            active={bottomTab === "inventory"}
+            label={t.navInventory}
+            icon="car-outline"
+            iconActive="car"
             onPress={() => {
               setBottomTab("inventory");
               void loadInventory();
             }}
-          >
-            <Text style={[styles.bottomTabText, bottomTab === "inventory" && styles.bottomTabTextOn]}>
-              {t.navInventory}
-            </Text>
-          </Pressable>
-          <Pressable
-            style={[styles.bottomTab, bottomTab === "store" && styles.bottomTabOn]}
+          />
+          <BottomNavItem
+            active={bottomTab === "store"}
+            label={t.navStore}
+            icon="grid-outline"
+            iconActive="grid"
             onPress={() => {
               setBottomTab("store");
               void loadInventory();
             }}
-          >
-            <Text style={[styles.bottomTabText, bottomTab === "store" && styles.bottomTabTextOn]}>{t.navStore}</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.bottomTab, bottomTab === "profile" && styles.bottomTabOn]}
+          />
+          <BottomNavItem
+            active={bottomTab === "profile"}
+            label={t.navProfile}
+            icon="person-outline"
+            iconActive="person"
             onPress={() => {
               setBottomTab("profile");
               if (mode === "store") setMode("home");
               void loadProfile();
             }}
-          >
-            <Text style={[styles.bottomTabText, bottomTab === "profile" && styles.bottomTabTextOn]}>{t.navProfile}</Text>
-          </Pressable>
+          />
         </View>
       </KeyboardAvoidingView>
       {toast ? <ToastOverlay text={toast.text} kind={toast.kind} onDismiss={hideToast} /> : null}
@@ -1105,6 +1108,30 @@ export default function App() {
         onPlus={() => selectedProduct && setQty(selectedProduct.id, 1)}
       />
     </SafeAreaView>
+  );
+}
+
+function BottomNavItem(props: {
+  active: boolean;
+  label: string;
+  icon: ComponentProps<typeof Ionicons>["name"];
+  iconActive: ComponentProps<typeof Ionicons>["name"];
+  onPress: () => void;
+}) {
+  const color = props.active ? accent : muted;
+  return (
+    <Pressable
+      style={[styles.bottomTab, props.active && styles.bottomTabOn]}
+      onPress={props.onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected: props.active }}
+      accessibilityLabel={props.label}
+    >
+      <Ionicons name={props.active ? props.iconActive : props.icon} size={22} color={color} />
+      <Text style={[styles.bottomTabText, props.active && styles.bottomTabTextOn]} numberOfLines={1}>
+        {props.label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -1612,11 +1639,14 @@ const styles = StyleSheet.create({
   },
   bottomTab: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 2,
     borderRadius: theme.radius.lg,
     alignItems: "center",
+    justifyContent: "center",
+    gap: 3,
   },
   bottomTabOn: { backgroundColor: theme.accentSoft },
-  bottomTabText: { color: muted, fontWeight: "600", fontSize: 11 },
-  bottomTabTextOn: { color: accent, fontWeight: "800", fontSize: 11 },
+  bottomTabText: { color: muted, fontWeight: "600", fontSize: 10 },
+  bottomTabTextOn: { color: accent, fontWeight: "800", fontSize: 10 },
 });
