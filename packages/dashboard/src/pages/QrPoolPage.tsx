@@ -110,11 +110,12 @@ export default function QrPoolPage() {
         return;
       }
       const stamp = new Date().toISOString().slice(0, 10);
-      downloadQrPoolExcel(
+      await downloadQrPoolExcel(
         data.items,
         {
           id: t.qrPool.exportColId,
           token: t.qrPool.exportColToken,
+          qr: t.qrPool.exportColQr,
           scanUrl: t.qrPool.exportColScanUrl,
           created: t.qrPool.exportColCreated,
         },

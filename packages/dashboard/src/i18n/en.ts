@@ -445,6 +445,7 @@ export const en: Messages = {
     exportEmpty: "No unassigned codes to export.",
     exportColId: "ID",
     exportColToken: "Token",
+    exportColQr: "QR code",
     exportColScanUrl: "Scan URL",
     exportColCreated: "Created (UTC)",
     exportSheetName: "QR cards",

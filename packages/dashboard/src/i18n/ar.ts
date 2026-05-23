@@ -444,6 +444,7 @@ export const ar = {
     exportEmpty: "لا توجد رموز غير مربوطة للتصدير.",
     exportColId: "المعرّف",
     exportColToken: "الرمز",
+    exportColQr: "رمز QR",
     exportColScanUrl: "رابط المسح",
     exportColCreated: "تاريخ الإنشاء (UTC)",
     exportSheetName: "بطاقات QR",
