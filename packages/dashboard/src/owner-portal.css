@@ -198,6 +198,14 @@ html[dir="rtl"] .owner-shell {
   box-shadow: var(--shadow-card);
 }
 
+.owner-section--flush {
+  padding: 18px 14px;
+}
+
+.owner-section--flush .owner-section-title {
+  padding: 0 4px;
+}
+
 .owner-section-title {
   margin: 0 0 14px;
   font-size: 1rem;
@@ -405,30 +413,441 @@ html[dir="rtl"] .owner-shell {
   overflow: hidden;
 }
 
-.owner-visit {
-  padding: 12px 0;
-  border-bottom: 1px solid var(--line);
+/* —— Order cards —— */
+.owner-order-list,
+.owner-visit-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.owner-order-card {
+  width: 100%;
   text-align: right;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px;
+  background: var(--surface);
+  cursor: pointer;
+  font-family: inherit;
+  color: inherit;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.12s;
 }
 
-.owner-visit:last-child {
-  border-bottom: none;
+.owner-order-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 8px 24px rgba(13, 148, 136, 0.12);
 }
 
-.owner-visit-time {
+.owner-order-card:active {
+  transform: scale(0.99);
+}
+
+.owner-order-card-top {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.owner-order-card-id {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.owner-order-hash {
+  font-weight: 800;
+  font-size: 1.1rem;
+}
+
+.owner-pay-pill {
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.owner-pay-pill--cash {
+  background: rgba(13, 148, 136, 0.12);
+  color: var(--accent);
+}
+
+.owner-pay-pill--deferred {
+  background: rgba(2, 132, 199, 0.12);
+  color: var(--accent2);
+}
+
+.owner-order-amount {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.owner-order-date {
+  margin: 8px 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.owner-order-preview {
+  margin: 8px 0 0;
+  font-size: 0.88rem;
+  color: var(--text);
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.owner-order-meta {
+  margin-top: 10px;
+  font-size: 0.8rem;
+  color: var(--muted);
+  display: flex;
+  flex-direction: row-reverse;
+  gap: 6px;
+}
+
+.owner-order-rep {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: 10px;
+}
+
+.owner-order-rep-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 0;
+}
+
+.owner-order-rep-name {
   font-weight: 700;
   font-size: 0.9rem;
 }
 
-.owner-visit-rep {
-  font-size: 0.82rem;
+.owner-order-rep-phone {
+  font-size: 0.8rem;
   color: var(--muted);
   margin-top: 2px;
 }
 
-.owner-visit-note {
-  margin-top: 6px;
+.owner-order-cta {
+  display: block;
+  margin-top: 12px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.owner-rep-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  object-fit: cover;
+  background: var(--surface-deep);
+  border: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+.owner-rep-avatar--sm {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+}
+
+.owner-rep-avatar--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  color: var(--accent);
+  background: rgba(13, 148, 136, 0.1);
+}
+
+/* —— Visit cards —— */
+.owner-visit-card {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.owner-visit-card-inner {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px;
+}
+
+.owner-visit-body {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+}
+
+.owner-visit-head {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.owner-visit-rep-name {
+  margin: 0;
+  font-weight: 800;
+  font-size: 1rem;
+}
+
+.owner-visit-phone {
   font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.owner-visit-kicker {
+  margin: 8px 0 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.owner-visit-time {
+  margin: 4px 0 0;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.owner-visit-note {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.owner-visit-note--muted {
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* —— Order detail page —— */
+.owner-detail-top {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.owner-back {
+  color: var(--accent);
+  font-weight: 800;
+  text-decoration: none;
+  font-size: 0.95rem;
+}
+
+.owner-detail-id {
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.owner-main--detail {
+  padding-top: 0;
+}
+
+.owner-detail-hero {
+  padding: 20px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, var(--card-grad-a), var(--card-grad-b));
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-card);
+  margin-bottom: 14px;
+}
+
+.owner-detail-hero-row {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.owner-detail-kicker {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.owner-detail-date {
+  margin: 4px 0 0;
+  font-size: 0.9rem;
+}
+
+.owner-detail-total {
+  margin: 14px 0 0;
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.owner-detail-rep {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  margin-bottom: 14px;
+  border-radius: 16px;
+  background: var(--card);
+  border: 1px solid var(--line);
+}
+
+.owner-detail-rep-meta {
+  flex: 1;
+  text-align: right;
+}
+
+.owner-detail-rep-label {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.owner-detail-rep-name {
+  margin: 4px 0 0;
+  font-weight: 800;
+  font-size: 1.05rem;
+}
+
+.owner-detail-rep-phone {
+  display: inline-block;
+  margin-top: 6px;
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.owner-line-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.owner-line-item {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.owner-line-item:last-child {
+  border-bottom: none;
+}
+
+.owner-line-thumb {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  object-fit: contain;
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+.owner-line-thumb--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.owner-line-body {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+}
+
+.owner-line-name {
+  margin: 0;
+  font-weight: 800;
+  font-size: 0.95rem;
+}
+
+.owner-line-desc,
+.owner-line-unit,
+.owner-line-qty {
+  margin: 4px 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.owner-line-total {
+  margin: 0;
+  font-weight: 800;
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+
+.owner-detail-sum {
+  display: flex;
+  flex-direction: row-reverse;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 2px solid var(--line);
+  font-size: 1.05rem;
+}
+
+.owner-detail-sum strong {
+  font-size: 1.25rem;
+  color: var(--accent);
+}
+
+@media (min-width: 640px) {
+  .owner-order-list {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+  }
+
+  .owner-order-list > li {
+    height: 100%;
+  }
+
+  .owner-order-card {
+    height: 100%;
+  }
 }
 
 .owner-loading,

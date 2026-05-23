@@ -83,17 +83,55 @@ router.get("/owner/summary", async (req, res, next) => {
               AND created_at >= date_trunc('month', timezone('Asia/Amman', now()))) AS month_total`,
         [store.id]
       ),
-      query(
-        `SELECT id, payment_type, total_amount::text AS total_amount, created_at
-         FROM orders WHERE store_id = $1 ORDER BY id DESC LIMIT 50`,
+      query<{
+        id: string;
+        payment_type: string;
+        total_amount: string;
+        created_at: string;
+        rep_name: string;
+        rep_image_url: string | null;
+        rep_phone: string;
+        line_count: string;
+        item_qty: string;
+        products_preview: string | null;
+      }>(
+        `SELECT o.id::text, o.payment_type, o.total_amount::text AS total_amount, o.created_at,
+                r.full_name AS rep_name, r.image_url AS rep_image_url, r.phone AS rep_phone,
+                (SELECT COUNT(*)::text FROM order_lines ol WHERE ol.order_id = o.id) AS line_count,
+                (SELECT COALESCE(SUM(ol.quantity), 0)::text FROM order_lines ol WHERE ol.order_id = o.id) AS item_qty,
+                (
+                  SELECT STRING_AGG(sub.name, ' · ' ORDER BY sub.ord)
+                  FROM (
+                    SELECT p.name, ol.id AS ord
+                    FROM order_lines ol
+                    JOIN products p ON p.id = ol.product_id
+                    WHERE ol.order_id = o.id
+                    ORDER BY ol.id
+                    LIMIT 4
+                  ) sub
+                ) AS products_preview
+         FROM orders o
+         JOIN representatives r ON r.id = o.representative_id
+         WHERE o.store_id = $1
+         ORDER BY o.id DESC
+         LIMIT 50`,
         [store.id]
       ),
-      query<{ id: string; visited_at: string; note: string | null; rep_name: string }>(
-        `SELECT v.id::text, v.visited_at, v.note, r.full_name AS rep_name
+      query<{
+        id: string;
+        visited_at: string;
+        note: string | null;
+        rep_name: string;
+        rep_image_url: string | null;
+        rep_phone: string;
+      }>(
+        `SELECT v.id::text, v.visited_at, v.note,
+                r.full_name AS rep_name, r.image_url AS rep_image_url, r.phone AS rep_phone
          FROM visits v
          JOIN representatives r ON r.id = v.representative_id
          WHERE v.store_id = $1
-         ORDER BY v.id DESC LIMIT 30`,
+         ORDER BY v.id DESC
+         LIMIT 50`,
         [store.id]
       ),
       query<{ product_id: number; name: string; image_url: string | null; qty: string; total: string }>(
@@ -146,8 +184,26 @@ router.get("/owner/summary", async (req, res, next) => {
         monthOrderCount: parseInt(counts[0]?.month_orders ?? "0", 10),
         monthOrderTotal: parseFloat(counts[0]?.month_total ?? "0"),
       },
-      orders,
-      visits,
+      orders: orders.map((o) => ({
+        id: o.id,
+        payment_type: o.payment_type,
+        total_amount: o.total_amount,
+        created_at: o.created_at,
+        rep_name: o.rep_name,
+        rep_image_url: o.rep_image_url,
+        rep_phone: o.rep_phone,
+        line_count: parseInt(o.line_count, 10),
+        item_qty: parseInt(o.item_qty, 10),
+        products_preview: o.products_preview,
+      })),
+      visits: visits.map((v) => ({
+        id: v.id,
+        visited_at: v.visited_at,
+        note: v.note,
+        rep_name: v.rep_name,
+        rep_image_url: v.rep_image_url,
+        rep_phone: v.rep_phone,
+      })),
       topProducts: topProducts.map((r) => ({
         productId: r.product_id,
         name: r.name,
@@ -160,6 +216,78 @@ router.get("/owner/summary", async (req, res, next) => {
         total: parseFloat(r.total),
         count: parseInt(r.count, 10),
       })),
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get("/owner/orders/:orderId", async (req, res, next) => {
+  try {
+    const { t } = tokenQuery.parse(req.query);
+    const orderId = z.coerce.number().int().positive().parse(req.params.orderId);
+    const store = await storeByOwnerToken(t);
+    if (!store) {
+      return res.status(404).json({ error: "غير موجود" });
+    }
+    const { rows } = await query<{
+      id: string;
+      payment_type: string;
+      total_amount: string;
+      created_at: string;
+      rep_name: string;
+      rep_image_url: string | null;
+      rep_phone: string;
+    }>(
+      `SELECT o.id::text, o.payment_type, o.total_amount::text AS total_amount, o.created_at,
+              r.full_name AS rep_name, r.image_url AS rep_image_url, r.phone AS rep_phone
+       FROM orders o
+       JOIN representatives r ON r.id = o.representative_id
+       WHERE o.id = $1 AND o.store_id = $2`,
+      [orderId, store.id]
+    );
+    const order = rows[0];
+    if (!order) {
+      throw new HttpError(404, "الطلب غير موجود");
+    }
+    const { rows: lines } = await query<{
+      product_id: number;
+      product_name: string;
+      designation: string | null;
+      unit_label: string | null;
+      image_url: string | null;
+      quantity: number;
+      unit_price: string;
+      line_total: string;
+    }>(
+      `SELECT ol.product_id, p.name AS product_name, p.designation, p.unit_label, p.image_url,
+              ol.quantity, ol.unit_price::text AS unit_price, ol.line_total::text AS line_total
+       FROM order_lines ol
+       JOIN products p ON p.id = ol.product_id
+       WHERE ol.order_id = $1
+       ORDER BY ol.id ASC`,
+      [orderId]
+    );
+    res.json({
+      order: {
+        id: order.id,
+        paymentType: order.payment_type,
+        totalAmount: parseFloat(order.total_amount),
+        createdAt: order.created_at,
+        repName: order.rep_name,
+        repImageUrl: order.rep_image_url,
+        repPhone: order.rep_phone,
+        lines: lines.map((l) => ({
+          productId: l.product_id,
+          name: l.product_name,
+          designation: l.designation,
+          unitLabel: l.unit_label,
+          imageUrl: l.image_url,
+          quantity: l.quantity,
+          unitPrice: parseFloat(l.unit_price),
+          lineTotal: parseFloat(l.line_total),
+        })),
+      },
     });
   } catch (e) {
     next(e);

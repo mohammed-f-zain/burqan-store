@@ -397,6 +397,18 @@ export const en: Messages = {
     emptyOrders: "No orders",
     emptyProducts: "No products",
     emptyVisits: "No visits",
+    back: "Back",
+    orderDetailTitle: "Order details",
+    orderLoadErr: "Could not load order",
+    orderLinesTitle: "Items",
+    orderTotal: "Total",
+    lineQty: (q: number) => `Qty ${q}`,
+    itemsCount: (n: number) => `${n} items`,
+    unitsCount: (n: number) => `${n} units`,
+    viewOrder: "View details",
+    openInNewTab: "Open in new tab",
+    visitAt: "Visit date",
+    noNote: "No note",
   },
 
   common: {

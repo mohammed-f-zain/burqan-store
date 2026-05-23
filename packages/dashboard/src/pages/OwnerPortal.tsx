@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { mediaUrl } from "../lib/mediaUrl";
+import { openOwnerOrder, ownerFormatMoney } from "../owner/ownerFormat";
 import { useOwnerArabic } from "../owner/useOwnerArabic";
 import { formatMarketDateTime } from "../utils/formatMarketDateTime";
 import { publicApi } from "../publicApi";
@@ -29,8 +30,26 @@ type OwnerSummary = {
     monthOrderCount: number;
     monthOrderTotal: number;
   };
-  orders: { id: string; payment_type: string; total_amount: string; created_at: string }[];
-  visits: { id: string; visited_at: string; note: string | null; rep_name: string }[];
+  orders: {
+    id: string;
+    payment_type: string;
+    total_amount: string;
+    created_at: string;
+    rep_name: string;
+    rep_image_url: string | null;
+    rep_phone: string;
+    line_count: number;
+    item_qty: number;
+    products_preview: string | null;
+  }[];
+  visits: {
+    id: string;
+    visited_at: string;
+    note: string | null;
+    rep_name: string;
+    rep_image_url: string | null;
+    rep_phone: string;
+  }[];
   topProducts: { productId: number; name: string; imageUrl: string | null; quantity: number; total: number }[];
   monthly: { month: string; total: number; count: number }[];
 };
@@ -43,10 +62,6 @@ type CatalogProduct = {
   image_url: string | null;
   price: string;
 };
-
-function formatMoney(n: number, currency: string) {
-  return `${n.toLocaleString("ar-JO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
-}
 
 function formatMonthLabel(isoMonth: string) {
   const d = new Date(isoMonth.includes("T") ? isoMonth : `${isoMonth}T12:00:00`);
@@ -194,7 +209,7 @@ export default function OwnerPortal() {
               <div className="owner-stat">
                 <div className="owner-stat-label">{t.owner.statMonthTotal}</div>
                 <div className="owner-stat-value owner-stat-value--accent">
-                  {formatMoney(data.stats.monthOrderTotal, t.owner.currency)}
+                  {ownerFormatMoney(data.stats.monthOrderTotal, t.owner.currency)}
                 </div>
               </div>
             </div>
@@ -202,20 +217,20 @@ export default function OwnerPortal() {
             <div className="owner-stats" style={{ marginTop: 12 }}>
               <div className="owner-stat">
                 <div className="owner-stat-label">{t.owner.deferredPurchases}</div>
-                <div className="owner-stat-value">{formatMoney(data.totals.deferredPurchases, t.owner.currency)}</div>
+                <div className="owner-stat-value">{ownerFormatMoney(data.totals.deferredPurchases, t.owner.currency)}</div>
               </div>
               <div className="owner-stat">
                 <div className="owner-stat-label">{t.owner.cashPurchases}</div>
-                <div className="owner-stat-value">{formatMoney(data.totals.cashPurchases, t.owner.currency)}</div>
+                <div className="owner-stat-value">{ownerFormatMoney(data.totals.cashPurchases, t.owner.currency)}</div>
               </div>
               <div className="owner-stat">
                 <div className="owner-stat-label">{t.owner.payments}</div>
-                <div className="owner-stat-value">{formatMoney(data.totals.paymentsRecorded, t.owner.currency)}</div>
+                <div className="owner-stat-value">{ownerFormatMoney(data.totals.paymentsRecorded, t.owner.currency)}</div>
               </div>
               <div className="owner-stat">
                 <div className="owner-stat-label">{t.owner.balance}</div>
                 <div className="owner-stat-value owner-stat-value--danger">
-                  {formatMoney(data.totals.balanceDue, t.owner.currency)}
+                  {ownerFormatMoney(data.totals.balanceDue, t.owner.currency)}
                 </div>
               </div>
             </div>
@@ -230,7 +245,7 @@ export default function OwnerPortal() {
                         <div
                           className="owner-chart-bar"
                           style={{ height: `${Math.max(4, (m.total / chartMax) * 100)}%` }}
-                          title={formatMoney(m.total, t.owner.currency)}
+                          title={ownerFormatMoney(m.total, t.owner.currency)}
                         />
                       </div>
                       <span className="owner-chart-label">{formatMonthLabel(m.month)}</span>
@@ -256,7 +271,7 @@ export default function OwnerPortal() {
                         <div className="owner-top-body">
                           <div className="owner-top-name">{p.name}</div>
                           <div className="owner-top-sub">
-                            {t.owner.qtyUnits(p.quantity)} · {formatMoney(p.total, t.owner.currency)}
+                            {t.owner.qtyUnits(p.quantity)} · {ownerFormatMoney(p.total, t.owner.currency)}
                           </div>
                         </div>
                       </li>
@@ -269,37 +284,63 @@ export default function OwnerPortal() {
         )}
 
         {tab === "orders" && (
-          <section className="owner-section">
+          <section className="owner-section owner-section--flush">
             <h2 className="owner-section-title">{t.owner.ordersTitle}</h2>
             {data.orders.length === 0 ? (
               <p className="owner-empty">{t.owner.emptyOrders}</p>
             ) : (
-              <div className="owner-table-wrap">
-                <table className="owner-table">
-                  <thead>
-                    <tr>
-                      <th>#</th>
-                      <th>{t.owner.colPayment}</th>
-                      <th>{t.owner.colAmount}</th>
-                      <th>{t.owner.colDate}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.orders.map((o) => (
-                      <tr key={o.id}>
-                        <td>{o.id}</td>
-                        <td>
-                          <span className={o.payment_type === "cash" ? "owner-pay-cash" : "owner-pay-deferred"}>
-                            {o.payment_type === "cash" ? t.owner.payCash : t.owner.payDeferred}
-                          </span>
-                        </td>
-                        <td>{formatMoney(parseFloat(o.total_amount), t.owner.currency)}</td>
-                        <td>{formatMarketDateTime(o.created_at, "ar")}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <ul className="owner-order-list">
+                {data.orders.map((order) => {
+                  const repImg = mediaUrl(order.rep_image_url);
+                  const isCash = order.payment_type === "cash";
+                  return (
+                    <li key={order.id}>
+                      <button
+                        type="button"
+                        className="owner-order-card"
+                        onClick={() => token && openOwnerOrder(order.id, token)}
+                      >
+                        <div className="owner-order-card-top">
+                          <div className="owner-order-card-id">
+                            <span className="owner-order-hash">#{order.id}</span>
+                            <span
+                              className={`owner-pay-pill${isCash ? " owner-pay-pill--cash" : " owner-pay-pill--deferred"}`}
+                            >
+                              {isCash ? t.owner.payCash : t.owner.payDeferred}
+                            </span>
+                          </div>
+                          <p className="owner-order-amount">
+                            {ownerFormatMoney(parseFloat(order.total_amount), t.owner.currency)}
+                          </p>
+                        </div>
+                        <p className="owner-order-date">{formatMarketDateTime(order.created_at, "ar")}</p>
+                        {order.products_preview ? (
+                          <p className="owner-order-preview">{order.products_preview}</p>
+                        ) : null}
+                        <div className="owner-order-meta">
+                          <span>{t.owner.itemsCount(order.line_count)}</span>
+                          <span>·</span>
+                          <span>{t.owner.unitsCount(order.item_qty)}</span>
+                        </div>
+                        <div className="owner-order-rep">
+                          {repImg ? (
+                            <img src={repImg} alt="" className="owner-rep-avatar owner-rep-avatar--sm" />
+                          ) : (
+                            <div className="owner-rep-avatar owner-rep-avatar--sm owner-rep-avatar--empty">
+                              {order.rep_name.slice(0, 1)}
+                            </div>
+                          )}
+                          <div className="owner-order-rep-text">
+                            <span className="owner-order-rep-name">{order.rep_name}</span>
+                            <span className="owner-order-rep-phone">{order.rep_phone}</span>
+                          </div>
+                        </div>
+                        <span className="owner-order-cta">{t.owner.viewOrder} ‹</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
           </section>
         )}
@@ -324,7 +365,7 @@ export default function OwnerPortal() {
                       )}
                       <div className="owner-product-body">
                         <h3 className="owner-product-name">{p.name}</h3>
-                        <p className="owner-product-price">{formatMoney(parseFloat(p.price), t.owner.currency)}</p>
+                        <p className="owner-product-price">{ownerFormatMoney(parseFloat(p.price), t.owner.currency)}</p>
                         {p.designation ? <p className="owner-product-desc">{p.designation}</p> : null}
                         {p.unit_label ? <p className="owner-product-desc">{p.unit_label}</p> : null}
                       </div>
@@ -337,20 +378,40 @@ export default function OwnerPortal() {
         )}
 
         {tab === "visits" && (
-          <section className="owner-section">
+          <section className="owner-section owner-section--flush">
             <h2 className="owner-section-title">{t.owner.visitsTitle}</h2>
             {data.visits.length === 0 ? (
               <p className="owner-empty">{t.owner.emptyVisits}</p>
             ) : (
-              <div>
-                {data.visits.map((v) => (
-                  <div key={v.id} className="owner-visit">
-                    <div className="owner-visit-time">{formatMarketDateTime(v.visited_at, "ar")}</div>
-                    <div className="owner-visit-rep">{t.owner.repLabel}: {v.rep_name}</div>
-                    {v.note ? <div className="owner-visit-note">{v.note}</div> : null}
-                  </div>
-                ))}
-              </div>
+              <ul className="owner-visit-list">
+                {data.visits.map((visit) => {
+                  const repImg = mediaUrl(visit.rep_image_url);
+                  return (
+                    <li key={visit.id} className="owner-visit-card">
+                      <div className="owner-visit-card-inner">
+                        {repImg ? (
+                          <img src={repImg} alt="" className="owner-rep-avatar" />
+                        ) : (
+                          <div className="owner-rep-avatar owner-rep-avatar--empty">{visit.rep_name.slice(0, 1)}</div>
+                        )}
+                        <div className="owner-visit-body">
+                          <div className="owner-visit-head">
+                            <p className="owner-visit-rep-name">{visit.rep_name}</p>
+                            <a href={`tel:${visit.rep_phone}`} className="owner-visit-phone" onClick={(e) => e.stopPropagation()}>
+                              {visit.rep_phone}
+                            </a>
+                          </div>
+                          <p className="owner-visit-kicker">{t.owner.visitAt}</p>
+                          <p className="owner-visit-time">{formatMarketDateTime(visit.visited_at, "ar")}</p>
+                          <p className={`owner-visit-note${visit.note ? "" : " owner-visit-note--muted"}`}>
+                            {visit.note || t.owner.noNote}
+                          </p>
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
           </section>
         )}

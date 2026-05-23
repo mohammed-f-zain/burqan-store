@@ -396,6 +396,18 @@ export const ar = {
     emptyOrders: "لا طلبات",
     emptyProducts: "لا منتجات",
     emptyVisits: "لا زيارات",
+    back: "رجوع",
+    orderDetailTitle: "تفاصيل الطلب",
+    orderLoadErr: "تعذّر تحميل الطلب",
+    orderLinesTitle: "المنتجات",
+    orderTotal: "الإجمالي",
+    lineQty: (q: number) => `الكمية ${q}`,
+    itemsCount: (n: number) => `${n} صنف`,
+    unitsCount: (n: number) => `${n} وحدة`,
+    viewOrder: "عرض التفاصيل",
+    openInNewTab: "فتح في نافذة جديدة",
+    visitAt: "تاريخ الزيارة",
+    noNote: "بدون ملاحظة",
   },
 
   common: {
