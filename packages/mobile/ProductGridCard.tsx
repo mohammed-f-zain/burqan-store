@@ -9,6 +9,8 @@ type Props = {
   width: number;
   currency: string;
   noImage: string;
+  /** When false, hide van stock badge (catalog-only view). */
+  showStock?: boolean;
   onPress: () => void;
 };
 
@@ -41,9 +43,11 @@ export default function ProductGridCard(props: Props) {
           <Text style={styles.price}>
             {props.item.price} {props.currency}
           </Text>
-          <View style={styles.stockBadge}>
-            <Text style={styles.stockText}>{props.item.quantity}</Text>
-          </View>
+          {props.showStock !== false ? (
+            <View style={styles.stockBadge}>
+              <Text style={styles.stockText}>{props.item.quantity}</Text>
+            </View>
+          ) : null}
         </View>
       </View>
     </Pressable>

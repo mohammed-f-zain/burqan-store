@@ -135,6 +135,8 @@ const t = {
   productsBadge: (n: number) => String(n),
   inventoryTitle: "مخزون السيارة",
   inventoryEmpty: "لا منتجات",
+  catalogEmpty: "لا منتجات متاحة",
+  catalogStockHint: "الرقم = مخزون السيارة",
   sellEmpty: "لا مخزون",
   emptyVisits: "لا زيارات",
   emptyOrders: "لا طلبات",
@@ -159,7 +161,7 @@ function mapProductRow(r: {
   id: number;
   name: string;
   price: string;
-  quantity: number;
+  quantity?: number;
   designation?: string | null;
   unit_label?: string | null;
   image_url?: string | null;
@@ -277,6 +279,7 @@ export default function App() {
   const [storeRefreshing, setStoreRefreshing] = useState(false);
   const [bottomTab, setBottomTab] = useState<BottomTab>("home");
   const [inventory, setInventory] = useState<Product[]>([]);
+  const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
 
   const headers = useMemo(() => {
     const h: Record<string, string> = { "Content-Type": "application/json" };
@@ -356,6 +359,25 @@ export default function App() {
       /* ignore */
     }
   }, [apiGet, token]);
+
+  const loadCatalog = useCallback(async () => {
+    if (!token) return;
+    try {
+      const data = await apiGet("/api/v1/rep/products");
+      const rows = (data.products ?? []) as Product[];
+      setCatalogProducts(rows.map((r) => mapProductRow(r)));
+    } catch {
+      setCatalogProducts([]);
+    }
+  }, [apiGet, token]);
+
+  const catalogDisplay = useMemo(() => {
+    const stockById = new Map(inventory.map((p) => [p.id, p.quantity]));
+    return catalogProducts.map((p) => ({
+      ...p,
+      quantity: stockById.get(p.id) ?? 0,
+    }));
+  }, [catalogProducts, inventory]);
 
   const loadDailyStores = useCallback(async () => {
     if (!token) return;
@@ -561,8 +583,11 @@ export default function App() {
   }, [token, loadInventory]);
 
   useEffect(() => {
-    if (token && bottomTab === "store") void loadInventory();
-  }, [token, bottomTab, loadInventory]);
+    if (token && bottomTab === "store") {
+      void loadCatalog();
+      void loadInventory();
+    }
+  }, [token, bottomTab, loadCatalog, loadInventory]);
 
   async function submitOrder() {
     if (!activeStore) return;
@@ -725,7 +750,7 @@ export default function App() {
                 onRefresh={async () => {
                   setStoreRefreshing(true);
                   try {
-                    await loadInventory();
+                    await Promise.all([loadCatalog(), loadInventory()]);
                   } finally {
                     setStoreRefreshing(false);
                   }
@@ -1053,23 +1078,25 @@ export default function App() {
         <>
           <View style={styles.screenHeader}>
             <Text style={styles.screenTitle}>{t.navStore}</Text>
-            {inventory.length > 0 ? (
+            {catalogDisplay.length > 0 ? (
               <View style={styles.countBadge}>
-                <Text style={styles.countBadgeText}>{t.productsBadge(inventory.length)}</Text>
+                <Text style={styles.countBadgeText}>{t.productsBadge(catalogDisplay.length)}</Text>
               </View>
             ) : null}
           </View>
-          {inventory.length === 0 ? (
-            <Text style={styles.emptyText}>{t.inventoryEmpty}</Text>
+          <Text style={styles.muted}>{t.catalogStockHint}</Text>
+          {catalogDisplay.length === 0 ? (
+            <Text style={styles.emptyText}>{t.catalogEmpty}</Text>
           ) : (
             <View style={styles.productGrid}>
-              {inventory.map((item) => (
+              {catalogDisplay.map((item) => (
                 <ProductGridCard
                   key={item.id}
                   item={item}
                   width={productCardWidth}
                   currency={t.currency}
                   noImage={t.noImage}
+                  showStock
                   onPress={() => setSelectedProduct(item)}
                 />
               ))}
@@ -1188,6 +1215,7 @@ export default function App() {
             iconActive="grid"
             onPress={() => {
               setBottomTab("store");
+              void loadCatalog();
               void loadInventory();
             }}
           />
