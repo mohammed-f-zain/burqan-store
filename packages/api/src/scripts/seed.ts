@@ -10,19 +10,22 @@ async function main() {
   const phSuper = await hashPassword(superPassword);
   const phRep = await hashPassword(repPassword);
 
-  await query(
-    `INSERT INTO areas (name, center_lat, center_lng, radius_km) VALUES
-       ('عمان الشمال', 32.02, 35.88, 30),
-       ('عمان الجنوب', 31.90, 35.92, 30)
-     ON CONFLICT (name) DO UPDATE SET
-       center_lat = EXCLUDED.center_lat,
-       center_lng = EXCLUDED.center_lng,
-       radius_km = EXCLUDED.radius_km`
-  );
+  const { JORDAN_GOVERNORATES } = await import("../data/jordanGovernorates.js");
+  for (const g of JORDAN_GOVERNORATES) {
+    await query(
+      `INSERT INTO areas (name, center_lat, center_lng, radius_km)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (name) DO UPDATE SET
+         center_lat = EXCLUDED.center_lat,
+         center_lng = EXCLUDED.center_lng,
+         radius_km = EXCLUDED.radius_km`,
+      [g.name, g.centerLat, g.centerLng, g.radiusKm]
+    );
+  }
 
-  const { rows: areaRows } = await query<{ id: number }>(`SELECT id FROM areas ORDER BY id ASC LIMIT 2`);
+  const { rows: areaRows } = await query<{ id: number }>(`SELECT id FROM areas ORDER BY id ASC`);
   const areaIds = areaRows.map((r) => r.id);
-  if (areaIds.length < 2) throw new Error("Need at least 2 areas");
+  if (!areaIds.length) throw new Error("Need at least one area");
 
   await query(
     `INSERT INTO admins (email, password_hash, full_name, is_super_admin, role_id, created_by_admin_id)

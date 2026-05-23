@@ -1,7 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as ExpoSplashScreen from "expo-splash-screen";
-import * as ImagePicker from "expo-image-picker";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import {
@@ -32,6 +31,7 @@ import ProductDetailModal, { type Product } from "./ProductDetailModal";
 import ProductGridCard from "./ProductGridCard";
 import { productImageUrl } from "./productImage";
 import ProfileScreen, { type RepProfile } from "./ProfileScreen";
+import RegisterStoreForm from "./RegisterStoreForm";
 import { clearRepToken, loadStoredRepToken, saveRepToken } from "./repSession";
 import SplashScreen from "./SplashScreen";
 import ToastOverlay, { type ToastKind } from "./ToastOverlay";
@@ -168,30 +168,11 @@ function mapProductRow(r: {
 }
 
 type Area = { id: number; name: string };
-type StoreBrief = {
-  id: number;
-  name: string;
-  phone: string;
-  ownerName: string;
-  location: { lat: number; lng: number };
-  deferredPaymentEnabled: boolean;
-  ownerPortalUrl?: string;
-};
+import type { StoreBrief } from "./storeTypes";
+export type { StoreBrief } from "./storeTypes";
+
 type BottomTab = "home" | "inventory" | "store" | "profile";
 type RepOrderRow = { id: string; payment_type: string; total_amount: string; created_at: string };
-
-async function uploadRepImage(apiBase: string, bearer: string, uri: string, mimeType: string): Promise<string> {
-  const form = new FormData();
-  form.append("file", { uri, name: "upload.jpg", type: mimeType } as unknown as Blob);
-  const res = await fetch(`${apiBase}/api/v1/rep/upload`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${bearer}` },
-    body: form,
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : t.uploadFailed);
-  return data.path as string;
-}
 
 export default function App() {
   const insets = useSafeAreaInsets();
@@ -919,8 +900,7 @@ export default function App() {
       )}
 
       {mode === "register" && lastScanToken && token && bottomTab === "home" && (
-        <RegisterForm
-          areas={areas}
+        <RegisterStoreForm
           qrPublicToken={lastScanToken}
           headers={headers}
           apiBase={API_BASE}
@@ -1223,156 +1203,6 @@ function ProductCard(props: {
   );
 }
 
-function RegisterForm(props: {
-  areas: Area[];
-  qrPublicToken: string;
-  headers: Record<string, string>;
-  apiBase: string;
-  authToken: string;
-  onNotice: (msg: string) => void;
-  onDone: (msg: string, store?: StoreBrief) => void;
-}) {
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [ownerName, setOwnerName] = useState("");
-  const [lat, setLat] = useState("");
-  const [lng, setLng] = useState("");
-  const [address, setAddress] = useState("");
-  const [areaId, setAreaId] = useState<number | undefined>(props.areas[0]?.id);
-  const [areaName, setAreaName] = useState("");
-  const [locating, setLocating] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [uploadBusy, setUploadBusy] = useState(false);
-  const [imagePath, setImagePath] = useState<string | null>(null);
-
-  const refreshLocation = useCallback(async () => {
-    setLocating(true);
-    try {
-      const pos = await getRepPosition();
-      setLat(pos.lat.toFixed(6));
-      setLng(pos.lng.toFixed(6));
-      const res = await fetch(
-        `${props.apiBase}/api/v1/rep/areas/resolve?lat=${pos.lat}&lng=${pos.lng}`,
-        { headers: props.headers }
-      );
-      const data = await res.json();
-      if (res.ok && data.areaId) {
-        setAreaId(data.areaId);
-        setAreaName(data.areaName ?? "");
-      } else {
-        props.onNotice(typeof data.error === "string" ? data.error : t.areaDetecting);
-      }
-    } catch (e) {
-      if (e instanceof LocationDeniedError) props.onNotice(t.locationDenied);
-      else props.onNotice(e instanceof Error ? e.message : t.locating);
-    } finally {
-      setLocating(false);
-    }
-  }, [props.apiBase, props.headers, props.onNotice]);
-
-  useEffect(() => {
-    void refreshLocation();
-  }, [refreshLocation]);
-
-  async function pickAndUpload() {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) {
-      props.onNotice(t.photosPermission);
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      quality: 0.85,
-    });
-    if (result.canceled || !result.assets[0]) return;
-    const asset = result.assets[0];
-    setUploadBusy(true);
-    try {
-      const path = await uploadRepImage(props.apiBase, props.authToken, asset.uri, asset.mimeType ?? "image/jpeg");
-      setImagePath(path);
-    } catch (e) {
-      props.onNotice(e instanceof Error ? e.message : t.uploadFailed);
-    } finally {
-      setUploadBusy(false);
-    }
-  }
-
-  async function submit() {
-    if (!areaId || !lat || !lng) {
-      props.onNotice(t.locating);
-      return;
-    }
-    setBusy(true);
-    try {
-      const res = await fetch(`${props.apiBase}/api/v1/rep/stores/register`, {
-        method: "POST",
-        headers: props.headers,
-        body: JSON.stringify({
-          qrPublicToken: props.qrPublicToken,
-          name,
-          phone,
-          ownerName,
-          locationLat: parseFloat(lat),
-          locationLng: parseFloat(lng),
-          addressText: address || undefined,
-          areaId,
-          imageUrl: imagePath ?? undefined,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? t.registerFailed);
-      props.onDone(t.storeCreated(data.store?.id ?? 0), data.store as StoreBrief);
-    } catch (e) {
-      props.onDone(e instanceof Error ? e.message : t.registerFailed);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <View style={styles.card}>
-      <Text style={styles.cardTitle}>{t.registerStore}</Text>
-      <Text style={styles.label}>{t.areaAuto}</Text>
-      {locating ? (
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 }}>
-          <ActivityIndicator color={accent} />
-          <Text style={styles.muted}>{t.areaDetecting}</Text>
-        </View>
-      ) : (
-        <Text style={styles.body}>{areaName || props.areas.find((a) => a.id === areaId)?.name || "—"}</Text>
-      )}
-      <Pressable style={styles.secondary} onPress={() => void refreshLocation()}>
-        <Text style={styles.secondaryText}>{t.refreshLocation}</Text>
-      </Pressable>
-      <Text style={styles.label}>{t.storeName}</Text>
-      <TextInput style={styles.input} value={name} onChangeText={setName} />
-      <Text style={styles.label}>{t.storePhone}</Text>
-      <TextInput style={styles.input} value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
-      <Text style={styles.label}>{t.ownerName}</Text>
-      <TextInput style={styles.input} value={ownerName} onChangeText={setOwnerName} />
-      <Text style={styles.label}>{t.latLng}</Text>
-      <View style={styles.rowBetween}>
-        <TextInput style={[styles.input, { flex: 1, marginRight: 8 }]} value={lat} onChangeText={setLat} keyboardType="decimal-pad" />
-        <TextInput style={[styles.input, { flex: 1 }]} value={lng} onChangeText={setLng} keyboardType="decimal-pad" />
-      </View>
-      <Text style={styles.label}>{t.address}</Text>
-      <TextInput style={styles.input} value={address} onChangeText={setAddress} />
-      <Text style={styles.label}>{t.storePhoto}</Text>
-      <Pressable style={styles.secondary} onPress={() => void pickAndUpload()} disabled={uploadBusy}>
-        {uploadBusy ? <ActivityIndicator color={text} /> : <Text style={styles.secondaryText}>{t.pickPhoto}</Text>}
-      </Pressable>
-      <View style={styles.rowBetween}>
-        <Pressable style={styles.secondary} onPress={() => props.onDone(t.cancelled)}>
-          <Text style={styles.secondaryText}>{t.cancel}</Text>
-        </Pressable>
-        <Pressable style={styles.primary} onPress={submit} disabled={busy}>
-          {busy ? <ActivityIndicator color={theme.onAccent} /> : <Text style={styles.primaryText}>{t.saveStore}</Text>}
-        </Pressable>
-      </View>
-    </View>
-  );
-}
-
 const bg = theme.bg;
 const card = theme.card;
 const line = theme.line;
@@ -1510,7 +1340,6 @@ const styles = StyleSheet.create({
   segmentOn: { backgroundColor: card, ...theme.shadow.card },
   segmentText: { color: muted, fontWeight: "700", fontSize: 14 },
   segmentTextOn: { color: accent },
-  primaryLg: { marginTop: 4 },
   input: {
     borderWidth: 1,
     borderColor: line,
@@ -1529,20 +1358,32 @@ const styles = StyleSheet.create({
   primary: {
     marginTop: 12,
     backgroundColor: accent,
-    paddingVertical: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
     borderRadius: theme.radius.md,
     alignItems: "center",
+    justifyContent: "center",
+    minHeight: 52,
+    borderWidth: 1,
+    borderColor: theme.accent2,
   },
-  primaryText: { color: "#ffffff", fontWeight: "800", fontSize: 16 },
+  primaryLg: {
+    marginTop: 4,
+    paddingVertical: 18,
+    minHeight: 56,
+  },
+  primaryText: { color: theme.onAccent, fontWeight: "800", fontSize: 16 },
   secondary: {
     marginTop: 10,
     backgroundColor: "#f8fafc",
     borderColor: line,
     borderWidth: 1,
-    paddingVertical: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
     borderRadius: theme.radius.md,
     alignItems: "center",
-    paddingHorizontal: 12,
+    justifyContent: "center",
+    minHeight: 48,
   },
   secondaryText: { color: text, fontWeight: "700", fontSize: 15 },
   muted: { color: muted, marginTop: 6, fontSize: 13, textAlign: "right" },

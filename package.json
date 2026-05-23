@@ -13,6 +13,7 @@
     "api:migrate": "npm run migrate -w @burqan/api",
     "api:migrate:geo": "npm run migrate:geo -w @burqan/api",
     "api:seed": "npm run seed -w @burqan/api",
+    "api:seed:jordan-areas": "npm run seed:jordan-areas -w @burqan/api",
     "api:gen:qr": "npm run gen:qr -w @burqan/api",
     "api:reset-admin": "npm run reset-admin -w @burqan/api",
     "api:migrate:auth": "npm run migrate:auth -w @burqan/api",

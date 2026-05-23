@@ -15,6 +15,7 @@ import {
   assertWithinScanDistance,
   repLocationSchema,
   resolveAreaIdForRep,
+  resolveAreaIdFromAllAreas,
 } from "../utils/geo.js";
 import { parseQrPublicToken } from "../utils/qrToken.js";
 
@@ -125,8 +126,47 @@ router.get("/areas/resolve", repAuthMiddleware, async (req, res, next) => {
   try {
     const lat = z.coerce.number().parse(req.query.lat);
     const lng = z.coerce.number().parse(req.query.lng);
-    const resolved = await resolveAreaIdForRep(lat, lng, req.rep!.areaIds);
+    const forRegister = req.query.forRegister === "1" || req.query.forRegister === "true";
+    const rep = req.rep!;
+    const resolved = forRegister
+      ? await resolveAreaIdFromAllAreas(lat, lng)
+      : await resolveAreaIdForRep(lat, lng, rep.areaIds);
+    if (forRegister && !rep.areaIds.includes(resolved.areaId)) {
+      throw new HttpError(
+        403,
+        `الموقع ضمن «${resolved.areaName}» وهذه المنطقة غير مخصصة لك. تواصل مع الإدارة.`
+      );
+    }
     res.json(resolved);
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** All Jordan areas with geo boundaries (for registration map). */
+router.get("/areas/jordan", repAuthMiddleware, async (_req, res, next) => {
+  try {
+    const { rows } = await query<{
+      id: number;
+      name: string;
+      center_lat: number;
+      center_lng: number;
+      radius_km: string;
+    }>(
+      `SELECT id, name, center_lat, center_lng, radius_km
+       FROM areas
+       WHERE center_lat IS NOT NULL AND center_lng IS NOT NULL
+       ORDER BY name ASC`
+    );
+    res.json({
+      areas: rows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        centerLat: r.center_lat,
+        centerLng: r.center_lng,
+        radiusKm: parseFloat(r.radius_km),
+      })),
+    });
   } catch (e) {
     next(e);
   }
@@ -271,10 +311,13 @@ router.post("/stores/register", repAuthMiddleware, async (req, res, next) => {
     const rep = req.rep!;
     let areaId = body.areaId;
     if (areaId == null) {
-      const resolved = await resolveAreaIdForRep(body.locationLat, body.locationLng, rep.areaIds);
+      const resolved = await resolveAreaIdFromAllAreas(body.locationLat, body.locationLng);
       areaId = resolved.areaId;
     }
-    if (!rep.areaIds.includes(areaId)) throw new HttpError(403, "المنطقة غير مخصصة لك");
+    if (!rep.areaIds.includes(areaId)) {
+      const { rows: an } = await query<{ name: string }>(`SELECT name FROM areas WHERE id = $1`, [areaId]);
+      throw new HttpError(403, `المنطقة «${an[0]?.name ?? areaId}» غير مخصصة لك`);
+    }
 
     const c = await pool.connect();
     try {

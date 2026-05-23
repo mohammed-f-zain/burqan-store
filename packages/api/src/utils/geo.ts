@@ -80,3 +80,32 @@ export async function resolveAreaIdForRep(
   const nearest = scored[0]!;
   return { areaId: nearest.area.id, areaName: nearest.area.name };
 }
+
+/** Pick governorate from all Jordan areas in DB (store registration). */
+export async function resolveAreaIdFromAllAreas(
+  lat: number,
+  lng: number
+): Promise<{ areaId: number; areaName: string }> {
+  const { rows } = await query<AreaGeo>(
+    `SELECT id, name, center_lat, center_lng, radius_km
+     FROM areas
+     WHERE center_lat IS NOT NULL AND center_lng IS NOT NULL
+     ORDER BY id ASC`
+  );
+  if (!rows.length) throw new HttpError(500, "لم تُعرَّف مناطق الأردن على الخادم");
+
+  const scored = rows.map((a) => {
+    const distM = haversineMeters(lat, lng, a.center_lat!, a.center_lng!);
+    const radiusM = parseFloat(String(a.radius_km)) * 1000;
+    return { area: a, distM, inside: distM <= radiusM };
+  });
+
+  const inside = scored.filter((s) => s.inside).sort((a, b) => a.distM - b.distM);
+  if (inside[0]) {
+    return { areaId: inside[0].area.id, areaName: inside[0].area.name };
+  }
+
+  scored.sort((a, b) => a.distM - b.distM);
+  const nearest = scored[0]!;
+  return { areaId: nearest.area.id, areaName: nearest.area.name };
+}

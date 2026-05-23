@@ -11,6 +11,7 @@
     "migrate": "tsx src/scripts/migrate.ts",
     "migrate:geo": "tsx src/scripts/migrate-geo.ts",
     "seed": "tsx src/scripts/seed.ts",
+    "seed:jordan-areas": "tsx src/scripts/seed-jordan-areas.ts",
     "gen:qr": "tsx src/scripts/generateQrPool.ts",
     "reset-admin": "tsx src/scripts/reset-admin-password.ts",
     "create-super-admin": "tsx src/scripts/create-super-admin.ts",

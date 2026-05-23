@@ -14,7 +14,8 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSCameraUsageDescription": "Allow Burqan to scan store QR codes.",
+        "NSCameraUsageDescription": "Allow Burqan to scan store QR codes and take store photos.",
+        "NSPhotoLibraryUsageDescription": "Allow Burqan to choose store photos from your gallery.",
         "NSLocationWhenInUseUsageDescription": "Burqan uses your location to register stores, verify you are at the store, and assign the correct area.",
         "NSAppTransportSecurity": {
           "NSAllowsLocalNetworking": true
