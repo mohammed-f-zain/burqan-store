@@ -16,6 +16,7 @@ import {
   repLocationSchema,
   resolveAreaIdForRep,
 } from "../utils/geo.js";
+import { parseQrPublicToken } from "../utils/qrToken.js";
 
 const router = Router();
 
@@ -132,7 +133,7 @@ const qrQuerySchema = z.object({
 /** Resolve QR token: unassigned pool code vs existing store */
 router.get("/qr/:token", repAuthMiddleware, async (req, res, next) => {
   try {
-    const token = z.string().min(16).max(64).parse(req.params.token);
+    const token = z.string().min(16).max(512).transform(parseQrPublicToken).pipe(z.string().min(16).max(64)).parse(req.params.token);
     const loc = qrQuerySchema.parse(req.query);
     const { rows } = await query<{
       qr_id: string;
@@ -161,11 +162,20 @@ router.get("/qr/:token", repAuthMiddleware, async (req, res, next) => {
       assertWithinScanDistance(loc.lat, loc.lng, row.location_lat, row.location_lng);
     }
     const store = await loadStoreForRep(row.store_id, req.rep!);
-    res.json({ status: "assigned", store });
+    await recordRepVisit(req.rep!.id, row.store_id);
+    res.json({ status: "assigned", store, visitRecorded: true });
   } catch (e) {
     next(e);
   }
 });
+
+async function recordRepVisit(repId: number, storeId: number, note?: string | null) {
+  const { rows } = await query(
+    `INSERT INTO visits (representative_id, store_id, note) VALUES ($1, $2, $3) RETURNING *`,
+    [repId, storeId, note ?? null]
+  );
+  return rows[0];
+}
 
 async function loadStoreForRep(storeId: number, rep: { areaIds: number[] }) {
   const { rows } = await query<{
@@ -344,11 +354,8 @@ router.post("/visits", repAuthMiddleware, async (req, res, next) => {
     const body = visitSchema.parse(req.body);
     const storeRow = await loadStoreRowForRep(body.storeId, req.rep!);
     assertWithinScanDistance(body.repLat, body.repLng, storeRow.location_lat, storeRow.location_lng);
-    const { rows } = await query(
-      `INSERT INTO visits (representative_id, store_id, note) VALUES ($1,$2,$3) RETURNING *`,
-      [req.rep!.id, body.storeId, body.note ?? null]
-    );
-    res.status(201).json({ visit: rows[0] });
+    const visit = await recordRepVisit(req.rep!.id, body.storeId, body.note);
+    res.status(201).json({ visit });
   } catch (e) {
     next(e);
   }

@@ -214,7 +214,14 @@ export default function StoreDetailPage() {
                 {t.stores.colQr}
               </p>
               <QRCodeSVG value={qrPayload(store.qr_public_token)} size={120} level="M" includeMargin={false} />
-              <span className="muted small mono break-all">{store.qr_public_token}</span>
+              <a
+                href={qrPayload(store.qr_public_token)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="linkish break-all small"
+              >
+                {qrPayload(store.qr_public_token)}
+              </a>
             </div>
           </div>
           <div className="store-detail-map-card">

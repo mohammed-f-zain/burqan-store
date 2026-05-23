@@ -21,6 +21,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { formatMarketDateTime } from "./formatMarketDateTime";
+import { parseQrPublicToken } from "./parseQrToken";
 import { getRepPosition, LocationDeniedError } from "./getDeviceLocation";
 import { resolveApiBase } from "./resolveApiBase";
 import { toArabicUserMessage } from "./arabicMessage";
@@ -70,14 +71,12 @@ const t = {
   inCart: "في السلة",
   phone: "الهاتف",
   location: "الموقع",
-  visitPlaceholder: "ملاحظة",
-  recordVisit: "تسجيل زيارة",
+  visitAutoHint: "تُسجَّل الزيارة تلقائياً عند مسح رمز المتجر.",
   payment: "الدفع",
   cash: "نقدي",
   deferredPay: "آجل",
   submitOrder: "إرسال الطلب",
   visitRecorded: "تم تسجيل الزيارة.",
-  visitFailed: "تعذّر تسجيل الزيارة.",
   orderSaved: "تم حفظ الطلب.",
   orderFailed: "تعذّر إرسال الطلب.",
   addToCart: "أضف منتجات إلى السلة.",
@@ -239,7 +238,6 @@ export default function App() {
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<Record<number, number>>({});
   const [paymentType, setPaymentType] = useState<"cash" | "deferred">("cash");
-  const [visitNote, setVisitNote] = useState("");
   const [homeRefreshing, setHomeRefreshing] = useState(false);
   const [storeRefreshing, setStoreRefreshing] = useState(false);
   const [bottomTab, setBottomTab] = useState<BottomTab>("home");
@@ -325,16 +323,16 @@ export default function App() {
 
   async function resolveQr(raw: string) {
     if (!token) return;
-    const trimmed = raw.trim();
-    if (!trimmed) return;
+    const publicToken = parseQrPublicToken(raw);
+    if (!publicToken) return;
     setBusy(true);
     hideToast();
     try {
       const pos = await getRepPosition();
       const data = await apiGet(
-        `/api/v1/rep/qr/${encodeURIComponent(trimmed)}?lat=${pos.lat}&lng=${pos.lng}`
+        `/api/v1/rep/qr/${encodeURIComponent(publicToken)}?lat=${pos.lat}&lng=${pos.lng}`
       );
-      setLastScanToken(trimmed);
+      setLastScanToken(publicToken);
       if (data.status === "unassigned") {
         setActiveStore(null);
         setMode("register");
@@ -344,6 +342,7 @@ export default function App() {
         setMode("store");
         setBottomTab("home");
         setStoreTab("info");
+        showToast(t.visitRecorded, "success");
         await refreshStoreData(data.store.id);
       }
     } catch (e) {
@@ -439,28 +438,6 @@ export default function App() {
   useEffect(() => {
     if (token && bottomTab === "store") void loadInventory();
   }, [token, bottomTab, loadInventory]);
-
-  async function logVisit() {
-    if (!activeStore) return;
-    setBusy(true);
-    try {
-      const pos = await getRepPosition();
-      await apiPost("/api/v1/rep/visits", {
-        storeId: activeStore.id,
-        note: visitNote || undefined,
-        repLat: pos.lat,
-        repLng: pos.lng,
-      });
-      setVisitNote("");
-      showToast(t.visitRecorded, "success");
-      await refreshStoreData(activeStore.id);
-    } catch (e) {
-      if (e instanceof LocationDeniedError) showToast(t.locationDenied, "error");
-      else showToast(e instanceof Error ? e.message : t.visitFailed, "error");
-    } finally {
-      setBusy(false);
-    }
-  }
 
   async function submitOrder() {
     if (!activeStore) return;
@@ -698,16 +675,7 @@ export default function App() {
                   {activeStore.location.lat.toFixed(4)}, {activeStore.location.lng.toFixed(4)}
                 </Text>
               </View>
-              <TextInput
-                style={styles.input}
-                value={visitNote}
-                onChangeText={setVisitNote}
-                placeholder={t.visitPlaceholder}
-                placeholderTextColor={muted}
-              />
-              <Pressable style={styles.primary} onPress={() => void logVisit()}>
-                <Text style={styles.primaryText}>{t.recordVisit}</Text>
-              </Pressable>
+              <Text style={styles.muted}>{t.visitAutoHint}</Text>
             </View>
           )}
 

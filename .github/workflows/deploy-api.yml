@@ -85,11 +85,10 @@ jobs:
             DASH_VITE_API='${{ vars.DASHBOARD_VITE_API_URL }}'
             DASH_VITE_QR='${{ vars.DASHBOARD_VITE_QR_PAYLOAD_BASE_URL }}'
             if [[ -n "${DASH_VITE_API}" ]]; then
+              QR_BASE="${DASH_VITE_QR:-https://burqan.store}"
               {
                 echo "VITE_API_URL=${DASH_VITE_API}"
-                if [[ -n "${DASH_VITE_QR}" ]]; then
-                  echo "VITE_QR_PAYLOAD_BASE_URL=${DASH_VITE_QR}"
-                fi
+                echo "VITE_QR_PAYLOAD_BASE_URL=${QR_BASE}"
               } > packages/dashboard/.env.production
             elif ! grep -q '^VITE_API_URL=' packages/dashboard/.env.production 2>/dev/null; then
               echo "::error::Dashboard needs VITE_API_URL. Set Actions variable DASHBOARD_VITE_API_URL (e.g. https://api.burqan.store) or create packages/dashboard/.env.production on the server — see infra/DEPLOY_VPS.md"

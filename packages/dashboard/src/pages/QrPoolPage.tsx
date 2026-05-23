@@ -7,7 +7,7 @@ import { useClientPagination } from "../hooks/useClientPagination";
 import { useLocale } from "../i18n/LocaleContext";
 import { formatMarketDateTime } from "../utils/formatMarketDateTime";
 import { toastInfo, toastError } from "../lib/toast";
-import { qrPayload } from "../utils/qrPayload";
+import { hasConfiguredQrBaseUrl, qrPayload } from "../utils/qrPayload";
 
 type Item = { id: string; publicToken: string; createdAt: string };
 
@@ -63,7 +63,7 @@ export default function QrPoolPage() {
     }
   }
 
-  const hasBaseUrl = useMemo(() => Boolean(import.meta.env.VITE_QR_PAYLOAD_BASE_URL?.trim()), []);
+  const hasBaseUrl = useMemo(() => hasConfiguredQrBaseUrl(), []);
 
   return (
     <div className="grid">
