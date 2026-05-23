@@ -3,7 +3,8 @@
 ## Install on your phone (latest preview build)
 
 1. Open on the phone (Chrome):  
-   https://expo.dev/accounts/saeedfwaz/projects/mobile/builds/d5db3454-3337-45ae-a5c5-6d5771036c00  
+   https://expo.dev/accounts/saeedfwaz/projects/mobile/builds/01045792-addf-4992-9d53-11afbb4fd5b1  
+   (Fixes Android crash on launch — do not use older builds.)  
 2. Tap **Install** / download the APK, then allow “Install unknown apps” if Android asks.
 3. The app talks to **https://api.burqan.store** (configured in `eas.json` → `preview` profile).
 
