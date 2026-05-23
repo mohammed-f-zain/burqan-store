@@ -4,7 +4,7 @@
   --loyalty: #0d9488;
   --loyalty-soft: rgba(13, 148, 136, 0.12);
   --loyalty-glow: rgba(13, 148, 136, 0.22);
-  --bg: #e8edf7;
+  --bg: #f2f6fc;
   --panel: #ffffff;
   --card: #ffffff;
   --text: #0f172a;
@@ -22,7 +22,8 @@
   color-scheme: light;
   min-height: 100vh;
   min-height: 100dvh;
-  background: radial-gradient(1100px 520px at 85% -5%, rgba(13, 148, 136, 0.1) 0%, var(--bg) 50%);
+  background-color: var(--bg);
+  background-image: linear-gradient(180deg, #ffffff 0%, #fafcfe 22%, var(--bg) 48%);
   font-family: "Tajawal", "Segoe UI", system-ui, sans-serif;
   color: var(--text);
   -webkit-font-smoothing: antialiased;
@@ -31,6 +32,11 @@
 
 html[dir="rtl"] .owner-shell {
   direction: rtl;
+}
+
+/* Prevent admin body gradient from darkening the top on owner pages */
+html[data-theme="light"] body:has(.owner-shell) {
+  background: var(--bg, #f2f6fc);
 }
 
 .owner-header {
@@ -52,15 +58,16 @@ html[dir="rtl"] .owner-shell {
 }
 
 .owner-brand img {
-  height: 64px;
+  height: 88px;
   width: auto;
-  max-width: min(320px, 88vw);
+  max-width: min(380px, 92vw);
+  object-fit: contain;
 }
 
 @media (min-width: 768px) {
   .owner-brand img {
-    height: 80px;
-    max-width: 400px;
+    height: 108px;
+    max-width: 460px;
   }
 }
 
