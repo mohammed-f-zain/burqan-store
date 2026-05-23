@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 
+import LoyaltyBadge from "../components/LoyaltyBadge";
+import LoyaltyIcon from "../components/LoyaltyIcon";
 import { ar } from "../i18n/ar";
 import { mediaUrl } from "../lib/mediaUrl";
 import { useOwnerArabic } from "../owner/useOwnerArabic";
@@ -160,7 +162,11 @@ export default function OwnerOrderDetail() {
                   <div className="owner-line-end">
                     <p className="owner-line-total">{formatMoney(line.lineTotal, o.currency)}</p>
                     {line.loyaltyPointsEarned > 0 ? (
-                      <p className="owner-line-loyalty">{o.loyaltyLinePoints(line.loyaltyPointsEarned)}</p>
+                      <LoyaltyBadge
+                        text={o.loyaltyLinePoints(line.loyaltyPointsEarned)}
+                        variant="inline"
+                        icon="plus"
+                      />
                     ) : null}
                   </div>
                 </li>
@@ -173,8 +179,11 @@ export default function OwnerOrderDetail() {
           </div>
           {(order.loyaltyPointsEarned ?? 0) > 0 ? (
             <div className="owner-detail-sum owner-detail-sum--loyalty">
-              <span>{o.orderLoyaltyTotal}</span>
-              <strong>{o.loyaltyLinePoints(order.loyaltyPointsEarned ?? 0)}</strong>
+              <span className="owner-detail-sum-label">
+                <LoyaltyIcon kind="balance" size={20} />
+                {o.orderLoyaltyTotal}
+              </span>
+              <LoyaltyBadge text={o.loyaltyLinePoints(order.loyaltyPointsEarned ?? 0)} variant="earn" icon="earn" />
             </div>
           ) : null}
         </section>

@@ -469,6 +469,45 @@ button.ghost {
   color: var(--danger);
 }
 
+.dash-kpi--loyalty .dash-kpi-label {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: 6px;
+}
+
+.dash-kpi--loyalty .dash-kpi-value {
+  color: #0d9488;
+}
+
+.dash-kpi-grid--loyalty {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+}
+
+.dash-section--loyalty {
+  margin-top: 20px;
+  padding-top: 4px;
+}
+
+.dash-rank-sub--loyalty {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dash-loyalty-inline {
+  display: inline-flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: 4px;
+  color: #0d9488;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .dash-section {
   margin-top: 22px;
 }

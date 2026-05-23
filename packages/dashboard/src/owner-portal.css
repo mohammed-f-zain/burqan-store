@@ -1,6 +1,9 @@
 /* Store owner public portal — standalone layout (no admin chrome) */
 
 .owner-shell {
+  --loyalty: #0d9488;
+  --loyalty-soft: rgba(13, 148, 136, 0.12);
+  --loyalty-glow: rgba(13, 148, 136, 0.22);
   --bg: #e8edf7;
   --panel: #ffffff;
   --card: #ffffff;
@@ -18,9 +21,12 @@
   --accent-soft: rgba(13, 148, 136, 0.12);
   color-scheme: light;
   min-height: 100vh;
+  min-height: 100dvh;
   background: radial-gradient(1100px 520px at 85% -5%, rgba(13, 148, 136, 0.1) 0%, var(--bg) 50%);
   font-family: "Tajawal", "Segoe UI", system-ui, sans-serif;
   color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  padding-bottom: env(safe-area-inset-bottom, 0);
 }
 
 html[dir="rtl"] .owner-shell {
@@ -33,7 +39,7 @@ html[dir="rtl"] .owner-shell {
   align-items: center;
   justify-content: center;
   gap: 16px;
-  padding: 24px 20px 16px;
+  padding: max(16px, env(safe-area-inset-top, 0)) 16px 16px;
   max-width: 960px;
   margin: 0 auto;
 }
@@ -61,7 +67,7 @@ html[dir="rtl"] .owner-shell {
 .owner-store-hero {
   max-width: 960px;
   margin: 0 auto 8px;
-  padding: 0 20px;
+  padding: 0 max(16px, env(safe-area-inset-right, 0)) 0 max(16px, env(safe-area-inset-left, 0));
 }
 
 .owner-store-card {
@@ -128,15 +134,23 @@ html[dir="rtl"] .owner-shell {
 .owner-tabs {
   display: flex;
   flex-direction: row-reverse;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
   max-width: 960px;
   margin: 16px auto 0;
-  padding: 0 20px;
+  padding: 4px max(16px, env(safe-area-inset-right, 0)) 8px max(16px, env(safe-area-inset-left, 0));
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.owner-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .owner-tab {
-  padding: 10px 18px;
+  flex-shrink: 0;
+  padding: 10px 16px;
   border-radius: 999px;
   border: 1px solid var(--line);
   background: var(--card);
@@ -162,7 +176,8 @@ html[dir="rtl"] .owner-shell {
 .owner-main {
   max-width: 960px;
   margin: 0 auto;
-  padding: 16px 20px 48px;
+  padding: 12px max(16px, env(safe-area-inset-right, 0)) max(32px, env(safe-area-inset-bottom, 0))
+    max(16px, env(safe-area-inset-left, 0));
 }
 
 .owner-stats {
@@ -885,17 +900,155 @@ html[dir="rtl"] .owner-shell {
   color: var(--muted);
 }
 
-.owner-stats--loyalty {
-  grid-template-columns: 1fr 1fr;
+/* —— Loyalty —— */
+.loyalty-icon {
+  flex-shrink: 0;
+  color: var(--loyalty);
 }
 
-.owner-stat--wide {
-  grid-column: 1 / -1;
+.loyalty-badge {
+  display: inline-flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: 6px;
+  color: var(--loyalty);
+  font-weight: 800;
 }
 
-.owner-stat-value--loyalty {
-  color: #0d9488;
-  font-size: 1.75rem;
+.loyalty-badge--inline {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--loyalty-soft);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.loyalty-badge--pill {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--loyalty-soft);
+  font-size: 0.88rem;
+}
+
+.loyalty-badge--earn {
+  padding: 8px 14px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--loyalty-soft), rgba(2, 132, 199, 0.1));
+  font-size: 1rem;
+}
+
+.loyalty-badge__text {
+  line-height: 1.2;
+}
+
+.section-title-icon {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px;
+  font-size: 1rem;
+  font-weight: 800;
+  text-align: right;
+  line-height: 1.35;
+}
+
+.section-title-icon__glyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: var(--loyalty-soft);
+  color: var(--loyalty);
+  flex-shrink: 0;
+}
+
+.owner-loyalty-panel {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+@media (min-width: 480px) {
+  .owner-loyalty-panel {
+    grid-template-columns: 1.2fr 1fr;
+  }
+}
+
+.owner-loyalty-card {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 16px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-card);
+  min-width: 0;
+}
+
+.owner-loyalty-card--balance {
+  background: linear-gradient(135deg, #f0fdfa 0%, #ffffff 55%);
+  border-color: rgba(13, 148, 136, 0.35);
+}
+
+@media (min-width: 480px) {
+  .owner-loyalty-card--balance {
+    grid-column: 1 / -1;
+    flex-direction: row-reverse;
+    padding: 20px 18px;
+  }
+}
+
+.owner-loyalty-card--month {
+  background: var(--card);
+}
+
+.owner-loyalty-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  background: var(--loyalty-soft);
+  color: var(--loyalty);
+  flex-shrink: 0;
+}
+
+.owner-loyalty-card--balance .owner-loyalty-card-icon {
+  width: 56px;
+  height: 56px;
+  box-shadow: 0 8px 20px var(--loyalty-glow);
+}
+
+.owner-loyalty-card-body {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+}
+
+.owner-loyalty-card-label {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.owner-loyalty-card-value {
+  margin: 4px 0 0;
+  font-size: clamp(1.35rem, 5vw, 1.85rem);
+  font-weight: 800;
+  color: var(--loyalty);
+  line-height: 1.2;
+  word-break: break-word;
+}
+
+.owner-loyalty-card-value--sm {
+  font-size: clamp(1.15rem, 4.5vw, 1.45rem);
 }
 
 .owner-loyalty-list {
@@ -912,11 +1065,23 @@ html[dir="rtl"] .owner-shell {
   flex-direction: row-reverse;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 14px 16px;
+  gap: 10px;
+  padding: 14px 12px;
   border-radius: 14px;
-  background: var(--card);
+  background: var(--surface);
   border: 1px solid var(--line);
+}
+
+.owner-loyalty-item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: var(--loyalty-soft);
+  color: var(--loyalty);
+  flex-shrink: 0;
 }
 
 .owner-loyalty-main {
@@ -938,18 +1103,8 @@ html[dir="rtl"] .owner-shell {
   color: var(--muted);
 }
 
-.owner-loyalty-points {
-  font-weight: 800;
-  font-size: 1rem;
-  color: #0d9488;
-  white-space: nowrap;
-}
-
-.owner-product-loyalty {
-  margin: 6px 0 0;
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: #0d9488;
+.owner-product .loyalty-badge {
+  margin-top: 8px;
 }
 
 .owner-line-end {
@@ -957,16 +1112,103 @@ html[dir="rtl"] .owner-shell {
   flex-shrink: 0;
 }
 
-.owner-line-loyalty {
-  margin: 4px 0 0;
-  font-size: 0.8rem;
-  font-weight: 700;
-  color: #0d9488;
-  text-align: left;
+.owner-detail-sum--loyalty {
+  flex-wrap: wrap;
+  gap: 10px;
+  background: linear-gradient(135deg, #f0fdfa, var(--card));
+  border: 1px solid rgba(13, 148, 136, 0.25);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-top: 10px;
 }
 
-.owner-detail-sum--loyalty strong {
-  color: #0d9488;
+.owner-detail-sum-label {
+  display: inline-flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+/* —— Mobile polish —— */
+@media (max-width: 420px) {
+  .owner-store-card {
+    flex-direction: column;
+    text-align: center;
+    padding: 18px 14px;
+  }
+
+  .owner-store-meta {
+    text-align: center;
+  }
+
+  .owner-stat {
+    padding: 14px 12px;
+  }
+
+  .owner-stat-value {
+    font-size: clamp(1.1rem, 4.5vw, 1.35rem);
+  }
+
+  .owner-stat-value--accent,
+  .owner-stat-value--danger {
+    font-size: clamp(1rem, 4vw, 1.25rem);
+  }
+
+  .owner-order-card-top {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .owner-order-amount {
+    white-space: normal;
+    text-align: right;
+  }
+
+  .owner-loyalty-item {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .owner-loyalty-item .loyalty-badge {
+    width: 100%;
+    justify-content: center;
+    margin-top: 4px;
+  }
+
+  .owner-line-item {
+    flex-wrap: wrap;
+  }
+
+  .owner-line-end {
+    width: 100%;
+    display: flex;
+    justify-content: flex-start;
+    margin-top: 8px;
+  }
+
+  .owner-products-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .owner-product-img,
+  .owner-product-img--empty {
+    aspect-ratio: 4 / 3;
+  }
+}
+
+@media (max-width: 360px) {
+  .owner-tab {
+    padding: 9px 12px;
+    font-size: 0.82rem;
+  }
+
+  .owner-loyalty-card-icon {
+    width: 46px;
+    height: 46px;
+  }
 }
 
 .owner-empty {

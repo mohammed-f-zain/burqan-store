@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { api } from "../api";
+import LoyaltyIcon from "../components/LoyaltyIcon";
+import SectionTitleWithIcon from "../components/SectionTitleWithIcon";
 import { useAuth } from "../auth/AuthContext";
 import { useLocale } from "../i18n/LocaleContext";
 import { mediaUrl } from "../lib/mediaUrl";
@@ -273,15 +275,23 @@ export default function OverviewPage() {
 
               {!hasAnalyticsData && <p className="muted">{t.overview.noAnalytics}</p>}
 
-              <section className="dash-section">
-                <h4 className="dash-section-title">{t.overview.loyaltyTitle}</h4>
-                <div className="dash-kpi-grid" style={{ marginBottom: 12 }}>
-                  <div className="dash-kpi dash-kpi--accent">
-                    <div className="dash-kpi-label">{t.overview.loyaltyTotalIssued}</div>
+              <section className="dash-section dash-section--loyalty">
+                <SectionTitleWithIcon icon={<LoyaltyIcon kind="balance" size={22} />} className="dash-section-title">
+                  {t.overview.loyaltyTitle}
+                </SectionTitleWithIcon>
+                <div className="dash-kpi-grid dash-kpi-grid--loyalty" style={{ marginBottom: 12 }}>
+                  <div className="dash-kpi dash-kpi--accent dash-kpi--loyalty">
+                    <div className="dash-kpi-label">
+                      <LoyaltyIcon kind="balance" size={18} />
+                      {t.overview.loyaltyTotalIssued}
+                    </div>
                     <div className="dash-kpi-value">{t.overview.loyaltyPoints(analytics.loyalty.totalPointsIssued)}</div>
                   </div>
-                  <div className="dash-kpi">
-                    <div className="dash-kpi-label">{t.overview.loyaltyMonthEarned}</div>
+                  <div className="dash-kpi dash-kpi--loyalty">
+                    <div className="dash-kpi-label">
+                      <LoyaltyIcon kind="earn" size={18} />
+                      {t.overview.loyaltyMonthEarned}
+                    </div>
                     <div className="dash-kpi-value">{t.overview.loyaltyPoints(analytics.loyalty.monthPointsEarned)}</div>
                   </div>
                 </div>
@@ -294,8 +304,12 @@ export default function OverviewPage() {
                           <Link to={`/app/stores/${s.storeId}`} className="dash-rank-name linkish">
                             {s.name}
                           </Link>
-                          <div className="dash-rank-sub">
-                            {s.areaName} · {t.overview.loyaltyPoints(s.balance)}
+                          <div className="dash-rank-sub dash-rank-sub--loyalty">
+                            <span>{s.areaName}</span>
+                            <span className="dash-loyalty-inline">
+                              <LoyaltyIcon kind="star" size={16} />
+                              {t.overview.loyaltyPoints(s.balance)}
+                            </span>
                           </div>
                         </div>
                       </li>

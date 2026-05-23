@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
+import LoyaltyBadge from "../components/LoyaltyBadge";
+import LoyaltyIcon from "../components/LoyaltyIcon";
+import SectionTitleWithIcon from "../components/SectionTitleWithIcon";
 import { mediaUrl } from "../lib/mediaUrl";
 import { openOwnerOrder, ownerFormatMoney } from "../owner/ownerFormat";
 import { useOwnerArabic } from "../owner/useOwnerArabic";
@@ -210,20 +213,28 @@ export default function OwnerPortal() {
               </div>
             </div>
 
-            <div className="owner-stats owner-stats--loyalty" style={{ marginTop: 12 }}>
-              <div className="owner-stat owner-stat--wide">
-                <div className="owner-stat-label">{t.owner.loyaltyBalance}</div>
-                <div className="owner-stat-value owner-stat-value--loyalty">
-                  {t.owner.loyaltyPoints(data.loyalty.balance)}
+            <section className="owner-loyalty-panel" aria-label={t.owner.loyaltyBalance}>
+              <div className="owner-loyalty-card owner-loyalty-card--balance">
+                <div className="owner-loyalty-card-icon" aria-hidden>
+                  <LoyaltyIcon kind="balance" size={32} />
+                </div>
+                <div className="owner-loyalty-card-body">
+                  <p className="owner-loyalty-card-label">{t.owner.loyaltyBalance}</p>
+                  <p className="owner-loyalty-card-value">{t.owner.loyaltyPoints(data.loyalty.balance)}</p>
                 </div>
               </div>
-              <div className="owner-stat">
-                <div className="owner-stat-label">{t.owner.loyaltyMonthEarned}</div>
-                <div className="owner-stat-value owner-stat-value--accent">
-                  {t.owner.loyaltyPoints(data.loyalty.monthPointsEarned)}
+              <div className="owner-loyalty-card owner-loyalty-card--month">
+                <div className="owner-loyalty-card-icon" aria-hidden>
+                  <LoyaltyIcon kind="earn" size={28} />
+                </div>
+                <div className="owner-loyalty-card-body">
+                  <p className="owner-loyalty-card-label">{t.owner.loyaltyMonthEarned}</p>
+                  <p className="owner-loyalty-card-value owner-loyalty-card-value--sm">
+                    {t.owner.loyaltyPoints(data.loyalty.monthPointsEarned)}
+                  </p>
                 </div>
               </div>
-            </div>
+            </section>
 
             <div className="owner-stats" style={{ marginTop: 12 }}>
               <div className="owner-stat">
@@ -248,17 +259,22 @@ export default function OwnerPortal() {
 
             {data.loyaltyRecent.length > 0 && (
               <section className="owner-section">
-                <h2 className="owner-section-title">{t.owner.loyaltyRecentTitle}</h2>
+                <SectionTitleWithIcon icon={<LoyaltyIcon kind="earn" size={22} />} className="owner-section-title">
+                  {t.owner.loyaltyRecentTitle}
+                </SectionTitleWithIcon>
                 <ul className="owner-loyalty-list">
                   {data.loyaltyRecent.map((row, i) => (
                     <li key={`${row.orderId}-${i}`} className="owner-loyalty-item">
+                      <span className="owner-loyalty-item-icon" aria-hidden>
+                        <LoyaltyIcon kind="plus" size={20} />
+                      </span>
                       <div className="owner-loyalty-main">
                         <span className="owner-loyalty-product">{row.productName}</span>
                         <span className="owner-loyalty-meta">
                           {t.owner.lineQty(row.quantity)} · {formatMarketDateTime(row.createdAt, "ar")}
                         </span>
                       </div>
-                      <span className="owner-loyalty-points">{t.owner.loyaltyLinePoints(row.points)}</span>
+                      <LoyaltyBadge text={t.owner.loyaltyLinePoints(row.points)} variant="inline" icon="star" />
                     </li>
                   ))}
                 </ul>
@@ -377,7 +393,11 @@ export default function OwnerPortal() {
                         <h3 className="owner-product-name">{p.name}</h3>
                         <p className="owner-product-price">{ownerFormatMoney(parseFloat(p.price), t.owner.currency)}</p>
                         {p.loyalty_points_per_unit > 0 ? (
-                          <p className="owner-product-loyalty">{t.owner.loyaltyPerUnit(p.loyalty_points_per_unit)}</p>
+                          <LoyaltyBadge
+                            text={t.owner.loyaltyPerUnit(p.loyalty_points_per_unit)}
+                            variant="inline"
+                            icon="star"
+                          />
                         ) : null}
                         {p.designation ? <p className="owner-product-desc">{p.designation}</p> : null}
                         {p.unit_label ? <p className="owner-product-desc">{p.unit_label}</p> : null}
