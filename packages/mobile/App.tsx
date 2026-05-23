@@ -5,6 +5,7 @@ import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Image,
   KeyboardAvoidingView,
   Linking,
@@ -128,6 +129,12 @@ const t = {
   stock: "المتوفر",
   tooFar: "أنت بعيد عن المتجر. اقترب إلى أقل من 100 متر.",
   noImage: "لا صورة",
+  visitEndTitle: "إنهاء الزيارة؟",
+  visitEndMessage: "هل تريد إغلاق جلسة هذا المتجر والعودة للرئيسية؟",
+  visitEndMessageCart: (n: number) => `لديك ${n} منتج في السلة. يمكنك إتمام الطلب أو إنهاء الزيارة.`,
+  visitEndStay: "متابعة الزيارة",
+  visitEndGoCart: "الذهاب إلى السلة",
+  visitEndConfirm: "إنهاء الزيارة",
 } as const;
 
 function formatPaymentType(type: string): string {
@@ -575,6 +582,36 @@ export default function App() {
     [cart]
   );
 
+  const endStoreSession = useCallback(() => {
+    setActiveStore(null);
+    setCart({});
+    setMode("home");
+  }, []);
+
+  const promptEndVisit = useCallback(
+    (onEnd: () => void) => {
+      const message = cartItemCount > 0 ? t.visitEndMessageCart(cartItemCount) : t.visitEndMessage;
+      const buttons: {
+        text: string;
+        style?: "default" | "cancel" | "destructive";
+        onPress?: () => void;
+      }[] = [{ text: t.visitEndStay, style: "cancel" }];
+      if (cartItemCount > 0) {
+        buttons.push({
+          text: t.visitEndGoCart,
+          onPress: () => {
+            setBottomTab("home");
+            setMode("store");
+            setStoreTab("sell");
+          },
+        });
+      }
+      buttons.push({ text: t.visitEndConfirm, style: "destructive", onPress: onEnd });
+      Alert.alert(t.visitEndTitle, message, buttons, { cancelable: true });
+    },
+    [cartItemCount]
+  );
+
   const cartLines = useMemo(() => {
     return Object.entries(cart)
       .filter(([, q]) => q > 0)
@@ -742,13 +779,7 @@ export default function App() {
         <View style={styles.card}>
           <View style={styles.rowBetween}>
             <Text style={styles.cardTitle}>{activeStore.name}</Text>
-            <Pressable
-              onPress={() => {
-                setActiveStore(null);
-                setCart({});
-                setMode("home");
-              }}
-            >
+            <Pressable onPress={() => promptEndVisit(endStoreSession)}>
               <Text style={styles.link}>{t.close}</Text>
             </Pressable>
           </View>
