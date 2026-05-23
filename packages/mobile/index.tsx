@@ -1,11 +1,10 @@
 import { registerRootComponent } from "expo";
-import { I18nManager } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import App from "./App";
 
-I18nManager.allowRTL(true);
-I18nManager.forceRTL(true);
+// Do not call I18nManager.forceRTL at startup — it crashes many Android release builds.
+// The UI is already RTL via styles (row-reverse, textAlign right).
 
 function Root() {
   return (
