@@ -15,7 +15,8 @@ import OrderDetailPage from "./pages/OrderDetailPage";
 import OrdersPage from "./pages/OrdersPage";
 import OverviewPage from "./pages/OverviewPage";
 import ProductsPage from "./pages/ProductsPage";
-import PublicOwner from "./pages/PublicOwner";
+import OwnerPortal from "./pages/OwnerPortal";
+import PublicQrRedirect from "./pages/PublicQrRedirect";
 import QrPoolPage from "./pages/QrPoolPage";
 import FillCarPage from "./pages/FillCarPage";
 import RepresentativesPage from "./pages/RepresentativesPage";
@@ -30,7 +31,8 @@ export default function App() {
         <AuthProvider>
           <div className="app-shell">
             <Routes>
-              <Route path="/owner" element={<PublicOwner />} />
+              <Route path="/r/:token" element={<PublicQrRedirect />} />
+              <Route path="/owner" element={<OwnerPortal />} />
               <Route path="/login" element={<Login />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />

@@ -149,7 +149,7 @@ router.get("/qr/:token", repAuthMiddleware, async (req, res, next) => {
       [token]
     );
     const row = rows[0];
-    if (!row) throw new HttpError(404, "Unknown QR code");
+    if (!row) throw new HttpError(404, "رمز QR غير معروف");
     if (!row.store_id) {
       return res.json({
         status: "unassigned",
@@ -189,8 +189,8 @@ async function loadStoreForRep(storeId: number, rep: { areaIds: number[] }) {
     [storeId]
   );
   const s = rows[0];
-  if (!s) throw new HttpError(404, "Store not found");
-  if (!rep.areaIds.includes(s.area_id)) throw new HttpError(403, "Store not in your areas");
+  if (!s) throw new HttpError(404, "المتجر غير موجود");
+  if (!rep.areaIds.includes(s.area_id)) throw new HttpError(403, "المتجر ليس ضمن مناطقك");
   const ownerPortalUrl = `${config.ownerPortalBaseUrl}/owner?t=${encodeURIComponent(s.owner_portal_token)}`;
   return {
     id: s.id,
@@ -228,7 +228,7 @@ router.post("/stores/register", repAuthMiddleware, async (req, res, next) => {
       const resolved = await resolveAreaIdForRep(body.locationLat, body.locationLng, rep.areaIds);
       areaId = resolved.areaId;
     }
-    if (!rep.areaIds.includes(areaId)) throw new HttpError(403, "Area not assigned to you");
+    if (!rep.areaIds.includes(areaId)) throw new HttpError(403, "المنطقة غير مخصصة لك");
 
     const c = await pool.connect();
     try {
@@ -240,7 +240,7 @@ router.post("/stores/register", repAuthMiddleware, async (req, res, next) => {
          FOR UPDATE`,
         [body.qrPublicToken]
       );
-      if (!qr.rows[0]) throw new HttpError(409, "QR already used or invalid");
+      if (!qr.rows[0]) throw new HttpError(409, "رمز QR مستخدم مسبقاً أو غير صالح");
 
       const ownerToken = randomBytes(24).toString("hex");
       const ins = await c.query<{ id: number }>(
@@ -378,8 +378,8 @@ async function loadStoreRowForRep(storeId: number, rep: { areaIds: number[] }) {
     storeId,
   ]);
   const s = rows[0];
-  if (!s) throw new HttpError(404, "Store not found");
-  if (!rep.areaIds.includes(s.area_id)) throw new HttpError(403, "Store not in your areas");
+  if (!s) throw new HttpError(404, "المتجر غير موجود");
+  if (!rep.areaIds.includes(s.area_id)) throw new HttpError(403, "المتجر ليس ضمن مناطقك");
   return s;
 }
 
@@ -391,7 +391,7 @@ router.post("/orders", repAuthMiddleware, async (req, res, next) => {
     assertWithinScanDistance(body.repLat, body.repLng, storeRow.location_lat, storeRow.location_lng);
     const store = await loadStoreForRep(body.storeId, rep);
     if (body.paymentType === "deferred" && !store.deferredPaymentEnabled) {
-      throw new HttpError(403, "Deferred payments not enabled for this store");
+      throw new HttpError(403, "البيع الآجل غير مفعّل لهذا المتجر");
     }
 
     const c = await pool.connect();
@@ -405,7 +405,7 @@ router.post("/orders", repAuthMiddleware, async (req, res, next) => {
           [line.productId]
         );
         const p = pr.rows[0];
-        if (!p?.is_active) throw new HttpError(400, "Invalid product");
+        if (!p?.is_active) throw new HttpError(400, "منتج غير صالح");
         const inv = await c.query<{ quantity: number }>(
           `SELECT quantity FROM representative_inventory
            WHERE representative_id = $1 AND product_id = $2

@@ -23,29 +23,28 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { formatMarketDateTime } from "./formatMarketDateTime";
 import { getRepPosition, LocationDeniedError } from "./getDeviceLocation";
 import { resolveApiBase } from "./resolveApiBase";
+import { toArabicUserMessage } from "./arabicMessage";
+import ProductDetailModal, { type Product } from "./ProductDetailModal";
+import ProductGridCard from "./ProductGridCard";
+import { productImageUrl } from "./productImage";
+import ToastOverlay, { type ToastKind } from "./ToastOverlay";
+import { theme } from "./theme";
 
 const API_BASE = resolveApiBase();
 
 const t = {
   appTitle: "برقان — المندوب",
-  loginSub:
-    "في وضع التطوير يُستخرج عنوان الـ API تلقائياً من اتصال Expo (نفس جهازك الذي يشغّل Metro). تأكد أن خادم الـ API يعمل على المنفذ 4000. للنفق (tunnel) أو خادم بعيد: عيّن EXPO_PUBLIC_API_URL و EXPO_PUBLIC_API_FORCE_ENV=1 في .env",
-  loginSubProd: "الاتصال بخادم برقان (api.burqan.store).",
   networkFailed:
     "تعذّر الاتصال بالخادم. تحقق: 1) تشغيل الـ API على هذا الجهاز (npm run api:dev) والمنفذ 4000. 2) الهاتف والكمبيوتر على نفس الـ Wi‑Fi. 3) جدار ناري macOS يسمح لـ Node بالاتصال الوارد. 4) مع tunnel استخدم EXPO_PUBLIC_API_URL الصحيح مع FORCE_ENV=1.",
   email: "البريد",
   password: "كلمة المرور",
   signIn: "دخول",
   signOut: "خروج",
-  scanTitle: "مسح أو إدخال رمز البطاقة",
-  openScanner: "فتح الكاميرا للمسح",
-  manualLabel: "رمز يدوي (من البطاقة المطبوعة)",
-  lookup: "بحث عن الرمز",
-  resume: "متابعة:",
-  resumeHint: "اضغط لفتح مساحة المتجر",
+  openScanner: "مسح الرمز",
+  manualToken: "رمز البطاقة",
+  lookup: "تأكيد",
   close: "إغلاق",
   registerStore: "تسجيل متجر جديد",
-  tokenPreview: "الرمز:",
   area: "المنطقة",
   storeName: "اسم المتجر",
   storePhone: "هاتف المتجر",
@@ -58,23 +57,21 @@ const t = {
   cancel: "إلغاء",
   saveStore: "حفظ المتجر",
   back: "رجوع",
-  deferred: "البيع الآجل:",
-  deferredOn: "مسموح",
-  deferredOff: "غير مسموح",
-  owner: "الصاحب:",
+  deferredOn: "آجل",
+  deferredOff: "نقدي فقط",
+  tabProducts: "المنتجات",
   tabInfo: "معلومات",
   tabVisits: "زيارات",
   tabOrders: "طلبات",
-  tabSell: "بيع",
-  phone: "الهاتف:",
-  location: "الموقع:",
-  ownerLink: "رابط صاحب المتجر:",
-  visitNote: "ملاحظة الزيارة (اختياري)",
-  visitPlaceholder: "مثال: توريد رفوف",
+  tabSell: "السلة",
+  priceLabel: "السعر",
+  unit: "الوحدة",
+  description: "الوصف",
+  inCart: "في السلة",
+  phone: "الهاتف",
+  location: "الموقع",
+  visitPlaceholder: "ملاحظة",
   recordVisit: "تسجيل زيارة",
-  noVisits: "لا زيارات بعد.",
-  noOrders: "لا طلبات بعد.",
-  sellHint: "اضغط + / − لبناء السلة. الأسعار من الكتالوج.",
   payment: "الدفع",
   cash: "نقدي",
   deferredPay: "آجل",
@@ -91,13 +88,13 @@ const t = {
   cameraMountError: "تعذّر تشغيل الكاميرا:",
   openSettings: "فتح إعدادات التطبيق",
   loginFailed: "فشل الدخول",
+  genericError: "حدث خطأ. حاول مرة أخرى.",
   qrFailed: "فشل البحث عن الرمز",
   uploadFailed: "فشل رفع الصورة",
   registerFailed: "فشل التسجيل",
   cancelled: "أُلغي",
   storeCreated: (id: number) => `تم إنشاء المتجر #${id}.`,
   currency: "د.أ",
-  dismissMessage: "اضغط لإخفاء الرسالة",
   locationDenied: "يلزم تفعيل الموقع للمسح وتسجيل المتاجر.",
   locating: "جاري تحديد موقعك…",
   areaAuto: "المنطقة (تلقائي من الخريطة)",
@@ -105,23 +102,22 @@ const t = {
   refreshLocation: "تحديث الموقع",
   navHome: "الرئيسية",
   navInventory: "مخزون السيارة",
-  navStore: "المتجر",
-  storeTabLockedTitle: "لم يُختر متجر بعد",
-  storeTabLockedHint: "امسح رمز QR للمتجر من تبويب الرئيسية أو أدخل الرمز يدوياً، ثم يُفعَّل تبويب المتجر.",
-  storeTabGoScan: "الذهاب للمسح",
+  navStore: "المنتجات",
+  productsBadge: (n: number) => String(n),
   inventoryTitle: "مخزون السيارة",
-  inventoryEmpty: "لا منتجات في السيارة. يحدّثها المشرف من لوحة التحكم (تعبئة السيارة).",
-  sellEmpty: "لا يوجد مخزون في السيارة للبيع في هذا المتجر.",
+  inventoryEmpty: "لا منتجات",
+  sellEmpty: "لا مخزون",
+  emptyVisits: "لا زيارات",
+  emptyOrders: "لا طلبات",
   stock: "المتوفر",
   tooFar: "أنت بعيد عن المتجر. اقترب إلى أقل من 100 متر.",
   noImage: "لا صورة",
 } as const;
 
-function productImageUrl(path: string | null | undefined): string | undefined {
-  if (!path) return undefined;
-  if (/^https?:\/\//i.test(path)) return path;
-  const base = API_BASE.replace(/\/$/, "");
-  return `${base}${path.startsWith("/") ? path : `/${path}`}`;
+function formatPaymentType(type: string): string {
+  if (type === "cash") return t.cash;
+  if (type === "deferred") return t.deferredPay;
+  return type;
 }
 
 function mapProductRow(r: {
@@ -153,15 +149,6 @@ type StoreBrief = {
   location: { lat: number; lng: number };
   deferredPaymentEnabled: boolean;
   ownerPortalUrl?: string;
-};
-type Product = {
-  id: number;
-  name: string;
-  price: string;
-  designation?: string | null;
-  unit_label?: string | null;
-  image_url?: string | null;
-  quantity: number;
 };
 type BottomTab = "home" | "inventory" | "store";
 type RepOrderRow = { id: string; payment_type: string; total_amount: string; created_at: string };
@@ -195,7 +182,20 @@ export default function App() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ text: string; kind: ToastKind } | null>(null);
+
+  const showToast = useCallback((text: string, kind: ToastKind = "info") => {
+    setToast({ text: toArabicUserMessage(text, t.genericError), kind });
+  }, []);
+
+  const hideToast = useCallback(() => setToast(null), []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const ms = toast.kind === "error" ? 5500 : 4000;
+    const id = setTimeout(() => setToast(null), ms);
+    return () => clearTimeout(id);
+  }, [toast]);
 
   const [mode, setMode] = useState<"home" | "scan" | "register" | "store">("home");
   const [permission, requestPermission] = useCameraPermissions();
@@ -232,6 +232,8 @@ export default function App() {
   const [areas, setAreas] = useState<Area[]>([]);
   const [activeStore, setActiveStore] = useState<StoreBrief | null>(null);
   const [storeTab, setStoreTab] = useState<"info" | "visits" | "orders" | "sell">("info");
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const productCardWidth = Math.floor((winW - 22 * 2 - 16 - 12) / 2);
   const [visits, setVisits] = useState<{ id: string; visited_at: string; note: string | null }[]>([]);
   const [orders, setOrders] = useState<unknown[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -275,7 +277,7 @@ export default function App() {
 
   async function login() {
     setBusy(true);
-    setMessage(null);
+    hideToast();
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 18_000);
     try {
@@ -303,7 +305,7 @@ export default function App() {
         msg === "Network request failed" ||
         msg === "Network Request Failed" ||
         msg.toLowerCase().includes("network request");
-      setMessage(isNetwork ? `${t.networkFailed}\n(${aborted ? "timeout" : msg})` : msg || t.loginFailed);
+      showToast(isNetwork ? t.networkFailed : toArabicUserMessage(msg, t.loginFailed), "error");
     } finally {
       clearTimeout(timer);
       setBusy(false);
@@ -326,7 +328,7 @@ export default function App() {
     const trimmed = raw.trim();
     if (!trimmed) return;
     setBusy(true);
-    setMessage(null);
+    hideToast();
     try {
       const pos = await getRepPosition();
       const data = await apiGet(
@@ -340,13 +342,13 @@ export default function App() {
       } else {
         setActiveStore(data.store as StoreBrief);
         setMode("store");
-        setBottomTab("store");
+        setBottomTab("home");
         setStoreTab("info");
         await refreshStoreData(data.store.id);
       }
     } catch (e) {
-      if (e instanceof LocationDeniedError) setMessage(t.locationDenied);
-      else setMessage(e instanceof Error ? e.message : t.qrFailed);
+      if (e instanceof LocationDeniedError) showToast(t.locationDenied, "error");
+      else showToast(e instanceof Error ? e.message : t.qrFailed, "error");
     } finally {
       setBusy(false);
     }
@@ -354,11 +356,11 @@ export default function App() {
 
   /** Uses Apple/Google system QR UI when available (reliable on iPhone); otherwise opens in-app camera modal. */
   async function openQrScanner() {
-    setMessage(null);
+    hideToast();
     if (!permission?.granted) {
       const r = await requestPermission();
       if (!r.granted) {
-        setMessage(t.cameraDenied);
+        showToast(t.cameraDenied, "error");
         return;
       }
       setScanPermissionOverride(true);
@@ -383,7 +385,7 @@ export default function App() {
       void CameraView.launchScanner({ barcodeTypes: ["qr"] }).catch((e) => {
         if (modernBarcodeSubRef.current === sub) modernBarcodeSubRef.current = null;
         sub.remove();
-        setMessage(e instanceof Error ? e.message : String(e));
+        showToast(e instanceof Error ? e.message : String(e), "error");
       });
       return;
     }
@@ -434,6 +436,10 @@ export default function App() {
     if (token) void loadInventory();
   }, [token, loadInventory]);
 
+  useEffect(() => {
+    if (token && bottomTab === "store") void loadInventory();
+  }, [token, bottomTab, loadInventory]);
+
   async function logVisit() {
     if (!activeStore) return;
     setBusy(true);
@@ -446,11 +452,11 @@ export default function App() {
         repLng: pos.lng,
       });
       setVisitNote("");
-      setMessage(t.visitRecorded);
+      showToast(t.visitRecorded, "success");
       await refreshStoreData(activeStore.id);
     } catch (e) {
-      if (e instanceof LocationDeniedError) setMessage(t.locationDenied);
-      else setMessage(e instanceof Error ? e.message : t.visitFailed);
+      if (e instanceof LocationDeniedError) showToast(t.locationDenied, "error");
+      else showToast(e instanceof Error ? e.message : t.visitFailed, "error");
     } finally {
       setBusy(false);
     }
@@ -462,7 +468,7 @@ export default function App() {
       .filter(([, q]) => q > 0)
       .map(([productId, quantity]) => ({ productId: parseInt(productId, 10), quantity }));
     if (!lines.length) {
-      setMessage(t.addToCart);
+      showToast(t.addToCart, "info");
       return;
     }
     setBusy(true);
@@ -476,12 +482,12 @@ export default function App() {
         repLng: pos.lng,
       });
       setCart({});
-      setMessage(t.orderSaved);
+      showToast(t.orderSaved, "success");
       await refreshStoreData(activeStore.id);
       setStoreTab("orders");
     } catch (e) {
-      if (e instanceof LocationDeniedError) setMessage(t.locationDenied);
-      else setMessage(e instanceof Error ? e.message : t.orderFailed);
+      if (e instanceof LocationDeniedError) showToast(t.locationDenied, "error");
+      else showToast(e instanceof Error ? e.message : t.orderFailed, "error");
     } finally {
       setBusy(false);
     }
@@ -505,6 +511,35 @@ export default function App() {
     sell: t.tabSell,
   };
 
+  const cartItemCount = useMemo(
+    () => Object.values(cart).reduce((sum, q) => sum + q, 0),
+    [cart]
+  );
+
+  const cartLines = useMemo(() => {
+    return Object.entries(cart)
+      .filter(([, q]) => q > 0)
+      .map(([pid, q]) => {
+        const p = products.find((x) => x.id === parseInt(pid, 10));
+        return p ? { product: p, qty: q } : null;
+      })
+      .filter((x): x is { product: Product; qty: number } => x != null);
+  }, [cart, products]);
+
+  const productDetailLabels = useMemo(
+    () => ({
+      close: t.close,
+      priceLabel: t.priceLabel,
+      unit: t.unit,
+      stock: t.stock,
+      description: t.description,
+      noImage: t.noImage,
+      currency: t.currency,
+      inCart: t.inCart,
+    }),
+    []
+  );
+
   if (!token) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: bg }} edges={["top", "bottom", "left", "right"]}>
@@ -513,23 +548,16 @@ export default function App() {
             <StatusBar style="dark" />
             <Image source={require("./assets/burqanlogo.png")} style={styles.logo} resizeMode="contain" />
             <Text style={styles.title}>{t.appTitle}</Text>
-            <Text style={styles.sub}>{__DEV__ ? t.loginSub : t.loginSubProd}</Text>
-            <Text style={[styles.muted, { fontSize: 11, marginTop: 6, textAlign: "center" }]} selectable>
-              API: {API_BASE}
-            </Text>
-            <TextInput style={styles.input} autoCapitalize="none" value={email} onChangeText={setEmail} placeholder={t.email} />
-            <TextInput style={styles.input} secureTextEntry value={password} onChangeText={setPassword} placeholder={t.password} />
-            <Pressable style={styles.primary} onPress={login} disabled={busy}>
-              {busy ? <ActivityIndicator color="#04121a" /> : <Text style={styles.primaryText}>{t.signIn}</Text>}
+            <View style={styles.loginCard}>
+            <TextInput style={styles.input} autoCapitalize="none" value={email} onChangeText={setEmail} placeholder={t.email} placeholderTextColor={muted} />
+            <TextInput style={styles.input} secureTextEntry value={password} onChangeText={setPassword} placeholder={t.password} placeholderTextColor={muted} />
+            <Pressable style={[styles.primary, styles.primaryLg]} onPress={login} disabled={busy}>
+              {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>{t.signIn}</Text>}
             </Pressable>
-            {message ? (
-              <Pressable onPress={() => setMessage(null)} style={styles.messageDismiss}>
-                <Text style={styles.error}>{message}</Text>
-                <Text style={styles.dismissHint}>{t.dismissMessage}</Text>
-              </Pressable>
-            ) : null}
+            </View>
           </View>
         </KeyboardAvoidingView>
+        {toast ? <ToastOverlay text={toast.text} kind={toast.kind} onDismiss={hideToast} /> : null}
       </SafeAreaView>
     );
   }
@@ -545,6 +573,20 @@ export default function App() {
           refreshControl={
             mode === "home" ? (
               <RefreshControl refreshing={homeRefreshing} onRefresh={onHomeRefresh} tintColor={accent} colors={[accent]} />
+            ) : bottomTab === "store" ? (
+              <RefreshControl
+                refreshing={storeRefreshing}
+                onRefresh={async () => {
+                  setStoreRefreshing(true);
+                  try {
+                    await loadInventory();
+                  } finally {
+                    setStoreRefreshing(false);
+                  }
+                }}
+                tintColor={accent}
+                colors={[accent]}
+              />
             ) : mode === "store" && activeStore ? (
               <RefreshControl
                 refreshing={storeRefreshing}
@@ -564,7 +606,7 @@ export default function App() {
         >
           <View style={styles.header}>
             <Image source={require("./assets/burqanlogo.png")} style={styles.logoHeader} resizeMode="contain" />
-            <Pressable
+            <Pressable style={styles.signOutBtn}
               onPress={() => {
                 modernBarcodeSubRef.current?.remove();
                 modernBarcodeSubRef.current = null;
@@ -572,139 +614,99 @@ export default function App() {
                 setActiveStore(null);
                 setMode("home");
                 setBottomTab("home");
-                setMessage(null);
+                hideToast();
               }}
             >
-              <Text style={styles.link}>{t.signOut}</Text>
+              <Text style={styles.signOutText}>{t.signOut}</Text>
             </Pressable>
           </View>
 
-      {bottomTab === "home" && mode !== "store" && (
+      {bottomTab === "home" && mode !== "store" && mode !== "register" && (
         <>
-          {mode !== "register" && (
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>{t.scanTitle}</Text>
-              <Pressable style={styles.secondary} onPress={() => void openQrScanner()}>
-                <Text style={styles.secondaryText}>{t.openScanner}</Text>
-              </Pressable>
-              <Text style={styles.label}>{t.manualLabel}</Text>
-              <TextInput style={styles.input} value={manualToken} onChangeText={setManualToken} autoCapitalize="none" />
-              <Pressable style={styles.primary} onPress={() => void resolveQr(manualToken)}>
-                <Text style={styles.primaryText}>{t.lookup}</Text>
-              </Pressable>
-            </View>
-          )}
-
-          {activeStore && mode === "home" && (
-            <Pressable
-              style={styles.card}
-              onPress={() => {
-                setMode("store");
-                setBottomTab("store");
-              }}
-            >
-              <Text style={styles.cardTitle}>
-                {t.resume} {activeStore.name}
-              </Text>
-              <Text style={styles.muted}>{t.resumeHint}</Text>
+          <View style={styles.card}>
+            <Pressable style={styles.scanPrimary} onPress={() => void openQrScanner()}>
+              <Text style={styles.scanPrimaryText}>{t.openScanner}</Text>
             </Pressable>
-          )}
+            <TextInput
+              style={styles.input}
+              value={manualToken}
+              onChangeText={setManualToken}
+              autoCapitalize="none"
+              placeholder={t.manualToken}
+              placeholderTextColor={muted}
+            />
+            <Pressable style={styles.secondary} onPress={() => void resolveQr(manualToken)}>
+              <Text style={styles.secondaryText}>{t.lookup}</Text>
+            </Pressable>
+          </View>
+          {activeStore ? (
+            <Pressable style={styles.resumeCard} onPress={() => setMode("store")}>
+              <View style={styles.resumeBody}>
+                <Text style={styles.resumeName}>{activeStore.name}</Text>
+                <Text style={styles.resumeMeta}>{activeStore.ownerName}</Text>
+              </View>
+              <Text style={styles.resumeArrow}>‹</Text>
+            </Pressable>
+          ) : null}
         </>
       )}
 
-      {bottomTab === "inventory" && (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>{t.inventoryTitle}</Text>
-          {inventory.length === 0 ? (
-            <Text style={styles.muted}>{t.inventoryEmpty}</Text>
-          ) : (
-            inventory.map((item) => <ProductCard key={item.id} item={item} mode="stock" />)
-          )}
-        </View>
-      )}
-
-      {mode === "register" && lastScanToken && token && bottomTab === "home" && (
-        <RegisterForm
-          areas={areas}
-          qrPublicToken={lastScanToken}
-          headers={headers}
-          apiBase={API_BASE}
-          authToken={token}
-          onNotice={(msg) => setMessage(msg)}
-          onDone={async (msg, store) => {
-            setMessage(msg);
-            if (store) {
-              setActiveStore(store);
-              setMode("store");
-              setBottomTab("store");
-              setStoreTab("info");
-              await refreshStoreData(store.id);
-            } else {
-              setMode("home");
-              setBottomTab("home");
-              setLastScanToken(null);
-            }
-          }}
-        />
-      )}
-
-      {bottomTab === "store" && !activeStore && (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>{t.storeTabLockedTitle}</Text>
-          <Text style={styles.muted}>{t.storeTabLockedHint}</Text>
-          <Pressable
-            style={[styles.primary, { marginTop: 12 }]}
-            onPress={() => {
-              setBottomTab("home");
-              setMode("home");
-            }}
-          >
-            <Text style={styles.primaryText}>{t.storeTabGoScan}</Text>
-          </Pressable>
-        </View>
-      )}
-
-      {bottomTab === "store" && mode === "store" && activeStore && (
+      {bottomTab === "home" && mode === "store" && activeStore && (
         <View style={styles.card}>
           <View style={styles.rowBetween}>
             <Text style={styles.cardTitle}>{activeStore.name}</Text>
             <Pressable
               onPress={() => {
+                setActiveStore(null);
+                setCart({});
                 setMode("home");
-                setBottomTab("home");
               }}
             >
-              <Text style={styles.link}>{t.back}</Text>
+              <Text style={styles.link}>{t.close}</Text>
             </Pressable>
           </View>
-          <Text style={styles.muted}>
-            {t.deferred} {activeStore.deferredPaymentEnabled ? t.deferredOn : t.deferredOff} · {t.owner} {activeStore.ownerName}
-          </Text>
+          <View style={styles.metaChips}>
+            <View style={styles.metaChip}>
+              <Text style={styles.metaChipText}>
+                {activeStore.deferredPaymentEnabled ? t.deferredOn : t.deferredOff}
+              </Text>
+            </View>
+            <View style={[styles.metaChip, styles.metaChipMuted]}>
+              <Text style={styles.metaChipTextMuted}>{activeStore.ownerName}</Text>
+            </View>
+          </View>
           <View style={styles.tabs}>
             {(["info", "visits", "orders", "sell"] as const).map((tab) => (
               <Pressable key={tab} style={[styles.tab, storeTab === tab && styles.tabOn]} onPress={() => setStoreTab(tab)}>
-                <Text style={[styles.tabText, storeTab === tab && styles.tabTextOn]}>{tabLabels[tab]}</Text>
+                <Text style={[styles.tabText, storeTab === tab && styles.tabTextOn]}>
+                  {tabLabels[tab]}
+                  {tab === "sell" && cartItemCount > 0 ? ` (${cartItemCount})` : ""}
+                </Text>
               </Pressable>
             ))}
           </View>
 
           {storeTab === "info" && (
-            <View style={{ marginTop: 12 }}>
-              <Text style={styles.body}>
-                {t.phone} {activeStore.phone}
-              </Text>
-              <Text style={styles.body}>
-                {t.location} {activeStore.location.lat.toFixed(4)}, {activeStore.location.lng.toFixed(4)}
-              </Text>
-              {activeStore.ownerPortalUrl ? (
-                <Text style={styles.muted} selectable>
-                  {t.ownerLink} {activeStore.ownerPortalUrl}
+            <View style={styles.panel}>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>{t.phone}</Text>
+                <Text style={styles.infoValue}>{activeStore.phone}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>{t.location}</Text>
+                <Text style={styles.infoValue}>
+                  {activeStore.location.lat.toFixed(4)}, {activeStore.location.lng.toFixed(4)}
                 </Text>
-              ) : null}
-              <Text style={styles.label}>{t.visitNote}</Text>
-              <TextInput style={styles.input} value={visitNote} onChangeText={setVisitNote} placeholder={t.visitPlaceholder} />
-              <Pressable style={styles.secondary} onPress={() => void logVisit()}>
-                <Text style={styles.secondaryText}>{t.recordVisit}</Text>
+              </View>
+              <TextInput
+                style={styles.input}
+                value={visitNote}
+                onChangeText={setVisitNote}
+                placeholder={t.visitPlaceholder}
+                placeholderTextColor={muted}
+              />
+              <Pressable style={styles.primary} onPress={() => void logVisit()}>
+                <Text style={styles.primaryText}>{t.recordVisit}</Text>
               </Pressable>
             </View>
           )}
@@ -712,7 +714,7 @@ export default function App() {
           {storeTab === "visits" && (
             <View style={{ marginTop: 12 }}>
               {visits.length === 0 ? (
-                <Text style={styles.muted}>{t.noVisits}</Text>
+                <Text style={styles.emptyText}>{t.emptyVisits}</Text>
               ) : (
                 visits.map((item) => (
                   <View key={item.id} style={styles.listRow}>
@@ -727,12 +729,12 @@ export default function App() {
           {storeTab === "orders" && (
             <View style={{ marginTop: 12 }}>
               {(orders as RepOrderRow[]).length === 0 ? (
-                <Text style={styles.muted}>{t.noOrders}</Text>
+                <Text style={styles.emptyText}>{t.emptyOrders}</Text>
               ) : (
                 (orders as RepOrderRow[]).map((item) => (
                   <View key={String(item.id)} style={styles.listRow}>
                     <Text style={styles.body}>
-                      #{item.id} · {item.payment_type} · {item.total_amount}
+                      #{item.id} · {formatPaymentType(item.payment_type)} · {item.total_amount} {t.currency}
                     </Text>
                     <Text style={styles.muted}>{formatMarketDateTime(item.created_at)}</Text>
                   </View>
@@ -742,10 +744,9 @@ export default function App() {
           )}
 
           {storeTab === "sell" && (
-            <View style={{ marginTop: 12 }}>
-              <Text style={styles.muted}>{t.sellHint}</Text>
+            <View style={styles.panel}>
               {products.length === 0 ? (
-                <Text style={styles.muted}>{t.sellEmpty}</Text>
+                <Text style={styles.emptyText}>{t.sellEmpty}</Text>
               ) : null}
               {products.map((item) => {
                 const q = cart[item.id] ?? 0;
@@ -762,32 +763,97 @@ export default function App() {
                   />
                 );
               })}
-              <Text style={styles.label}>{t.payment}</Text>
-              <View style={styles.rowBetween}>
-                <Pressable style={[styles.secondary, paymentType === "cash" && styles.tabOn]} onPress={() => setPaymentType("cash")}>
-                  <Text style={styles.secondaryText}>{t.cash}</Text>
-                </Pressable>
-                <Pressable
-                  style={[styles.secondary, paymentType === "deferred" && styles.tabOn]}
-                  onPress={() => setPaymentType("deferred")}
-                >
-                  <Text style={styles.secondaryText}>{t.deferredPay}</Text>
-                </Pressable>
-              </View>
-              <Pressable style={styles.primary} onPress={() => void submitOrder()}>
-                <Text style={styles.primaryText}>{t.submitOrder}</Text>
-              </Pressable>
+              {cartLines.length > 0 ? (
+                <>
+                  <View style={styles.segmented}>
+                    <Pressable
+                      style={[styles.segment, paymentType === "cash" && styles.segmentOn]}
+                      onPress={() => setPaymentType("cash")}
+                    >
+                      <Text style={[styles.segmentText, paymentType === "cash" && styles.segmentTextOn]}>{t.cash}</Text>
+                    </Pressable>
+                    <Pressable
+                      style={[styles.segment, paymentType === "deferred" && styles.segmentOn]}
+                      onPress={() => setPaymentType("deferred")}
+                    >
+                      <Text style={[styles.segmentText, paymentType === "deferred" && styles.segmentTextOn]}>{t.deferredPay}</Text>
+                    </Pressable>
+                  </View>
+                  <Pressable style={[styles.primary, styles.primaryLg]} onPress={() => void submitOrder()}>
+                    <Text style={styles.primaryText}>{t.submitOrder}</Text>
+                  </Pressable>
+                </>
+              ) : null}
             </View>
           )}
         </View>
       )}
 
-      {message && mode !== "scan" ? (
-        <Pressable onPress={() => setMessage(null)} style={styles.messageDismiss}>
-          <Text style={styles.error}>{message}</Text>
-          <Text style={styles.dismissHint}>{t.dismissMessage}</Text>
-        </Pressable>
-      ) : null}
+      {bottomTab === "inventory" && (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>{t.inventoryTitle}</Text>
+          {inventory.length === 0 ? (
+            <Text style={styles.emptyText}>{t.inventoryEmpty}</Text>
+          ) : (
+            inventory.map((item) => <ProductCard key={item.id} item={item} mode="stock" />)
+          )}
+        </View>
+      )}
+
+      {mode === "register" && lastScanToken && token && bottomTab === "home" && (
+        <RegisterForm
+          areas={areas}
+          qrPublicToken={lastScanToken}
+          headers={headers}
+          apiBase={API_BASE}
+          authToken={token}
+          onNotice={(msg) => showToast(msg, "info")}
+          onDone={async (msg, store) => {
+            showToast(msg, store ? "success" : msg === t.cancelled ? "info" : "error");
+            if (store) {
+              setActiveStore(store);
+              setMode("store");
+              setBottomTab("home");
+              setStoreTab("info");
+              await refreshStoreData(store.id);
+            } else {
+              setMode("home");
+              setBottomTab("home");
+              setLastScanToken(null);
+            }
+          }}
+        />
+      )}
+
+      {bottomTab === "store" && (
+        <>
+          <View style={styles.screenHeader}>
+            <Text style={styles.screenTitle}>{t.navStore}</Text>
+            {inventory.length > 0 ? (
+              <View style={styles.countBadge}>
+                <Text style={styles.countBadgeText}>{t.productsBadge(inventory.length)}</Text>
+              </View>
+            ) : null}
+          </View>
+          {inventory.length === 0 ? (
+            <Text style={styles.emptyText}>{t.inventoryEmpty}</Text>
+          ) : (
+            <View style={styles.productGrid}>
+              {inventory.map((item) => (
+                <ProductGridCard
+                  key={item.id}
+                  item={item}
+                  width={productCardWidth}
+                  currency={t.currency}
+                  noImage={t.noImage}
+                  onPress={() => setSelectedProduct(item)}
+                />
+              ))}
+            </View>
+          )}
+        </>
+      )}
+
       </ScrollView>
         <Modal
           visible={mode === "scan"}
@@ -837,7 +903,7 @@ export default function App() {
                       barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
                       onCameraReady={() => setCameraPreviewReady(true)}
                       onMountError={(e) => {
-                        setMessage(`${t.cameraMountError} ${e.message}`);
+                        showToast(`${t.cameraMountError} ${toArabicUserMessage(e.message, t.genericError)}`, "error");
                       }}
                       onBarcodeScanned={({ data }) => {
                         setMode("home");
@@ -848,7 +914,6 @@ export default function App() {
                     {!cameraPreviewReady && (
                       <View style={styles.cameraWarmup}>
                         <ActivityIndicator size="large" color="#fff" />
-                        <Text style={styles.cameraWarmupText}>{t.cameraPreviewWait}</Text>
                       </View>
                     )}
                   </>
@@ -896,13 +961,25 @@ export default function App() {
             style={[styles.bottomTab, bottomTab === "store" && styles.bottomTabOn]}
             onPress={() => {
               setBottomTab("store");
-              if (activeStore) setMode("store");
+              void loadInventory();
             }}
           >
             <Text style={[styles.bottomTabText, bottomTab === "store" && styles.bottomTabTextOn]}>{t.navStore}</Text>
           </Pressable>
         </View>
       </KeyboardAvoidingView>
+      {toast ? <ToastOverlay text={toast.text} kind={toast.kind} onDismiss={hideToast} /> : null}
+      <ProductDetailModal
+        visible={selectedProduct != null}
+        product={selectedProduct}
+        viewOnly={bottomTab === "store"}
+        cartQty={selectedProduct ? (cart[selectedProduct.id] ?? 0) : 0}
+        atMax={selectedProduct ? (cart[selectedProduct.id] ?? 0) >= selectedProduct.quantity : false}
+        labels={productDetailLabels}
+        onClose={() => setSelectedProduct(null)}
+        onMinus={() => selectedProduct && setQty(selectedProduct.id, -1)}
+        onPlus={() => selectedProduct && setQty(selectedProduct.id, 1)}
+      />
     </SafeAreaView>
   );
 }
@@ -1066,9 +1143,6 @@ function RegisterForm(props: {
   return (
     <View style={styles.card}>
       <Text style={styles.cardTitle}>{t.registerStore}</Text>
-      <Text style={styles.muted}>
-        {t.tokenPreview} {props.qrPublicToken.slice(0, 20)}…
-      </Text>
       <Text style={styles.label}>{t.areaAuto}</Text>
       {locating ? (
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 }}>
@@ -1098,7 +1172,6 @@ function RegisterForm(props: {
       <Pressable style={styles.secondary} onPress={() => void pickAndUpload()} disabled={uploadBusy}>
         {uploadBusy ? <ActivityIndicator color={text} /> : <Text style={styles.secondaryText}>{t.pickPhoto}</Text>}
       </Pressable>
-      {imagePath ? <Text style={styles.muted}>{imagePath}</Text> : null}
       <View style={styles.rowBetween}>
         <Pressable style={styles.secondary} onPress={() => props.onDone(t.cancelled)}>
           <Text style={styles.secondaryText}>{t.cancel}</Text>
@@ -1111,65 +1184,157 @@ function RegisterForm(props: {
   );
 }
 
-const bg = "#f1f5f9";
-const card = "#ffffff";
-const line = "#e2e8f0";
-const text = "#0f172a";
-const muted = "#64748b";
-const accent = "#0d9488";
+const bg = theme.bg;
+const card = theme.card;
+const line = theme.line;
+const text = theme.text;
+const muted = theme.muted;
+const accent = theme.accent;
 
 const styles = StyleSheet.create({
-  center: { flex: 1, backgroundColor: bg, padding: 22, justifyContent: "center" },
+  center: { flex: 1, backgroundColor: bg, padding: 24, justifyContent: "center" },
   page: { padding: 16, paddingBottom: 48, backgroundColor: bg, flexGrow: 1 },
-  logo: { width: 160, height: 64, alignSelf: "center", marginBottom: 12 },
-  logoHeader: { width: 120, height: 44 },
-  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
-  title: { color: text, fontSize: 22, fontWeight: "700", textAlign: "center" },
-  sub: { color: muted, marginTop: 8, marginBottom: 12 },
+  logo: { width: 160, height: 64, alignSelf: "center", marginBottom: 20 },
+  logoHeader: { width: 112, height: 40 },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+    paddingVertical: 4,
+  },
+  signOutBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: theme.radius.pill,
+    backgroundColor: theme.accentSoft,
+  },
+  signOutText: { color: accent, fontWeight: "800", fontSize: 14 },
+  title: { color: text, fontSize: 24, fontWeight: "800", textAlign: "center", letterSpacing: -0.3 },
+  loginCard: {
+    width: "100%",
+    backgroundColor: card,
+    borderRadius: theme.radius.xl,
+    padding: 20,
+    marginTop: 8,
+    ...theme.shadow.card,
+  },
   card: {
     backgroundColor: card,
-    borderColor: line,
-    borderWidth: 1,
-    borderRadius: 16,
-    padding: 14,
+    borderRadius: theme.radius.xl,
+    padding: 16,
     marginTop: 12,
+    ...theme.shadow.card,
   },
-  cardTitle: { color: text, fontSize: 18, fontWeight: "700", marginBottom: 8 },
+  cardTitle: { color: text, fontSize: 17, fontWeight: "800", marginBottom: 4, textAlign: "right" },
+  screenHeader: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  screenTitle: { color: text, fontSize: 22, fontWeight: "800" },
+  countBadge: {
+    minWidth: 32,
+    height: 32,
+    borderRadius: theme.radius.pill,
+    backgroundColor: theme.accent,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+  },
+  countBadgeText: { color: "#fff", fontWeight: "800", fontSize: 14 },
+  scanPrimary: {
+    backgroundColor: accent,
+    paddingVertical: 14,
+    borderRadius: theme.radius.md,
+    alignItems: "center",
+  },
+  scanPrimaryText: { color: "#fff", fontWeight: "800", fontSize: 16 },
+  resumeCard: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    backgroundColor: card,
+    borderRadius: theme.radius.xl,
+    padding: 16,
+    marginTop: 12,
+    ...theme.shadow.card,
+  },
+  resumeBody: { flex: 1 },
+  resumeName: { color: text, fontSize: 17, fontWeight: "800", textAlign: "right" },
+  resumeMeta: { color: muted, fontSize: 13, marginTop: 2, textAlign: "right" },
+  resumeArrow: { color: accent, fontSize: 28, fontWeight: "300", marginLeft: 8 },
+  metaChips: { flexDirection: "row-reverse", flexWrap: "wrap", gap: 8, marginTop: 8, marginBottom: 4 },
+  metaChip: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: theme.radius.pill,
+    backgroundColor: theme.accentSoft,
+  },
+  metaChipMuted: { backgroundColor: "#f1f5f9" },
+  metaChipText: { color: theme.accentDark, fontSize: 12, fontWeight: "700" },
+  metaChipTextMuted: { color: muted, fontSize: 12, fontWeight: "600" },
+  panel: { marginTop: 12 },
+  infoRow: {
+    flexDirection: "row-reverse",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: line,
+  },
+  infoLabel: { color: muted, fontSize: 13, fontWeight: "600" },
+  infoValue: { color: text, fontSize: 15, fontWeight: "700", maxWidth: "65%", textAlign: "left" },
+  emptyText: { color: muted, fontSize: 15, textAlign: "center", marginTop: 24, fontWeight: "600" },
+  segmented: {
+    flexDirection: "row-reverse",
+    backgroundColor: "#f1f5f9",
+    borderRadius: theme.radius.md,
+    padding: 4,
+    marginTop: 16,
+    marginBottom: 12,
+  },
+  segment: { flex: 1, paddingVertical: 10, borderRadius: theme.radius.sm, alignItems: "center" },
+  segmentOn: { backgroundColor: card, ...theme.shadow.card },
+  segmentText: { color: muted, fontWeight: "700", fontSize: 14 },
+  segmentTextOn: { color: accent },
+  primaryLg: { marginTop: 4 },
   input: {
     borderWidth: 1,
     borderColor: line,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: theme.radius.md,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     color: text,
-    marginTop: 6,
+    marginTop: 8,
     backgroundColor: "#f8fafc",
+    fontSize: 16,
     textAlign: "right",
     writingDirection: "rtl",
   },
-  label: { color: muted, marginTop: 10, fontSize: 12, textAlign: "right" },
+  label: { color: muted, marginTop: 12, fontSize: 12, fontWeight: "600", textAlign: "right" },
   body: { color: text, marginTop: 4, textAlign: "right" },
   primary: {
-    marginTop: 14,
+    marginTop: 12,
     backgroundColor: accent,
-    paddingVertical: 12,
-    borderRadius: 12,
+    paddingVertical: 14,
+    borderRadius: theme.radius.md,
     alignItems: "center",
   },
-  primaryText: { color: "#ffffff", fontWeight: "800" },
+  primaryText: { color: "#ffffff", fontWeight: "800", fontSize: 16 },
   secondary: {
     marginTop: 10,
+    backgroundColor: "#f8fafc",
     borderColor: line,
     borderWidth: 1,
     paddingVertical: 12,
-    borderRadius: 12,
+    borderRadius: theme.radius.md,
     alignItems: "center",
     paddingHorizontal: 12,
   },
-  secondaryText: { color: text, fontWeight: "700" },
-  error: { color: "#e11d48", marginTop: 10, textAlign: "right" },
-  muted: { color: muted, marginTop: 8, fontSize: 13, textAlign: "right" },
-  link: { color: accent, fontWeight: "700" },
+  secondaryText: { color: text, fontWeight: "700", fontSize: 15 },
+  muted: { color: muted, marginTop: 6, fontSize: 13, textAlign: "right" },
+  link: { color: accent, fontWeight: "800", fontSize: 15 },
   scannerModal: { flex: 1, backgroundColor: "#000" },
   scannerCenter: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24 },
   scannerHint: { color: "#e8eefc", marginTop: 16, textAlign: "center", fontSize: 15 },
@@ -1201,14 +1366,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     zIndex: 40,
   },
-  messageDismiss: { marginTop: 12, paddingVertical: 4 },
-  dismissHint: { color: muted, fontSize: 12, marginTop: 4, textAlign: "right" },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
-  tabs: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
-  tab: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 999, borderWidth: 1, borderColor: line },
-  tabOn: { borderColor: accent, backgroundColor: "rgba(13,148,136,0.1)" },
-  tabText: { color: muted, fontWeight: "600" },
-  tabTextOn: { color: accent },
+  tabs: {
+    flexDirection: "row-reverse",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 12,
+    backgroundColor: "#f1f5f9",
+    padding: 4,
+    borderRadius: theme.radius.md,
+  },
+  tab: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: theme.radius.sm },
+  tabOn: { backgroundColor: card, ...theme.shadow.card },
+  tabText: { color: muted, fontWeight: "700", fontSize: 13 },
+  tabTextOn: { color: accent, fontWeight: "800" },
+  productGrid: {
+    flexDirection: "row-reverse",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+  },
   listRow: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: line },
   productRow: { flexDirection: "row", alignItems: "center", paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: line },
   productCard: {
@@ -1216,16 +1392,10 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     gap: 14,
     padding: 14,
-    marginTop: 12,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: line,
-    backgroundColor: "#ffffff",
-    shadowColor: "#0f172a",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
+    marginTop: 10,
+    borderRadius: theme.radius.lg,
+    backgroundColor: card,
+    ...theme.shadow.card,
   },
   productImage: {
     width: 88,
@@ -1287,22 +1457,21 @@ const styles = StyleSheet.create({
   chipOn: { borderColor: accent, backgroundColor: "rgba(13,148,136,0.12)" },
   chipText: { color: text, fontWeight: "600" },
   bottomBar: {
-    flexDirection: "row",
-    borderTopWidth: 1,
-    borderTopColor: line,
+    flexDirection: "row-reverse",
+    marginHorizontal: 12,
+    marginTop: 8,
+    padding: 6,
+    borderRadius: theme.radius.xl,
     backgroundColor: card,
-    paddingTop: 8,
-    paddingHorizontal: 8,
-    gap: 6,
+    ...theme.shadow.float,
   },
   bottomTab: {
     flex: 1,
     paddingVertical: 10,
-    borderRadius: 12,
+    borderRadius: theme.radius.lg,
     alignItems: "center",
   },
-  bottomTabOn: { backgroundColor: "rgba(13,148,136,0.12)" },
-  bottomTabDisabled: { opacity: 0.4 },
+  bottomTabOn: { backgroundColor: theme.accentSoft },
   bottomTabText: { color: muted, fontWeight: "600", fontSize: 12 },
-  bottomTabTextOn: { color: accent, fontWeight: "800" },
+  bottomTabTextOn: { color: accent, fontWeight: "800", fontSize: 12 },
 });
