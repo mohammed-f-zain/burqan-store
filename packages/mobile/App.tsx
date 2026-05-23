@@ -662,7 +662,6 @@ export default function App() {
           <View style={styles.center}>
             <StatusBar style="dark" />
             <Image source={require("./assets/burqanlogo.png")} style={styles.logo} resizeMode="contain" />
-            <Text style={styles.title}>{t.appTitle}</Text>
             <View style={styles.loginCard}>
             <TextInput style={styles.input} autoCapitalize="none" value={email} onChangeText={setEmail} placeholder={t.email} placeholderTextColor={muted} />
             <TextInput style={styles.input} secureTextEntry value={password} onChangeText={setPassword} placeholder={t.password} placeholderTextColor={muted} />
