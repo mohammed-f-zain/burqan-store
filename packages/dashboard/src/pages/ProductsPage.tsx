@@ -115,13 +115,17 @@ export default function ProductsPage() {
   async function saveEdit() {
     if (!edit) return;
     try {
+      const weightRaw = edit.carton_weight_kg;
+      const cartonWeightKg =
+        weightRaw != null && String(weightRaw).trim() !== "" ? parseFloat(String(weightRaw)) : null;
+
       await api.patch(`/products/${edit.id}`, {
-        name: edit.name,
-        designation: edit.designation,
-        unitLabel: edit.unit_label,
-        cartonSpec: edit.carton_spec,
-        dimensionsCm: edit.dimensions_cm,
-        cartonWeightKg: edit.carton_weight_kg != null ? parseFloat(String(edit.carton_weight_kg)) : null,
+        name: edit.name.trim(),
+        designation: edit.designation?.trim() || null,
+        unitLabel: edit.unit_label?.trim() || null,
+        cartonSpec: edit.carton_spec?.trim() || null,
+        dimensionsCm: edit.dimensions_cm?.trim() || null,
+        cartonWeightKg: cartonWeightKg != null && !Number.isNaN(cartonWeightKg) ? cartonWeightKg : null,
         imageUrl: edit.image_url === null || edit.image_url === "" ? null : edit.image_url,
         price: parseFloat(edit.price),
         loyaltyPointsPerUnit: edit.loyalty_points_per_unit ?? 0,
@@ -291,16 +295,22 @@ export default function ProductsPage() {
 
       {edit && (
         <div className="modal-backdrop" onClick={() => setEdit(null)} role="presentation">
-          <div className="modal card" onClick={(e) => e.stopPropagation()} role="dialog">
+          <div className="modal card wide" onClick={(e) => e.stopPropagation()} role="dialog">
             <h3>{t.products.editTitle}</h3>
-            <div className="form">
+            <div className="form grid2">
               <label>
                 {t.products.name}
-                <input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} />
+                <input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} required />
               </label>
               <label>
                 {t.products.price}
-                <input value={edit.price} onChange={(e) => setEdit({ ...edit, price: e.target.value })} />
+                <input
+                  value={edit.price}
+                  onChange={(e) => setEdit({ ...edit, price: e.target.value })}
+                  type="number"
+                  step="0.01"
+                  min={0}
+                />
               </label>
               <label>
                 {t.products.loyaltyPoints}
@@ -313,13 +323,58 @@ export default function ProductsPage() {
                     setEdit({ ...edit, loyalty_points_per_unit: parseInt(e.target.value, 10) || 0 })
                   }
                 />
+                <span className="muted small">{t.products.loyaltyPointsHint}</span>
               </label>
               <label>
-                {t.products.colActive}{" "}
-                <input type="checkbox" checked={edit.is_active} onChange={(e) => setEdit({ ...edit, is_active: e.target.checked })} />
+                {t.products.designation}
+                <input
+                  value={edit.designation ?? ""}
+                  onChange={(e) => setEdit({ ...edit, designation: e.target.value || null })}
+                />
               </label>
-              <div>
-                <div className="muted small">{t.products.imageField}</div>
+              <label>
+                {t.products.unit}
+                <input
+                  value={edit.unit_label ?? ""}
+                  onChange={(e) => setEdit({ ...edit, unit_label: e.target.value || null })}
+                />
+              </label>
+              <label>
+                {t.products.carton}
+                <input
+                  value={edit.carton_spec ?? ""}
+                  onChange={(e) => setEdit({ ...edit, carton_spec: e.target.value || null })}
+                />
+              </label>
+              <label>
+                {t.products.dimensions}
+                <input
+                  value={edit.dimensions_cm ?? ""}
+                  onChange={(e) => setEdit({ ...edit, dimensions_cm: e.target.value || null })}
+                />
+              </label>
+              <label>
+                {t.products.weight}
+                <input
+                  value={edit.carton_weight_kg ?? ""}
+                  onChange={(e) => setEdit({ ...edit, carton_weight_kg: e.target.value || null })}
+                  type="number"
+                  step="0.001"
+                  min={0}
+                />
+              </label>
+              <label style={{ gridColumn: "1 / -1" }}>
+                {t.products.colActive}{" "}
+                <input
+                  type="checkbox"
+                  checked={edit.is_active}
+                  onChange={(e) => setEdit({ ...edit, is_active: e.target.checked })}
+                />
+              </label>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <div className="muted small" style={{ marginBottom: 6 }}>
+                  {t.products.image}
+                </div>
                 <input
                   type="file"
                   accept="image/jpeg,image/png,image/gif,image/webp"
@@ -327,7 +382,14 @@ export default function ProductsPage() {
                 />
                 {editUploading && <p className="muted small">{t.products.uploading}</p>}
                 {mediaUrl(edit.image_url) && (
-                  <img src={mediaUrl(edit.image_url)} alt="" style={{ maxWidth: 160, marginTop: 8, borderRadius: 8 }} />
+                  <div style={{ marginTop: 8 }}>
+                    <img src={mediaUrl(edit.image_url)} alt="" style={{ maxWidth: 160, maxHeight: 160, borderRadius: 8 }} />
+                    <div>
+                      <button type="button" className="ghost small" onClick={() => setEdit({ ...edit, image_url: null })}>
+                        {t.products.clearImage}
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
