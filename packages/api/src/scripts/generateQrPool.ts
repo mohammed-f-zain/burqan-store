@@ -1,5 +1,4 @@
-import { randomBytes } from "node:crypto";
-
+import { countUnassignedQrCodes, insertQrCodes } from "../lib/generateQrCodes.js";
 import { query, pool } from "../db/pool.js";
 
 async function main() {
@@ -14,16 +13,10 @@ async function main() {
     await pool.end();
     return;
   }
-  const batch = 500;
-  for (let i = 0; i < need; i += batch) {
-    const slice = Math.min(batch, need - i);
-    const tokens: string[] = [];
-    for (let j = 0; j < slice; j++) tokens.push(randomBytes(24).toString("hex"));
-    const values = tokens.map((_, idx) => `($${idx + 1})`).join(", ");
-    await query(`INSERT INTO qr_codes (public_token) VALUES ${values}`, tokens);
-  }
+  const inserted = await insertQrCodes(need);
+  const unassigned = await countUnassignedQrCodes();
   // eslint-disable-next-line no-console
-  console.log("Inserted", need, "QR codes; total now ~", have + need);
+  console.log("Inserted", inserted, "QR codes; unassigned now", unassigned);
   await pool.end();
 }
 

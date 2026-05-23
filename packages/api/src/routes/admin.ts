@@ -17,6 +17,7 @@ import {
 import { HttpError } from "../utils/errors.js";
 import { hashPassword, verifyPassword } from "../utils/password.js";
 import { signAdminToken } from "../utils/jwt.js";
+import { countUnassignedQrCodes, insertQrCodes } from "../lib/generateQrCodes.js";
 import { optionalStoredImagePathNullableSchema, optionalStoredImagePathSchema } from "../utils/storedImagePath.js";
 
 const router = Router();
@@ -258,13 +259,7 @@ router.get(
       const limit = limitRaw ?? 50;
       const cursor = req.query.cursor ? z.coerce.number().int().positive().parse(req.query.cursor) : null;
 
-      const { rows: countRows } = await query<{ c: string }>(
-        `SELECT COUNT(*)::text AS c
-         FROM qr_codes qc
-         LEFT JOIN stores s ON s.qr_code_id = qc.id
-         WHERE s.id IS NULL`
-      );
-      const unassignedCount = parseInt(countRows[0]?.c ?? "0", 10);
+      const unassignedCount = await countUnassignedQrCodes();
 
       const { rows } = await query<{ id: string; public_token: string; created_at: Date }>(
         `SELECT qc.id::text AS id, qc.public_token, qc.created_at
@@ -288,6 +283,58 @@ router.get(
         })),
         nextCursor,
         unassignedCount,
+      });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+const qrPoolGenerateSchema = z.object({
+  count: z.number().int().min(1).max(500),
+});
+
+router.post(
+  "/qr-pool/generate",
+  adminAuthMiddleware,
+  requireAdminPermission("qr_pool.write"),
+  async (req, res, next) => {
+    try {
+      const body = qrPoolGenerateSchema.parse(req.body);
+      const inserted = await insertQrCodes(body.count);
+      const unassignedCount = await countUnassignedQrCodes();
+      res.status(201).json({ inserted, unassignedCount });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+router.get(
+  "/qr-pool/export",
+  adminAuthMiddleware,
+  requireAdminPermission("qr_pool.read"),
+  async (req, res, next) => {
+    try {
+      const limit = z.coerce.number().int().min(1).max(20000).optional().parse(req.query.limit) ?? 20000;
+      const base = config.qrPayloadBaseUrl.replace(/\/$/, "");
+      const { rows } = await query<{ id: string; public_token: string; created_at: Date }>(
+        `SELECT qc.id::text AS id, qc.public_token, qc.created_at
+         FROM qr_codes qc
+         LEFT JOIN stores s ON s.qr_code_id = qc.id
+         WHERE s.id IS NULL
+         ORDER BY qc.id ASC
+         LIMIT $1`,
+        [limit]
+      );
+      res.json({
+        items: rows.map((r) => ({
+          id: r.id,
+          publicToken: r.public_token,
+          scanUrl: `${base}/r/${encodeURIComponent(r.public_token)}`,
+          createdAt: r.created_at.toISOString(),
+        })),
+        exportedCount: rows.length,
       });
     } catch (e) {
       next(e);

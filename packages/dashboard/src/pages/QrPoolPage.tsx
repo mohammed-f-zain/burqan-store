@@ -1,23 +1,36 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 
 import { api } from "../api";
+import { useAuth } from "../auth/AuthContext";
 import PaginationBar from "../components/PaginationBar";
 import { useClientPagination } from "../hooks/useClientPagination";
 import { useLocale } from "../i18n/LocaleContext";
+import { pickAxiosErrorMessage } from "../lib/apiError";
+import { downloadQrPoolExcel } from "../lib/exportQrPoolExcel";
 import { formatMarketDateTime } from "../utils/formatMarketDateTime";
-import { toastInfo, toastError } from "../lib/toast";
+import { toastInfo, toastError, toastSuccess } from "../lib/toast";
 import { hasConfiguredQrBaseUrl, qrPayload } from "../utils/qrPayload";
 
 type Item = { id: string; publicToken: string; createdAt: string };
 
+const GENERATE_PRESETS = [10, 25, 50, 100] as const;
+const MAX_GENERATE = 500;
+
 export default function QrPoolPage() {
   const { t } = useLocale();
+  const { can } = useAuth();
+  const canRead = can("qr_pool.read");
+  const canGenerate = can("qr_pool.write");
   const [items, setItems] = useState<Item[]>([]);
   const [nextCursor, setNextCursor] = useState<number | null>(null);
   const [unassignedCount, setUnassignedCount] = useState<number | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [generateOpen, setGenerateOpen] = useState(false);
+  const [generateCount, setGenerateCount] = useState("50");
+  const [generating, setGenerating] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const qrPgn = useClientPagination(items);
 
@@ -63,25 +76,99 @@ export default function QrPoolPage() {
     }
   }
 
+  async function submitGenerate(e: FormEvent) {
+    e.preventDefault();
+    const count = parseInt(generateCount, 10);
+    if (!Number.isFinite(count) || count < 1 || count > MAX_GENERATE) return;
+    setGenerating(true);
+    try {
+      const { data } = await api.post<{ inserted: number; unassignedCount: number }>("/qr-pool/generate", {
+        count,
+      });
+      setUnassignedCount(data.unassignedCount);
+      setGenerateOpen(false);
+      toastSuccess(t.qrPool.generateSuccess.replace("{count}", String(data.inserted)));
+      setLoading(true);
+      await load(null, false);
+    } catch (err) {
+      toastError(pickAxiosErrorMessage(err, t.qrPool.generateFailed));
+    } finally {
+      setGenerating(false);
+      setLoading(false);
+    }
+  }
+
+  async function exportExcel() {
+    setExporting(true);
+    try {
+      const { data } = await api.get<{
+        items: { id: string; publicToken: string; scanUrl: string; createdAt: string }[];
+        exportedCount: number;
+      }>("/qr-pool/export");
+      if (!data.items.length) {
+        toastInfo(t.qrPool.exportEmpty);
+        return;
+      }
+      const stamp = new Date().toISOString().slice(0, 10);
+      downloadQrPoolExcel(
+        data.items,
+        {
+          id: t.qrPool.exportColId,
+          token: t.qrPool.exportColToken,
+          scanUrl: t.qrPool.exportColScanUrl,
+          created: t.qrPool.exportColCreated,
+        },
+        t.qrPool.exportSheetName,
+        `burqan-qr-cards-${stamp}`
+      );
+      toastSuccess(t.qrPool.exportSuccess.replace("{count}", String(data.exportedCount)));
+    } catch (err) {
+      toastError(pickAxiosErrorMessage(err, t.qrPool.exportFailed));
+    } finally {
+      setExporting(false);
+    }
+  }
+
   const hasBaseUrl = useMemo(() => hasConfiguredQrBaseUrl(), []);
 
   return (
     <div className="grid">
       <div className="card">
-        <h2>{t.qrPool.title}</h2>
-        <p className="muted">{t.qrPool.intro}</p>
-        {!hasBaseUrl && <p className="muted small">{t.qrPool.envHint}</p>}
-        {unassignedCount != null && (
-          <p>
-            <strong>{unassignedCount}</strong> — {t.qrPool.unassignedCount}
-          </p>
-        )}
-        {loading && <p className="muted">{t.common.loading}</p>}
+        <div className="row spread" style={{ alignItems: "flex-start", gap: 12 }}>
+          <div>
+            <h2 style={{ marginTop: 0 }}>{t.qrPool.title}</h2>
+            <p className="muted">{t.qrPool.intro}</p>
+            {!hasBaseUrl && <p className="muted small">{t.qrPool.envHint}</p>}
+            {unassignedCount != null && (
+              <p>
+                <strong>{unassignedCount}</strong> — {t.qrPool.unassignedCount}
+              </p>
+            )}
+            {loading && <p className="muted">{t.common.loading}</p>}
+          </div>
+          <div className="row" style={{ gap: 8, flexShrink: 0 }}>
+            {canRead && (
+              <button type="button" className="ghost" disabled={exporting || loading} onClick={() => void exportExcel()}>
+                {exporting ? t.common.loading : t.qrPool.exportExcel}
+              </button>
+            )}
+            {canGenerate && (
+              <button type="button" className="primary" onClick={() => setGenerateOpen(true)}>
+                {t.qrPool.generate}
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       {!loading && items.length === 0 && !loadFailed && (
         <div className="card">
           <p className="muted">{t.qrPool.none}</p>
+          {canGenerate && (
+            <button type="button" className="primary" style={{ marginTop: 12 }} onClick={() => setGenerateOpen(true)}>
+              {t.qrPool.generate}
+            </button>
+          )}
         </div>
       )}
 
@@ -141,6 +228,51 @@ export default function QrPoolPage() {
               {t.qrPool.loadMore}
             </button>
           )}
+        </div>
+      )}
+
+      {generateOpen && (
+        <div className="modal-backdrop" onClick={() => !generating && setGenerateOpen(false)} role="presentation">
+          <div className="modal card" onClick={(e) => e.stopPropagation()} role="dialog" aria-labelledby="qr-generate-title">
+            <h3 id="qr-generate-title">{t.qrPool.generateTitle}</h3>
+            <p className="muted small">{t.qrPool.generateHint}</p>
+            <form onSubmit={(ev) => void submitGenerate(ev)} className="form">
+              <label>
+                {t.qrPool.generateCount}
+                <input
+                  type="number"
+                  min={1}
+                  max={MAX_GENERATE}
+                  step={1}
+                  value={generateCount}
+                  onChange={(e) => setGenerateCount(e.target.value)}
+                  required
+                  disabled={generating}
+                />
+              </label>
+              <div className="row" style={{ gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+                {GENERATE_PRESETS.map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    className="ghost small"
+                    disabled={generating}
+                    onClick={() => setGenerateCount(String(n))}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <div className="row spread">
+                <button type="button" className="ghost" disabled={generating} onClick={() => setGenerateOpen(false)}>
+                  {t.qrPool.generateCancel}
+                </button>
+                <button type="submit" className="primary" disabled={generating}>
+                  {generating ? t.common.loading : t.qrPool.generateSubmit}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>
