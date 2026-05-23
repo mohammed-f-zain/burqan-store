@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 
 import LoyaltyBadge from "../components/LoyaltyBadge";
 import LoyaltyIcon from "../components/LoyaltyIcon";
+import OwnerProductDetailSheet, { type OwnerCatalogProduct } from "../components/OwnerProductDetailSheet";
 import SectionTitleWithIcon from "../components/SectionTitleWithIcon";
 import { mediaUrl } from "../lib/mediaUrl";
 import { openOwnerOrder, ownerFormatMoney } from "../owner/ownerFormat";
@@ -68,16 +69,6 @@ type OwnerSummary = {
   }[];
 };
 
-type CatalogProduct = {
-  id: number;
-  name: string;
-  designation: string | null;
-  unit_label: string | null;
-  image_url: string | null;
-  price: string;
-  loyalty_points_per_unit: number;
-};
-
 export default function OwnerPortal() {
   const [params] = useSearchParams();
   const token = params.get("t");
@@ -85,7 +76,8 @@ export default function OwnerPortal() {
 
   const [tab, setTab] = useState<Tab>("overview");
   const [data, setData] = useState<OwnerSummary | null>(null);
-  const [products, setProducts] = useState<CatalogProduct[]>([]);
+  const [products, setProducts] = useState<OwnerCatalogProduct[]>([]);
+  const [selectedProduct, setSelectedProduct] = useState<OwnerCatalogProduct | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [productsLoading, setProductsLoading] = useState(false);
@@ -119,7 +111,7 @@ export default function OwnerPortal() {
     setProductsLoading(true);
     (async () => {
       try {
-        const res = await publicApi.get<{ products: CatalogProduct[] }>("/owner/products", { params: { t: token } });
+        const res = await publicApi.get<{ products: OwnerCatalogProduct[] }>("/owner/products", { params: { t: token } });
         if (!cancelled) setProducts(res.data.products ?? []);
       } catch {
         if (!cancelled) setProducts([]);
@@ -221,17 +213,6 @@ export default function OwnerPortal() {
                 <div className="owner-loyalty-card-body">
                   <p className="owner-loyalty-card-label">{t.owner.loyaltyBalance}</p>
                   <p className="owner-loyalty-card-value">{t.owner.loyaltyPoints(data.loyalty.balance)}</p>
-                </div>
-              </div>
-              <div className="owner-loyalty-card owner-loyalty-card--month">
-                <div className="owner-loyalty-card-icon" aria-hidden>
-                  <LoyaltyIcon kind="earn" size={28} />
-                </div>
-                <div className="owner-loyalty-card-body">
-                  <p className="owner-loyalty-card-label">{t.owner.loyaltyMonthEarned}</p>
-                  <p className="owner-loyalty-card-value owner-loyalty-card-value--sm">
-                    {t.owner.loyaltyPoints(data.loyalty.monthPointsEarned)}
-                  </p>
                 </div>
               </div>
             </section>
@@ -383,7 +364,12 @@ export default function OwnerPortal() {
                 {products.map((p) => {
                   const img = mediaUrl(p.image_url);
                   return (
-                    <article key={p.id} className="owner-product">
+                    <button
+                      key={p.id}
+                      type="button"
+                      className="owner-product owner-product-card"
+                      onClick={() => setSelectedProduct(p)}
+                    >
                       {img ? (
                         <img src={img} alt="" className="owner-product-img" />
                       ) : (
@@ -399,10 +385,9 @@ export default function OwnerPortal() {
                             icon="star"
                           />
                         ) : null}
-                        {p.designation ? <p className="owner-product-desc">{p.designation}</p> : null}
-                        {p.unit_label ? <p className="owner-product-desc">{p.unit_label}</p> : null}
+                        <span className="owner-product-cta">{t.owner.viewProduct} ‹</span>
                       </div>
-                    </article>
+                    </button>
                   );
                 })}
               </div>
@@ -449,6 +434,14 @@ export default function OwnerPortal() {
           </section>
         )}
       </main>
+
+      {selectedProduct && (
+        <OwnerProductDetailSheet
+          product={selectedProduct}
+          strings={t.owner}
+          onClose={() => setSelectedProduct(null)}
+        />
+      )}
     </div>
   );
 }

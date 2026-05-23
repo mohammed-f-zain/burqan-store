@@ -334,10 +334,15 @@ router.get("/owner/products", async (req, res, next) => {
       name: string;
       designation: string | null;
       unit_label: string | null;
+      carton_spec: string | null;
+      dimensions_cm: string | null;
+      carton_weight_kg: string | null;
       image_url: string | null;
       price: string;
+      loyalty_points_per_unit: number;
     }>(
-      `SELECT id, name, designation, unit_label, image_url, price::text AS price, loyalty_points_per_unit
+      `SELECT id, name, designation, unit_label, carton_spec, dimensions_cm, carton_weight_kg,
+              image_url, price::text AS price, loyalty_points_per_unit
        FROM products
        WHERE is_active = true
        ORDER BY name ASC`
