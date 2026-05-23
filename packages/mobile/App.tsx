@@ -78,6 +78,8 @@ const t = {
   inCart: "في السلة",
   phone: "الهاتف",
   location: "الموقع",
+  locationUnknown: "لم يُسجَّل عنوان",
+  openInMaps: "فتح على الخريطة",
   visitAutoHint: "تُسجَّل الزيارة تلقائياً عند مسح رمز المتجر.",
   payment: "الدفع",
   cash: "نقدي",
@@ -124,6 +126,12 @@ const t = {
   profileLoadFailed: "تعذّر تحميل الملف الشخصي",
   welcome: (name: string) => `مرحباً، ${name}`,
   homeSubtitle: "امسح رمز المتجر لبدء الزيارة والبيع",
+  dailyStoresTitle: "متاجر مناطقي اليوم",
+  dailyStoresHint: "تختفي بعد الزيارة وتعود في اليوم التالي",
+  dailyStoresEmpty: "لا متاجر متبقية اليوم — أحسنت!",
+  dailyStoresCount: (n: number) => `${n} متجر`,
+  storeOwner: "صاحب المتجر",
+  callStore: "اتصال بالمتجر",
   productsBadge: (n: number) => String(n),
   inventoryTitle: "مخزون السيارة",
   inventoryEmpty: "لا منتجات",
@@ -168,11 +176,23 @@ function mapProductRow(r: {
 }
 
 type Area = { id: number; name: string };
-import type { StoreBrief } from "./storeTypes";
+import StorePeekModal from "./StorePeekModal";
+import type { DailyStoreCard, StoreBrief } from "./storeTypes";
 export type { StoreBrief } from "./storeTypes";
 
 type BottomTab = "home" | "inventory" | "store" | "profile";
 type RepOrderRow = { id: string; payment_type: string; total_amount: string; created_at: string };
+
+function formatStoreLocation(
+  store: Pick<StoreBrief, "addressText" | "areaName">,
+  unknownLabel: string
+): string {
+  const address = store.addressText?.trim();
+  if (address) return address;
+  const area = store.areaName?.trim();
+  if (area) return area;
+  return unknownLabel;
+}
 
 export default function App() {
   const insets = useSafeAreaInsets();
@@ -251,6 +271,9 @@ export default function App() {
   const [cart, setCart] = useState<Record<number, number>>({});
   const [paymentType, setPaymentType] = useState<"cash" | "deferred">("cash");
   const [homeRefreshing, setHomeRefreshing] = useState(false);
+  const [dailyStores, setDailyStores] = useState<DailyStoreCard[]>([]);
+  const [dailyStoresLoading, setDailyStoresLoading] = useState(false);
+  const [peekStore, setPeekStore] = useState<DailyStoreCard | null>(null);
   const [storeRefreshing, setStoreRefreshing] = useState(false);
   const [bottomTab, setBottomTab] = useState<BottomTab>("home");
   const [inventory, setInventory] = useState<Product[]>([]);
@@ -334,6 +357,19 @@ export default function App() {
     }
   }, [apiGet, token]);
 
+  const loadDailyStores = useCallback(async () => {
+    if (!token) return;
+    setDailyStoresLoading(true);
+    try {
+      const data = await apiGet("/api/v1/rep/stores/daily");
+      setDailyStores((data.stores ?? []) as DailyStoreCard[]);
+    } catch {
+      setDailyStores([]);
+    } finally {
+      setDailyStoresLoading(false);
+    }
+  }, [apiGet, token]);
+
   const loadProfile = useCallback(async () => {
     if (!token) return;
     try {
@@ -387,7 +423,8 @@ export default function App() {
     }
     void loadProfile();
     void loadInventory();
-  }, [token, loadProfile, loadInventory]);
+    void loadDailyStores();
+  }, [token, loadProfile, loadInventory, loadDailyStores]);
 
   const signOut = useCallback(() => {
     modernBarcodeSubRef.current?.remove();
@@ -396,6 +433,8 @@ export default function App() {
     setToken(null);
     setRepProfile(null);
     setActiveStore(null);
+    setDailyStores([]);
+    setPeekStore(null);
     setMode("home");
     setBottomTab("home");
     hideToast();
@@ -423,7 +462,7 @@ export default function App() {
         setBottomTab("home");
         setStoreTab("info");
         showToast(t.visitRecorded, "success");
-        await refreshStoreData(data.store.id);
+        await Promise.all([refreshStoreData(data.store.id), loadDailyStores()]);
       }
     } catch (e) {
       if (e instanceof LocationDeniedError) showToast(t.locationDenied, "error");
@@ -502,14 +541,20 @@ export default function App() {
       });
       const aj = await a.json();
       if (a.ok) setAreas(aj.areas ?? []);
-      await Promise.all([loadInventory(), loadProfile()]);
+      await Promise.all([loadInventory(), loadProfile(), loadDailyStores()]);
       if (activeStore) await refreshStoreData(activeStore.id);
     } catch {
       /* ignore */
     } finally {
       setHomeRefreshing(false);
     }
-  }, [token, activeStore, refreshStoreData, loadInventory, loadProfile]);
+  }, [token, activeStore, refreshStoreData, loadInventory, loadProfile, loadDailyStores]);
+
+  useEffect(() => {
+    if (token && bottomTab === "home" && mode !== "store" && mode !== "register") {
+      void loadDailyStores();
+    }
+  }, [token, bottomTab, mode, loadDailyStores]);
 
   useEffect(() => {
     if (token) void loadInventory();
@@ -577,7 +622,8 @@ export default function App() {
     setActiveStore(null);
     setCart({});
     setMode("home");
-  }, []);
+    void loadDailyStores();
+  }, [loadDailyStores]);
 
   const promptEndVisit = useCallback(
     (onEnd: () => void) => {
@@ -760,6 +806,34 @@ export default function App() {
               <Text style={styles.resumeArrow}>‹</Text>
             </Pressable>
           ) : null}
+
+          <View style={styles.dailySection}>
+            <View style={styles.rowBetween}>
+              <Text style={styles.cardTitle}>{t.dailyStoresTitle}</Text>
+              {!dailyStoresLoading && dailyStores.length > 0 ? (
+                <Text style={styles.dailyCount}>{t.dailyStoresCount(dailyStores.length)}</Text>
+              ) : null}
+            </View>
+            <Text style={styles.muted}>{t.dailyStoresHint}</Text>
+            {dailyStoresLoading ? (
+              <ActivityIndicator color={accent} style={{ marginTop: 16 }} />
+            ) : dailyStores.length === 0 ? (
+              <Text style={styles.emptyText}>{t.dailyStoresEmpty}</Text>
+            ) : (
+              dailyStores.map((s) => (
+                <Pressable key={s.id} style={styles.dailyStoreCard} onPress={() => setPeekStore(s)}>
+                  <View style={styles.dailyStoreBody}>
+                    <Text style={styles.dailyStoreName}>{s.name}</Text>
+                    <Text style={styles.dailyStoreMeta}>
+                      {s.areaName ? `${s.areaName} · ` : ""}
+                      {s.ownerName}
+                    </Text>
+                  </View>
+                  <Text style={styles.resumeArrow}>‹</Text>
+                </Pressable>
+              ))
+            )}
+          </View>
         </>
       )}
 
@@ -796,15 +870,32 @@ export default function App() {
             <View style={styles.panel}>
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>{t.phone}</Text>
-                <Pressable onPress={() => void Linking.openURL(`tel:${activeStore.phone}`)}>
-                  <Text style={[styles.infoValue, styles.link]}>{activeStore.phone}</Text>
+                <Pressable
+                  style={[styles.infoValueWrap, styles.infoLtr]}
+                  onPress={() => void Linking.openURL(`tel:${activeStore.phone}`)}
+                >
+                  <Text
+                    style={[styles.infoValue, styles.link, styles.infoValueSingleLine]}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                  >
+                    {activeStore.phone}
+                  </Text>
                 </Pressable>
               </View>
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>{t.location}</Text>
-                <Text style={styles.infoValue}>
-                  {activeStore.location.lat.toFixed(4)}, {activeStore.location.lng.toFixed(4)}
-                </Text>
+                <Pressable
+                  style={styles.infoValueWrap}
+                  onPress={() =>
+                    void Linking.openURL(
+                      `https://www.google.com/maps/search/?api=1&query=${activeStore.location.lat},${activeStore.location.lng}`
+                    )
+                  }
+                >
+                  <Text style={styles.infoValue}>{formatStoreLocation(activeStore, t.locationUnknown)}</Text>
+                  <Text style={styles.infoMapsHint}>{t.openInMaps}</Text>
+                </Pressable>
               </View>
               <Text style={styles.muted}>{t.visitAutoHint}</Text>
             </View>
@@ -913,7 +1004,7 @@ export default function App() {
               setMode("store");
               setBottomTab("home");
               setStoreTab("info");
-              await refreshStoreData(store.id);
+              await Promise.all([refreshStoreData(store.id), loadDailyStores()]);
             } else {
               setMode("home");
               setBottomTab("home");
@@ -1125,6 +1216,23 @@ export default function App() {
         onMinus={() => selectedProduct && setQty(selectedProduct.id, -1)}
         onPlus={() => selectedProduct && setQty(selectedProduct.id, 1)}
       />
+      <StorePeekModal
+        visible={peekStore != null}
+        store={peekStore}
+        labels={{
+          close: t.close,
+          phone: t.phone,
+          owner: t.storeOwner,
+          location: t.location,
+          locationUnknown: t.locationUnknown,
+          openInMaps: t.openInMaps,
+          callStore: t.callStore,
+          deferredOn: t.deferredOn,
+          deferredOff: t.deferredOff,
+        }}
+        formatLocation={(s) => formatStoreLocation(s, t.locationUnknown)}
+        onClose={() => setPeekStore(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -1307,6 +1415,27 @@ const styles = StyleSheet.create({
   resumeName: { color: text, fontSize: 17, fontWeight: "800", textAlign: "right" },
   resumeMeta: { color: muted, fontSize: 13, marginTop: 2, textAlign: "right" },
   resumeArrow: { color: accent, fontSize: 28, fontWeight: "300", marginLeft: 8 },
+  dailySection: {
+    marginTop: 16,
+    backgroundColor: card,
+    borderRadius: theme.radius.xl,
+    padding: 16,
+    ...theme.shadow.card,
+  },
+  dailyCount: { color: accent, fontSize: 13, fontWeight: "700" },
+  dailyStoreCard: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    backgroundColor: "#f8fafc",
+    borderRadius: theme.radius.lg,
+    padding: 14,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: line,
+  },
+  dailyStoreBody: { flex: 1, minWidth: 0 },
+  dailyStoreName: { color: text, fontSize: 16, fontWeight: "800", textAlign: "right" },
+  dailyStoreMeta: { color: muted, fontSize: 13, marginTop: 4, textAlign: "right" },
   metaChips: { flexDirection: "row-reverse", flexWrap: "wrap", gap: 8, marginTop: 8, marginBottom: 4 },
   metaChip: {
     paddingVertical: 6,
@@ -1320,13 +1449,18 @@ const styles = StyleSheet.create({
   panel: { marginTop: 12 },
   infoRow: {
     flexDirection: "row-reverse",
-    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: line,
   },
-  infoLabel: { color: muted, fontSize: 13, fontWeight: "600" },
-  infoValue: { color: text, fontSize: 15, fontWeight: "700", maxWidth: "65%", textAlign: "left" },
+  infoLabel: { color: muted, fontSize: 13, fontWeight: "600", flexShrink: 0, minWidth: 72 },
+  infoValueWrap: { flex: 1, minWidth: 0, alignItems: "flex-start" },
+  infoValue: { color: text, fontSize: 15, fontWeight: "700", textAlign: "left", width: "100%" },
+  infoValueSingleLine: { flexShrink: 1 },
+  infoLtr: { direction: "ltr" },
+  infoMapsHint: { color: theme.accent, fontSize: 12, fontWeight: "600", marginTop: 4 },
   emptyText: { color: muted, fontSize: 15, textAlign: "center", marginTop: 24, fontWeight: "600" },
   segmented: {
     flexDirection: "row-reverse",

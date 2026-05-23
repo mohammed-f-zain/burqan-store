@@ -269,10 +269,12 @@ async function loadStoreForRep(storeId: number, rep: { areaIds: number[] }) {
     deferred_payment_enabled: boolean;
     owner_portal_token: string;
     qr_public_token: string;
+    area_name: string;
   }>(
-    `SELECT s.*, qc.public_token AS qr_public_token
+    `SELECT s.*, qc.public_token AS qr_public_token, a.name AS area_name
      FROM stores s
      JOIN qr_codes qc ON qc.id = s.qr_code_id
+     JOIN areas a ON a.id = s.area_id
      WHERE s.id = $1`,
     [storeId]
   );
@@ -287,6 +289,7 @@ async function loadStoreForRep(storeId: number, rep: { areaIds: number[] }) {
     ownerName: s.owner_name,
     location: { lat: s.location_lat, lng: s.location_lng },
     addressText: s.address_text,
+    areaName: s.area_name,
     imageUrl: s.image_url,
     areaId: s.area_id,
     deferredPaymentEnabled: s.deferred_payment_enabled,
@@ -368,6 +371,56 @@ router.post("/stores/register", repAuthMiddleware, async (req, res, next) => {
     } finally {
       c.release();
     }
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** Stores in rep areas not yet visited today (Asia/Amman calendar day). */
+router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
+  try {
+    const rep = req.rep!;
+    if (!rep.areaIds.length) {
+      return res.json({ stores: [] });
+    }
+    const { rows } = await query<{
+      id: number;
+      name: string;
+      phone: string;
+      owner_name: string;
+      location_lat: number;
+      location_lng: number;
+      address_text: string | null;
+      deferred_payment_enabled: boolean;
+      area_name: string;
+    }>(
+      `SELECT s.id, s.name, s.phone, s.owner_name, s.location_lat, s.location_lng,
+              s.address_text, s.deferred_payment_enabled, a.name AS area_name
+       FROM stores s
+       JOIN areas a ON a.id = s.area_id
+       WHERE s.area_id = ANY($1::int[])
+         AND NOT EXISTS (
+           SELECT 1 FROM visits v
+           WHERE v.store_id = s.id
+             AND v.representative_id = $2
+             AND (v.visited_at AT TIME ZONE 'Asia/Amman')::date =
+                 (NOW() AT TIME ZONE 'Asia/Amman')::date
+         )
+       ORDER BY a.name ASC, s.name ASC`,
+      [rep.areaIds, rep.id]
+    );
+    res.json({
+      stores: rows.map((s) => ({
+        id: s.id,
+        name: s.name,
+        phone: s.phone,
+        ownerName: s.owner_name,
+        location: { lat: s.location_lat, lng: s.location_lng },
+        addressText: s.address_text,
+        areaName: s.area_name,
+        deferredPaymentEnabled: s.deferred_payment_enabled,
+      })),
+    });
   } catch (e) {
     next(e);
   }
