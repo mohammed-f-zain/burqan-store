@@ -3,6 +3,11 @@
 .owner-shell {
   min-height: 100vh;
   background: radial-gradient(1100px 520px at 85% -5%, rgba(13, 148, 136, 0.14) 0%, var(--bg) 50%);
+  font-family: "Tajawal", "Segoe UI", system-ui, sans-serif;
+}
+
+html[dir="rtl"] .owner-shell {
+  direction: rtl;
 }
 
 .owner-header {

@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import { useLocale } from "../i18n/LocaleContext";
+import { useOwnerArabic } from "../owner/useOwnerArabic";
 import { publicApi } from "../publicApi";
 
 export default function PublicQrRedirect() {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
-  const { t } = useLocale();
+  const t = useOwnerArabic();
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {

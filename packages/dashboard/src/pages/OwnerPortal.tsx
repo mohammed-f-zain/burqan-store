@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
-import { useLocale } from "../i18n/LocaleContext";
 import { mediaUrl } from "../lib/mediaUrl";
+import { useOwnerArabic } from "../owner/useOwnerArabic";
 import { formatMarketDateTime } from "../utils/formatMarketDateTime";
 import { publicApi } from "../publicApi";
 
@@ -48,20 +48,20 @@ function formatMoney(n: number, currency: string) {
   return `${n.toLocaleString("ar-JO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
 }
 
-function formatMonthLabel(isoMonth: string, ar: boolean) {
+function formatMonthLabel(isoMonth: string) {
   const d = new Date(isoMonth.includes("T") ? isoMonth : `${isoMonth}T12:00:00`);
-  return new Intl.DateTimeFormat(ar ? "ar-JO" : "en-GB", {
+  return new Intl.DateTimeFormat("ar-JO", {
     month: "short",
     year: "2-digit",
     calendar: "gregory",
+    numberingSystem: "latn",
   }).format(d);
 }
 
 export default function OwnerPortal() {
   const [params] = useSearchParams();
   const token = params.get("t");
-  const { t, locale } = useLocale();
-  const ar = locale === "ar";
+  const t = useOwnerArabic();
 
   const [tab, setTab] = useState<Tab>("overview");
   const [data, setData] = useState<OwnerSummary | null>(null);
@@ -233,7 +233,7 @@ export default function OwnerPortal() {
                           title={formatMoney(m.total, t.owner.currency)}
                         />
                       </div>
-                      <span className="owner-chart-label">{formatMonthLabel(m.month, ar)}</span>
+                      <span className="owner-chart-label">{formatMonthLabel(m.month)}</span>
                     </div>
                   ))}
                 </div>
@@ -294,7 +294,7 @@ export default function OwnerPortal() {
                           </span>
                         </td>
                         <td>{formatMoney(parseFloat(o.total_amount), t.owner.currency)}</td>
-                        <td>{formatMarketDateTime(o.created_at)}</td>
+                        <td>{formatMarketDateTime(o.created_at, "ar")}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -345,7 +345,7 @@ export default function OwnerPortal() {
               <div>
                 {data.visits.map((v) => (
                   <div key={v.id} className="owner-visit">
-                    <div className="owner-visit-time">{formatMarketDateTime(v.visited_at)}</div>
+                    <div className="owner-visit-time">{formatMarketDateTime(v.visited_at, "ar")}</div>
                     <div className="owner-visit-rep">{t.owner.repLabel}: {v.rep_name}</div>
                     {v.note ? <div className="owner-visit-note">{v.note}</div> : null}
                   </div>
