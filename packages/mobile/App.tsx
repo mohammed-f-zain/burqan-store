@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
+import * as ExpoSplashScreen from "expo-splash-screen";
 import * as ImagePicker from "expo-image-picker";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
@@ -32,8 +33,11 @@ import ProductGridCard from "./ProductGridCard";
 import { productImageUrl } from "./productImage";
 import ProfileScreen, { type RepProfile } from "./ProfileScreen";
 import { clearRepToken, loadStoredRepToken, saveRepToken } from "./repSession";
+import SplashScreen from "./SplashScreen";
 import ToastOverlay, { type ToastKind } from "./ToastOverlay";
 import { theme } from "./theme";
+
+void ExpoSplashScreen.preventAutoHideAsync().catch(() => {});
 
 const API_BASE = resolveApiBase();
 
@@ -202,7 +206,7 @@ export default function App() {
   const embeddedCameraHeight = Math.max(360, winH - (insets.top + scanTopMargin) - scanBottomChrome);
 
   const [token, setToken] = useState<string | null>(null);
-  const [sessionRestoring, setSessionRestoring] = useState(true);
+  const [showSplash, setShowSplash] = useState(true);
   const [repProfile, setRepProfile] = useState<RepProfile | null>(null);
   const [profileRefreshing, setProfileRefreshing] = useState(false);
   const [email, setEmail] = useState("");
@@ -379,10 +383,16 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      const minSplashMs = 2400;
+      const started = Date.now();
       const stored = await loadStoredRepToken();
-      if (cancelled) return;
-      if (stored) setToken(stored);
-      setSessionRestoring(false);
+      if (!cancelled && stored) setToken(stored);
+      const remaining = minSplashMs - (Date.now() - started);
+      if (remaining > 0) await new Promise((r) => setTimeout(r, remaining));
+      if (!cancelled) {
+        setShowSplash(false);
+        await ExpoSplashScreen.hideAsync().catch(() => {});
+      }
     })();
     return () => {
       cancelled = true;
@@ -636,14 +646,12 @@ export default function App() {
     []
   );
 
-  if (sessionRestoring) {
+  if (showSplash) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: bg }} edges={["top", "bottom", "left", "right"]}>
-        <View style={styles.center}>
-          <StatusBar style="dark" />
-          <ActivityIndicator size="large" color={accent} />
-        </View>
-      </SafeAreaView>
+      <View style={{ flex: 1, backgroundColor: theme.bgSplash }}>
+        <StatusBar style="light" />
+        <SplashScreen />
+      </View>
     );
   }
 
@@ -1359,7 +1367,7 @@ function RegisterForm(props: {
           <Text style={styles.secondaryText}>{t.cancel}</Text>
         </Pressable>
         <Pressable style={styles.primary} onPress={submit} disabled={busy}>
-          {busy ? <ActivityIndicator color="#04121a" /> : <Text style={styles.primaryText}>{t.saveStore}</Text>}
+          {busy ? <ActivityIndicator color={theme.onAccent} /> : <Text style={styles.primaryText}>{t.saveStore}</Text>}
         </Pressable>
       </View>
     </View>
@@ -1453,6 +1461,8 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: theme.radius.md,
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: theme.accent2,
   },
   scanPrimaryText: { color: "#fff", fontWeight: "800", fontSize: 16 },
   resumeCard: {
@@ -1657,7 +1667,7 @@ const styles = StyleSheet.create({
   qtyNum: { color: text, fontWeight: "800", minWidth: 24, textAlign: "center" },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
   chip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: line },
-  chipOn: { borderColor: accent, backgroundColor: "rgba(13,148,136,0.12)" },
+  chipOn: { borderColor: accent, backgroundColor: theme.accentSoft },
   chipText: { color: text, fontWeight: "600" },
   bottomBar: {
     flexDirection: "row-reverse",

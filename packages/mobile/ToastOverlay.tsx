@@ -1,12 +1,14 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { theme } from "./theme";
+
 export type ToastKind = "success" | "error" | "info";
 
 const palettes: Record<ToastKind, { bg: string; border: string; text: string; label: string }> = {
-  success: { bg: "#ecfdf5", border: "#0d9488", text: "#134e4a", label: "✓" },
-  error: { bg: "#fff1f2", border: "#e11d48", text: "#9f1239", label: "!" },
-  info: { bg: "#f0f9ff", border: "#0284c7", text: "#0c4a6e", label: "i" },
+  success: { bg: "#eff6ff", border: theme.accent, text: theme.accentDark, label: "✓" },
+  error: { bg: "#fff1f2", border: theme.danger, text: "#9f1239", label: "!" },
+  info: { bg: "#ecfeff", border: theme.accent2, text: theme.accentDark, label: "i" },
 };
 
 type Props = {
