@@ -1097,3 +1097,102 @@ html[dir="rtl"] .swal-toast-burqan .swal2-icon {
   flex: 1;
   min-width: 0;
 }
+
+.area-gov-wrap {
+  width: 100%;
+}
+
+.area-gov-toolbar {
+  flex-wrap: wrap;
+}
+
+.area-gov-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.area-gov-group {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.area-gov-group summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  user-select: none;
+}
+
+.area-gov-group summary::-webkit-details-marker {
+  display: none;
+}
+
+.area-gov-group summary::before {
+  content: "▸";
+  color: var(--accent);
+  font-size: 0.85rem;
+  width: 1rem;
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+
+.area-gov-group[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.area-gov-group__title {
+  flex: 1;
+}
+
+.area-gov-group__body {
+  padding: 8px 12px 14px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.area-gov-group__body.area-gov-checks,
+.area-gov-group__body:has(.area-gov-check) {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+}
+
+.area-gov-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+
+.area-gov-row__main {
+  flex: 1;
+  min-width: 160px;
+}
+
+.area-gov-check {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--card);
+  border: 1px solid var(--line);
+}
+
+.area-gov-checks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+}

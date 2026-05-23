@@ -1,25 +1,38 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { api } from "../api";
+import AreaGovernorateGroups from "../components/AreaGovernorateGroups";
 import { useAuth } from "../auth/AuthContext";
-import PaginationBar from "../components/PaginationBar";
-import { useClientPagination } from "../hooks/useClientPagination";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
 import { confirmDanger } from "../lib/swalConfirm";
 import { toastError, toastSuccess } from "../lib/toast";
 
-type Area = { id: number; name: string };
+type Area = {
+  id: number;
+  name: string;
+  governorate: string | null;
+  center_lat?: number | null;
+  center_lng?: number | null;
+  radius_km?: string | number | null;
+};
 
 export default function AreasPage() {
   const { can } = useAuth();
   const { t } = useLocale();
   const [areas, setAreas] = useState<Area[]>([]);
   const [name, setName] = useState("");
+  const [governorate, setGovernorate] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
 
-  const areaPgn = useClientPagination(areas);
+  const governorateOptions = useMemo(() => {
+    const s = new Set<string>();
+    for (const a of areas) {
+      if (a.governorate?.trim()) s.add(a.governorate.trim());
+    }
+    return [...s].sort((a, b) => a.localeCompare(b, "ar"));
+  }, [areas]);
 
   async function load() {
     const { data } = await api.get<{ areas: Area[] }>("/areas");
@@ -34,8 +47,12 @@ export default function AreasPage() {
   async function onAdd(e: FormEvent) {
     e.preventDefault();
     try {
-      await api.post("/areas", { name: name.trim() });
+      await api.post("/areas", {
+        name: name.trim(),
+        governorate: governorate.trim() || null,
+      });
       setName("");
+      setGovernorate("");
       await load();
       toastSuccess(t.areas.added);
     } catch (err) {
@@ -91,8 +108,19 @@ export default function AreasPage() {
       <div className="card">
         <h2>{t.areas.title}</h2>
         {write && (
-          <form onSubmit={onAdd} className="row spread" style={{ gap: 12, alignItems: "flex-end" }}>
-            <label style={{ flex: 1 }}>
+          <form onSubmit={onAdd} className="form" style={{ maxWidth: 520 }}>
+            <label>
+              {t.areas.governorateLabel}
+              <select value={governorate} onChange={(e) => setGovernorate(e.target.value)}>
+                <option value="">{t.areas.governoratePick}</option>
+                {governorateOptions.map((g) => (
+                  <option key={g} value={g}>
+                    {g}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
               {t.areas.newLabel}
               <input value={name} onChange={(e) => setName(e.target.value)} required minLength={2} />
             </label>
@@ -103,73 +131,64 @@ export default function AreasPage() {
         )}
       </div>
       <div className="card">
-        {areas.length > 0 && (
-          <PaginationBar
-            className="pagination-bar--flush"
-            page={areaPgn.page}
-            totalPages={areaPgn.totalPages}
-            totalItems={areaPgn.total}
-            from={areaPgn.from}
-            to={areaPgn.to}
-            pageSize={areaPgn.pageSize}
-            pageSizeOptions={areaPgn.pageSizeOptions}
-            onPageChange={areaPgn.setPage}
-            onPageSizeChange={areaPgn.setPageSize}
-          />
-        )}
-        <div className="table-wrap" style={{ marginTop: areas.length > 0 ? 12 : 0 }}>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>{t.areas.colName}</th>
-                {write && <th>{t.areas.colActions}</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {areaPgn.slice.map((a) => (
-                <tr key={a.id}>
-                  <td>
+        {areas.length === 0 ? (
+          <p className="muted">{t.areas.empty}</p>
+        ) : (
+          <AreaGovernorateGroups
+            areas={areas}
+            unassignedLabel={t.areas.unassignedGroup}
+            expandAllLabel={t.areas.expandAll}
+            collapseAllLabel={t.areas.collapseAll}
+            defaultOpen
+          >
+            {(a) => (
+              <div className="area-gov-row" key={a.id}>
+                <div className="area-gov-row__main">
+                  {editingId === a.id ? (
+                    <input
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      minLength={2}
+                      style={{ width: "100%", maxWidth: 320 }}
+                    />
+                  ) : (
+                    <>
+                      <strong>{a.name}</strong> <span className="muted small">#{a.id}</span>
+                      {a.radius_km != null ? (
+                        <div className="muted small">
+                          {t.areas.radiusKm}: {String(a.radius_km)} km
+                        </div>
+                      ) : null}
+                    </>
+                  )}
+                </div>
+                {write && (
+                  <div className="row spread" style={{ gap: 8, flexWrap: "wrap" }}>
                     {editingId === a.id ? (
-                      <input
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
-                        minLength={2}
-                        style={{ width: "100%", maxWidth: 320 }}
-                      />
+                      <>
+                        <button type="button" className="primary" onClick={() => void saveEdit()}>
+                          {t.areas.save}
+                        </button>
+                        <button type="button" className="ghost" onClick={cancelEdit}>
+                          {t.areas.cancel}
+                        </button>
+                      </>
                     ) : (
                       <>
-                        <strong>{a.name}</strong> <span className="muted small">#{a.id}</span>
+                        <button type="button" className="ghost" onClick={() => startEdit(a)}>
+                          {t.areas.edit}
+                        </button>
+                        <button type="button" className="ghost danger" onClick={() => void remove(a.id)}>
+                          {t.areas.delete}
+                        </button>
                       </>
                     )}
-                  </td>
-                  {write && (
-                    <td>
-                      {editingId === a.id ? (
-                        <div className="row spread" style={{ gap: 8, flexWrap: "wrap" }}>
-                          <button type="button" className="primary" onClick={() => void saveEdit()}>
-                            {t.areas.save}
-                          </button>
-                          <button type="button" className="ghost" onClick={cancelEdit}>
-                            {t.areas.cancel}
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="row spread" style={{ gap: 8, flexWrap: "wrap" }}>
-                          <button type="button" className="ghost" onClick={() => startEdit(a)}>
-                            {t.areas.edit}
-                          </button>
-                          <button type="button" className="ghost danger" onClick={() => void remove(a.id)}>
-                            {t.areas.delete}
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </AreaGovernorateGroups>
+        )}
       </div>
     </div>
   );

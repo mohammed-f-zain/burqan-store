@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { api } from "../api";
+import AreaGovernorateGroups from "../components/AreaGovernorateGroups";
 import { useAuth } from "../auth/AuthContext";
 import PaginationBar from "../components/PaginationBar";
 import { useClientPagination } from "../hooks/useClientPagination";
@@ -22,7 +23,7 @@ type Rep = {
   area_ids: unknown;
   image_url: string | null;
 };
-type Area = { id: number; name: string };
+type Area = { id: number; name: string; governorate?: string | null };
 function normalizeAreaIds(raw: unknown): number[] {
   if (Array.isArray(raw)) return raw.map((x) => Number(x)).filter((n) => Number.isFinite(n));
   if (typeof raw === "string") {
@@ -261,14 +262,20 @@ export default function RepresentativesPage() {
               {uploading && <p className="muted small">{t.reps.uploading}</p>}
             </div>
             <div className="muted small">{t.reps.areas}</div>
-            <div className="perm-grid">
-              {areas.map((a) => (
-                <label key={a.id} className="check">
+            <AreaGovernorateGroups
+              areas={areas}
+              unassignedLabel={t.areas.unassignedGroup}
+              expandAllLabel={t.areas.expandAll}
+              collapseAllLabel={t.areas.collapseAll}
+              layout="grid"
+            >
+              {(a) => (
+                <label key={a.id} className="check area-gov-check">
                   <input type="checkbox" checked={picked.includes(a.id)} onChange={() => toggleArea(a.id)} />
                   <span>{a.name}</span>
                 </label>
-              ))}
-            </div>
+              )}
+            </AreaGovernorateGroups>
             <button className="primary" type="submit">
               {t.reps.createBtn}
             </button>
@@ -399,14 +406,20 @@ export default function RepresentativesPage() {
                 )}
               </div>
               <div className="muted small">{t.reps.areas}</div>
-              <div className="perm-grid">
-                {areas.map((a) => (
-                  <label key={a.id} className="check">
+              <AreaGovernorateGroups
+                areas={areas}
+                unassignedLabel={t.areas.unassignedGroup}
+                expandAllLabel={t.areas.expandAll}
+                collapseAllLabel={t.areas.collapseAll}
+                layout="grid"
+              >
+                {(a) => (
+                  <label key={a.id} className="check area-gov-check">
                     <input type="checkbox" checked={ePicked.includes(a.id)} onChange={() => toggleEArea(a.id)} />
                     <span>{a.name}</span>
                   </label>
-                ))}
-              </div>
+                )}
+              </AreaGovernorateGroups>
             </div>
             {canFillCar && (
               <p className="muted small" style={{ marginTop: 16 }}>
