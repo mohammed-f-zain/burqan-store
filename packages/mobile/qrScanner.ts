@@ -1,17 +1,16 @@
+import Constants from "expo-constants";
 import { CameraView } from "expo-camera";
 import { Platform } from "react-native";
 
-import { shouldUseInAppQrScannerOnIos } from "./systemQrScanner";
-
-/** Apple Data Scanner / Google Code Scanner. */
-export const SYSTEM_QR_BARCODE_TYPES = ["qr"] as const;
-
-/** In-app CameraView — iOS needs AVFoundation symbology id. */
-export const IN_APP_QR_BARCODE_TYPES =
-  Platform.OS === "ios" ? (["org.iso.QRCode", "qr"] as const) : (["qr"] as const);
+export { IN_APP_QR_BARCODE_TYPES, SYSTEM_QR_BARCODE_TYPES } from "./qrScannerConfig";
 
 export function isSystemQrScannerAvailable(): boolean {
   return CameraView.isModernBarcodeScannerAvailable;
+}
+
+/** Expo Go on iOS: launchScanner events are unreliable — use in-app CameraView instead. */
+export function shouldUseInAppQrScannerOnIos(): boolean {
+  return Platform.OS === "ios" && Constants.appOwnership === "expo";
 }
 
 /** Native full-screen scanner when supported (not Expo Go on iOS). */

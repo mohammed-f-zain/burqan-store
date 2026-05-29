@@ -1,8 +1,7 @@
-import Constants from "expo-constants";
 import { CameraView } from "expo-camera";
 import { Platform } from "react-native";
 
-import { SYSTEM_QR_BARCODE_TYPES } from "./qrScanner";
+import { SYSTEM_QR_BARCODE_TYPES } from "./qrScannerConfig";
 
 type ScanCallback = (data: string) => void;
 
@@ -50,9 +49,4 @@ export function presentSystemQrScanner(onScan: ScanCallback): void {
 
 export function cancelSystemQrScanSession(): void {
   activeScanCallback = null;
-}
-
-/** Expo Go on iOS: launchScanner events are unreliable — use in-app CameraView instead. */
-export function shouldUseInAppQrScannerOnIos(): boolean {
-  return Platform.OS === "ios" && Constants.appOwnership === "expo";
 }
