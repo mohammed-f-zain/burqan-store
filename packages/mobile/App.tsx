@@ -33,7 +33,7 @@ import {
   layoutContentWidth,
   tabletContentMaxWidth,
 } from "./deviceLayout";
-import { resolveApiBase } from "./resolveApiBase";
+import { isLocalApiBase, resolveApiBase } from "./resolveApiBase";
 import { toArabicUserMessage } from "./arabicMessage";
 import ProductDetailModal, { type Product } from "./ProductDetailModal";
 import { productImageUrl } from "./productImage";
@@ -51,8 +51,10 @@ const API_BASE = resolveApiBase();
 
 const t = {
   appTitle: "برقان — المندوب",
-  networkFailed:
-    "تعذّر الاتصال بالخادم. تحقق: 1) تشغيل الـ API على هذا الجهاز (npm run api:dev) والمنفذ 4000. 2) الهاتف والكمبيوتر على نفس الـ Wi‑Fi. 3) جدار ناري macOS يسمح لـ Node بالاتصال الوارد. 4) مع tunnel استخدم EXPO_PUBLIC_API_URL الصحيح مع FORCE_ENV=1.",
+  networkFailedLive: (host: string) =>
+    `تعذّر الاتصال بالخادم (${host}). تحقق من الإنترنت على الهاتف وحالة api.burqan.store على السيرفر.`,
+  networkFailedLocal:
+    "تعذّر الاتصال بالـ API المحلي. شغّل npm run api:dev (منفذ 4000)، نفس Wi‑Fi، أو أزل EXPO_PUBLIC_API_USE_LOCAL=1 لاستخدام api.burqan.store.",
   email: "البريد",
   password: "كلمة المرور",
   signIn: "دخول",
@@ -440,7 +442,14 @@ export default function App() {
         msg === "Network request failed" ||
         msg === "Network Request Failed" ||
         msg.toLowerCase().includes("network request");
-      showToast(isNetwork ? t.networkFailed : toArabicUserMessage(msg, t.loginFailed), "error");
+      showToast(
+        isNetwork
+          ? isLocalApiBase(API_BASE)
+            ? t.networkFailedLocal
+            : t.networkFailedLive(API_BASE)
+          : toArabicUserMessage(msg, t.loginFailed),
+        "error"
+      );
     } finally {
       clearTimeout(timer);
       setBusy(false);

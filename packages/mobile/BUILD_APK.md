@@ -8,21 +8,9 @@
    cd packages/mobile && npx expo start -c
    ```
 3. **Scan the QR code in the terminal** (IP changes when you change networks — old QR codes stop working).
-4. If it spins forever: try tunnel mode:
-   ```bash
-   npx expo start --tunnel
-   ```
-   Then in `packages/mobile/.env` set:
-   ```
-   EXPO_PUBLIC_API_FORCE_ENV=1
-   EXPO_PUBLIC_API_URL=https://api.burqan.store
-   ```
-5. Start the API locally for login during dev:
-   ```bash
-   npm run api:dev
-   ```
-   (from repo root — port **4000**)
-6. Allow **Node** through macOS Firewall if the phone cannot connect.
+4. **API URL:** Expo Go and `expo start` use the **live API** (`https://api.burqan.store`) by default — no Mac firewall or local `api:dev` needed.
+5. **Local API only** (optional): copy `.env.example` → `.env` and set `EXPO_PUBLIC_API_USE_LOCAL=1`, then run `npm run api:dev` (port 4000) and allow Node through macOS Firewall.
+6. If Metro tunnel is slow, `expo start --tunnel` still uses the live API unless you set `USE_LOCAL=1`.
 7. **Maps** in store registration may be blank in Expo Go — use the **APK** or a dev build for full maps; the rest of the app should still work.
 
 ---

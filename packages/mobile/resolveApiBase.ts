@@ -46,15 +46,28 @@ function inferHostFromMetroBundle(): string | null {
   }
 }
 
+/** True when the app targets a LAN/localhost API (not the public production host). */
+export function isLocalApiBase(base: string): boolean {
+  try {
+    const u = new URL(base);
+    if (u.protocol !== "http:") return false;
+    return isLikelyLanOrEmulatorHost(u.hostname) || u.hostname === "localhost" || u.hostname === "127.0.0.1";
+  } catch {
+    return false;
+  }
+}
+
 /**
  * - **Release builds** (`__DEV__` false): `EXPO_PUBLIC_API_URL` if set, else {@link DEFAULT_PRODUCTION_API}.
- * - **Development**: Metro LAN host on :4000 when inferable; else `EXPO_PUBLIC_API_URL`; else localhost.
- * - `EXPO_PUBLIC_API_FORCE_ENV=1` forces `EXPO_PUBLIC_API_URL` even in dev (tunnel / remote API).
+ * - **Development (default)**: same live API as production — no local Mac/firewall required.
+ * - **Local API in dev**: set `EXPO_PUBLIC_API_USE_LOCAL=1` to use Metro LAN host :4000 (or `EXPO_PUBLIC_API_URL`).
+ * - `EXPO_PUBLIC_API_FORCE_ENV=1` + `EXPO_PUBLIC_API_URL` always wins in dev (staging, tunnel, etc.).
  */
 export function resolveApiBase(): string {
   const envUrl = normalizeApiUrl(process.env.EXPO_PUBLIC_API_URL);
   const forceEnv = process.env.EXPO_PUBLIC_API_FORCE_ENV === "1";
-  const inferredHost = __DEV__ ? inferHostFromMetroBundle() : null;
+  const useLocal = process.env.EXPO_PUBLIC_API_USE_LOCAL === "1";
+  const inferredHost = __DEV__ && useLocal ? inferHostFromMetroBundle() : null;
   const inferred = inferredHost ? `http://${inferredHost}:4000` : null;
 
   if (!__DEV__) {
@@ -62,7 +75,10 @@ export function resolveApiBase(): string {
   }
 
   if (forceEnv && envUrl) return envUrl;
-  if (inferred) return inferred;
-  if (envUrl) return envUrl;
-  return "http://127.0.0.1:4000";
+  if (useLocal) {
+    if (inferred) return inferred;
+    if (envUrl) return envUrl;
+    return "http://127.0.0.1:4000";
+  }
+  return envUrl ?? DEFAULT_PRODUCTION_API;
 }
