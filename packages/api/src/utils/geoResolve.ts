@@ -1,8 +1,12 @@
 import { query } from "../db/pool.js";
+import { areaBboxParams, EXCLUDE_GRID_AREA_SQL } from "./areaQuery.js";
 import { HttpError } from "./errors.js";
 import { haversineMeters } from "./geoDistance.js";
 import { isGoogleGeocodeEnabled, reverseGeocode } from "./googleGeocode.js";
 import { GOVERNORATE_AREA_SUFFIX, matchAreaFromGoogle } from "./matchAreaFromGoogle.js";
+
+const NEARBY_AREA_RADIUS_KM = 28;
+const GOOGLE_MATCH_MAX_CANDIDATES = 120;
 
 export type AreaGeo = {
   id: number;
@@ -65,6 +69,9 @@ async function resolveWithGoogleThenCircles(
   lng: number,
   rows: AreaGeo[]
 ): Promise<ResolvedArea> {
+  if (rows.length > GOOGLE_MATCH_MAX_CANDIDATES) {
+    return pickFromCircles(lat, lng, rows);
+  }
   if (isGoogleGeocodeEnabled()) {
     try {
       const geocode = await reverseGeocode(lat, lng);
@@ -97,14 +104,39 @@ export async function resolveAreaIdForRep(
   return resolveWithGoogleThenCircles(lat, lng, rows);
 }
 
-/** Pick area from all Jordan areas in DB (store registration). */
-export async function resolveAreaIdFromAllAreas(lat: number, lng: number): Promise<ResolvedArea> {
+async function loadAreasNearPoint(lat: number, lng: number, radiusKm: number): Promise<AreaGeo[]> {
+  const box = areaBboxParams(lat, lng, radiusKm);
   const { rows } = await query<AreaGeo>(
     `SELECT id, name, governorate, center_lat, center_lng, radius_km
      FROM areas
      WHERE center_lat IS NOT NULL AND center_lng IS NOT NULL
-     ORDER BY id ASC`
+       AND ${EXCLUDE_GRID_AREA_SQL}
+       AND center_lat BETWEEN $1 AND $2
+       AND center_lng BETWEEN $3 AND $4
+     ORDER BY id ASC`,
+    [box.minLat, box.maxLat, box.minLng, box.maxLng]
   );
+  return rows;
+}
+
+/** Pick area from all Jordan areas in DB (store registration). */
+export async function resolveAreaIdFromAllAreas(lat: number, lng: number): Promise<ResolvedArea> {
+  let rows = await loadAreasNearPoint(lat, lng, NEARBY_AREA_RADIUS_KM);
+  if (!rows.length) {
+    rows = await loadAreasNearPoint(lat, lng, 90);
+  }
+  if (!rows.length) {
+    const { rows: fallback } = await query<AreaGeo>(
+      `SELECT id, name, governorate, center_lat, center_lng, radius_km
+       FROM areas
+       WHERE center_lat IS NOT NULL AND center_lng IS NOT NULL
+         AND ${EXCLUDE_GRID_AREA_SQL}
+         AND name LIKE '%' || $1
+       ORDER BY id ASC`,
+      [GOVERNORATE_AREA_SUFFIX]
+    );
+    rows = fallback;
+  }
   if (!rows.length) {
     throw new HttpError(500, "لم تُعرَّف المناطق على الخادم — شغّل seed:jordan-areas");
   }

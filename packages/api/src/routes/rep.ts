@@ -18,6 +18,7 @@ import {
   resolveAreaIdFromAllAreas,
 } from "../utils/geo.js";
 import { parseQrPublicToken } from "../utils/qrToken.js";
+import { areaBboxParams, EXCLUDE_GRID_AREA_SQL } from "../utils/areaQuery.js";
 
 const router = Router();
 
@@ -140,9 +141,24 @@ router.get("/areas/resolve", repAuthMiddleware, async (req, res, next) => {
   }
 });
 
-/** All Jordan areas with geo boundaries (for registration map). */
-router.get("/areas/jordan", repAuthMiddleware, async (_req, res, next) => {
+const jordanAreasQuerySchema = z.object({
+  lat: z.coerce.number().min(-90).max(90).optional(),
+  lng: z.coerce.number().min(-180).max(180).optional(),
+  radiusKm: z.coerce.number().min(5).max(80).optional(),
+});
+
+/** Jordan areas with geo boundaries (for registration map). Optional lat/lng narrows payload. */
+router.get("/areas/jordan", repAuthMiddleware, async (req, res, next) => {
   try {
+    const q = jordanAreasQuerySchema.parse(req.query);
+    const params: (number | string)[] = [];
+    let bboxSql = "";
+    if (q.lat != null && q.lng != null) {
+      const radiusKm = q.radiusKm ?? 22;
+      const box = areaBboxParams(q.lat, q.lng, radiusKm);
+      bboxSql = ` AND center_lat BETWEEN $1 AND $2 AND center_lng BETWEEN $3 AND $4`;
+      params.push(box.minLat, box.maxLat, box.minLng, box.maxLng);
+    }
     const { rows } = await query<{
       id: number;
       name: string;
@@ -154,7 +170,9 @@ router.get("/areas/jordan", repAuthMiddleware, async (_req, res, next) => {
       `SELECT id, name, governorate, center_lat, center_lng, radius_km
        FROM areas
        WHERE center_lat IS NOT NULL AND center_lng IS NOT NULL
-       ORDER BY governorate NULLS LAST, name ASC`
+         AND ${EXCLUDE_GRID_AREA_SQL}${bboxSql}
+       ORDER BY governorate NULLS LAST, name ASC`,
+      params
     );
     res.json({
       areas: rows.map((r) => ({
@@ -175,7 +193,8 @@ router.get("/inventory", repAuthMiddleware, async (req, res, next) => {
   try {
     const rep = req.rep!;
     const { rows } = await query(
-      `SELECT p.id, p.name, p.designation, p.unit_label, p.image_url, p.price, ri.quantity
+      `SELECT p.id, p.name, p.designation, p.unit_label, p.carton_spec, p.dimensions_cm,
+              p.carton_weight_kg, p.image_url, p.price, ri.quantity
        FROM representative_inventory ri
        INNER JOIN products p ON p.id = ri.product_id AND p.is_active = true
        WHERE ri.representative_id = $1 AND ri.quantity > 0

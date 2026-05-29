@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { productImageUrl } from "./productImage";
@@ -11,18 +12,20 @@ type Props = {
   noImage: string;
   /** When false, hide van stock badge (catalog-only view). */
   showStock?: boolean;
+  /** Inside virtualized grid — no extra outer margin. */
+  embedded?: boolean;
   onPress: () => void;
 };
 
-const IMAGE_ASPECT = 1;
+const IMAGE_ASPECT = 0.92;
 
-export default function ProductGridCard(props: Props) {
+function ProductGridCard(props: Props) {
   const uri = productImageUrl(props.item.image_url);
   const imageHeight = Math.round(props.width * IMAGE_ASPECT);
 
   return (
     <Pressable
-      style={[styles.card, { width: props.width }]}
+      style={[styles.card, { width: props.width }, props.embedded && styles.cardEmbedded]}
       onPress={props.onPress}
       accessibilityRole="button"
     >
@@ -100,4 +103,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   stockText: { color: theme.accentDark, fontSize: 13, fontWeight: "800" },
+  cardEmbedded: { marginBottom: 0 },
 });
+
+export default memo(ProductGridCard);

@@ -7,12 +7,39 @@ export class LocationDeniedError extends Error {
   }
 }
 
+export class LocationTimeoutError extends Error {
+  constructor() {
+    super("location_timeout");
+    this.name = "LocationTimeoutError";
+  }
+}
+
+const DEFAULT_TIMEOUT_MS = 12_000;
+
 /** Current device GPS for store registration and proximity checks. */
-export async function getRepPosition(): Promise<{ lat: number; lng: number }> {
+export async function getRepPosition(opts?: { timeoutMs?: number }): Promise<{ lat: number; lng: number }> {
+  const timeoutMs = opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const { status } = await Location.requestForegroundPermissionsAsync();
   if (status !== "granted") throw new LocationDeniedError();
-  const pos = await Location.getCurrentPositionAsync({
+
+  const last = await Location.getLastKnownPositionAsync({ maxAge: 120_000 });
+  if (last?.coords) {
+    return { lat: last.coords.latitude, lng: last.coords.longitude };
+  }
+
+  const posPromise = Location.getCurrentPositionAsync({
     accuracy: Location.Accuracy.Balanced,
   });
-  return { lat: pos.coords.latitude, lng: pos.coords.longitude };
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new LocationTimeoutError()), timeoutMs);
+  });
+
+  try {
+    const pos = await Promise.race([posPromise, timeoutPromise]);
+    return { lat: pos.coords.latitude, lng: pos.coords.longitude };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }

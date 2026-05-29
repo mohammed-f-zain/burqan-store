@@ -23,12 +23,19 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { formatMarketDateTime } from "./formatMarketDateTime";
 import { parseQrPublicToken } from "./parseQrToken";
-import { getRepPosition, LocationDeniedError } from "./getDeviceLocation";
-import { isTabletDevice, tabletContentMaxWidth } from "./deviceLayout";
+import { fetchJson } from "./fetchJson";
+import { getRepPosition, LocationDeniedError, LocationTimeoutError } from "./getDeviceLocation";
+import ProductCatalogGrid from "./ProductCatalogGrid";
+import InventoryList from "./InventoryList";
+import {
+  getProductGridLayout,
+  isTabletDevice,
+  layoutContentWidth,
+  tabletContentMaxWidth,
+} from "./deviceLayout";
 import { resolveApiBase } from "./resolveApiBase";
 import { toArabicUserMessage } from "./arabicMessage";
 import ProductDetailModal, { type Product } from "./ProductDetailModal";
-import ProductGridCard from "./ProductGridCard";
 import { productImageUrl } from "./productImage";
 import ProfileScreen, { type RepProfile } from "./ProfileScreen";
 /** Lazy: react-native-maps can break Expo Go if loaded at startup. */
@@ -75,7 +82,14 @@ const t = {
   tabSell: "السلة",
   priceLabel: "السعر",
   unit: "الوحدة",
-  description: "الوصف",
+  description: "الوصف / التعيين",
+  productCode: "رمز المنتج",
+  specsTitle: "مواصفات المنتج",
+  cartonSpec: "الكرتون",
+  dimensions: "الأبعاد (سم)",
+  cartonWeight: "وزن الكرتون",
+  notSpecified: "—",
+  vanStock: "مخزون السيارة",
   inCart: "في السلة",
   phone: "الهاتف",
   location: "الموقع",
@@ -99,6 +113,10 @@ const t = {
   loginFailed: "فشل الدخول",
   genericError: "حدث خطأ. حاول مرة أخرى.",
   qrFailed: "فشل البحث عن الرمز",
+  qrResolving: "جاري التحقق من الرمز…",
+  qrInvalid: "رمز غير صالح",
+  locationTimeout: "تعذّر تحديد الموقع في الوقت المحدد — تحقق من GPS",
+  networkTimeout: "انتهى وقت الاتصال بالخادم — حاول مرة أخرى",
   uploadFailed: "فشل رفع الصورة",
   registerFailed: "فشل التسجيل",
   cancelled: "أُلغي",
@@ -188,6 +206,9 @@ function mapProductRow(r: {
   quantity?: number;
   designation?: string | null;
   unit_label?: string | null;
+  carton_spec?: string | null;
+  dimensions_cm?: string | null;
+  carton_weight_kg?: string | number | null;
   image_url?: string | null;
 }): Product {
   return {
@@ -196,6 +217,9 @@ function mapProductRow(r: {
     price: String(r.price),
     designation: r.designation ?? null,
     unit_label: r.unit_label ?? null,
+    carton_spec: r.carton_spec ?? null,
+    dimensions_cm: r.dimensions_cm ?? null,
+    carton_weight_kg: r.carton_weight_kg != null ? String(r.carton_weight_kg) : null,
     image_url: r.image_url ?? null,
     quantity: Number(r.quantity) || 0,
   };
@@ -236,6 +260,10 @@ export default function App() {
         ? { maxWidth: pageMaxWidth, width: "100%" as const, alignSelf: "center" as const }
         : undefined,
     [pageMaxWidth]
+  );
+  const contentWidth = useMemo(
+    () => layoutContentWidth(winW, pageMaxWidth),
+    [winW, pageMaxWidth]
   );
   /** Extra space under the Dynamic Island / status bar (larger on iPhone with island). */
   const scanTopMargin = Platform.OS === "ios" ? 36 : 16;
@@ -279,6 +307,8 @@ export default function App() {
   const [cameraSessionActive, setCameraSessionActive] = useState(false);
   /** System QR scanner listener — must not be removed when `launchScanner` promise resolves (that can happen as soon as the UI opens). */
   const modernBarcodeSubRef = useRef<{ remove: () => void } | null>(null);
+  const qrResolveInFlightRef = useRef(false);
+  const [busyMessage, setBusyMessage] = useState<string | null>(null);
 
   const canUseCamera = Boolean(permission?.granted || scanPermissionOverride);
 
@@ -297,8 +327,12 @@ export default function App() {
     }
     setCameraPreviewReady(false);
     setCameraSessionActive(false);
-    const t = setTimeout(() => setCameraSessionActive(true), 280);
-    return () => clearTimeout(t);
+    const startCam = setTimeout(() => setCameraSessionActive(true), 200);
+    const previewFallback = setTimeout(() => setCameraPreviewReady(true), 3500);
+    return () => {
+      clearTimeout(startCam);
+      clearTimeout(previewFallback);
+    };
   }, [mode, canUseCamera]);
   const [lastScanToken, setLastScanToken] = useState<string | null>(null);
   const [manualToken, setManualToken] = useState("");
@@ -306,7 +340,6 @@ export default function App() {
   const [activeStore, setActiveStore] = useState<StoreBrief | null>(null);
   const [storeTab, setStoreTab] = useState<"info" | "visits" | "orders" | "sell">("info");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const productCardWidth = Math.floor((winW - 22 * 2 - 16 - 12) / 2);
   const [visits, setVisits] = useState<{ id: string; visited_at: string; note: string | null }[]>([]);
   const [orders, setOrders] = useState<unknown[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -323,6 +356,14 @@ export default function App() {
   const [bottomTab, setBottomTab] = useState<BottomTab>("home");
   const [inventory, setInventory] = useState<Product[]>([]);
   const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
+  const productGrid = useMemo(
+    () => getProductGridLayout(contentWidth, isTablet),
+    [contentWidth, isTablet]
+  );
+  const renderInventoryCard = useCallback(
+    (props: { item: Product; mode: "stock" }) => <ProductCard item={props.item} mode="stock" />,
+    []
+  );
 
   const headers = useMemo(() => {
     const h: Record<string, string> = { "Content-Type": "application/json" };
@@ -410,7 +451,7 @@ export default function App() {
     if (!token) return;
     try {
       const data = await apiGet("/api/v1/rep/inventory");
-      const rows = (data.inventory ?? []) as Product[];
+      const rows = (data.inventory ?? []) as Parameters<typeof mapProductRow>[0][];
       setInventory(rows.map(mapProductRow).filter((r) => r.quantity > 0));
     } catch {
       /* ignore */
@@ -421,8 +462,8 @@ export default function App() {
     if (!token) return;
     try {
       const data = await apiGet("/api/v1/rep/products");
-      const rows = (data.products ?? []) as Product[];
-      setCatalogProducts(rows.map((r) => mapProductRow(r)));
+      const rows = (data.products ?? []) as Parameters<typeof mapProductRow>[0][];
+      setCatalogProducts(rows.map(mapProductRow));
     } catch {
       setCatalogProducts([]);
     }
@@ -552,35 +593,57 @@ export default function App() {
   }, [token, loadProfile, loadInventory, loadDailyStores]);
 
   async function resolveQr(raw: string) {
-    if (!token) return;
+    if (!token || qrResolveInFlightRef.current) return;
     const publicToken = parseQrPublicToken(raw);
-    if (!publicToken) return;
+    if (!publicToken || publicToken.length < 16) {
+      showToast(t.qrInvalid, "error");
+      return;
+    }
+
+    qrResolveInFlightRef.current = true;
+    setMode("home");
+    setScanPermissionOverride(false);
     setBusy(true);
+    setBusyMessage(t.qrResolving);
     hideToast();
+
     try {
-      const pos = await getRepPosition();
-      const data = await apiGet(
-        `/api/v1/rep/qr/${encodeURIComponent(publicToken)}?lat=${pos.lat}&lng=${pos.lng}`
+      const pos = await getRepPosition({ timeoutMs: 12_000 });
+      const { res, data } = await fetchJson<{
+        status?: string;
+        store?: StoreBrief;
+        error?: string;
+      }>(
+        `${API_BASE}/api/v1/rep/qr/${encodeURIComponent(publicToken)}?lat=${pos.lat}&lng=${pos.lng}`,
+        { headers, timeoutMs: 20_000 }
       );
+      if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : t.qrFailed);
+
       setLastScanToken(publicToken);
       if (data.status === "unassigned") {
         setActiveStore(null);
         setMode("register");
         setBottomTab("home");
-      } else {
-        setActiveStore(data.store as StoreBrief);
+      } else if (data.store) {
+        setActiveStore(data.store);
         setVisitHadOrder(false);
         setMode("store");
         setBottomTab("home");
         setStoreTab("info");
         showToast(t.visitRecorded, "success");
-        await Promise.all([refreshStoreData(data.store.id), loadDailyStores()]);
+        void Promise.all([refreshStoreData(data.store.id), loadDailyStores()]);
+      } else {
+        throw new Error(t.qrFailed);
       }
     } catch (e) {
       if (e instanceof LocationDeniedError) showToast(t.locationDenied, "error");
+      else if (e instanceof LocationTimeoutError) showToast(t.locationTimeout, "error");
+      else if (e instanceof Error && e.message === "network_timeout") showToast(t.networkTimeout, "error");
       else showToast(e instanceof Error ? e.message : t.qrFailed, "error");
     } finally {
       setBusy(false);
+      setBusyMessage(null);
+      qrResolveInFlightRef.current = false;
     }
   }
 
@@ -603,6 +666,7 @@ export default function App() {
       modernBarcodeSubRef.current = null;
 
       const sub = CameraView.onModernBarcodeScanned((ev) => {
+        if (qrResolveInFlightRef.current) return;
         sub.remove();
         if (modernBarcodeSubRef.current === sub) modernBarcodeSubRef.current = null;
         if (CameraView.isModernBarcodeScannerAvailable) {
@@ -633,7 +697,7 @@ export default function App() {
         ]);
         setVisits(v.visits ?? []);
         setOrders(o.orders ?? []);
-        const rows = (inv.inventory ?? []) as Product[];
+        const rows = (inv.inventory ?? []) as Parameters<typeof mapProductRow>[0][];
         const mapped = rows.map(mapProductRow).filter((r) => r.quantity > 0);
         setProducts(mapped);
         setInventory(mapped);
@@ -784,7 +848,14 @@ export default function App() {
       priceLabel: t.priceLabel,
       unit: t.unit,
       stock: t.stock,
+      vanStock: t.vanStock,
       description: t.description,
+      productCode: t.productCode,
+      specsTitle: t.specsTitle,
+      cartonSpec: t.cartonSpec,
+      dimensions: t.dimensions,
+      cartonWeight: t.cartonWeight,
+      notSpecified: t.notSpecified,
       noImage: t.noImage,
       currency: t.currency,
       inCart: t.inCart,
@@ -831,45 +902,8 @@ export default function App() {
     <SafeAreaView style={{ flex: 1, backgroundColor: bg }} edges={["top", "left", "right"]}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <StatusBar style="dark" />
-        <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={[styles.page, pageFrameStyle, { paddingBottom: insets.bottom + 88 }]}
-          keyboardShouldPersistTaps="handled"
-          refreshControl={
-            mode === "home" ? (
-              <RefreshControl refreshing={homeRefreshing} onRefresh={onHomeRefresh} tintColor={accent} colors={[accent]} />
-            ) : bottomTab === "store" ? (
-              <RefreshControl
-                refreshing={storeRefreshing}
-                onRefresh={async () => {
-                  setStoreRefreshing(true);
-                  try {
-                    await Promise.all([loadCatalog(), loadInventory()]);
-                  } finally {
-                    setStoreRefreshing(false);
-                  }
-                }}
-                tintColor={accent}
-                colors={[accent]}
-              />
-            ) : mode === "store" && activeStore ? (
-              <RefreshControl
-                refreshing={storeRefreshing}
-                onRefresh={async () => {
-                  setStoreRefreshing(true);
-                  try {
-                    await refreshStoreData(activeStore.id);
-                  } finally {
-                    setStoreRefreshing(false);
-                  }
-                }}
-                tintColor={accent}
-                colors={[accent]}
-              />
-            ) : undefined
-          }
-        >
-          <View style={styles.header}>
+        <View style={styles.mainShell}>
+          <View style={[styles.header, pageFrameStyle, styles.headerFrame]}>
             <View style={styles.headerStart}>
               <Image source={require("./assets/burqanlogo.png")} style={styles.logoHeader} resizeMode="contain" />
               {bottomTab === "home" && repProfile?.fullName ? (
@@ -898,6 +932,69 @@ export default function App() {
             </Pressable>
           </View>
 
+          {bottomTab === "store" ? (
+            <View style={[styles.flexTab, pageFrameStyle]}>
+              <View style={styles.screenHeader}>
+                <Text style={styles.screenTitle}>{t.navStore}</Text>
+                {catalogDisplay.length > 0 ? (
+                  <View style={styles.countBadge}>
+                    <Text style={styles.countBadgeText}>{t.productsBadge(catalogDisplay.length)}</Text>
+                  </View>
+                ) : null}
+              </View>
+              <Text style={[styles.muted, styles.catalogHint]}>{t.catalogStockHint}</Text>
+              <ProductCatalogGrid
+                products={catalogDisplay}
+                columns={productGrid.columns}
+                cardWidth={productGrid.cardWidth}
+                gap={productGrid.gap}
+                currency={t.currency}
+                noImage={t.noImage}
+                emptyLabel={t.catalogEmpty}
+                refreshing={storeRefreshing}
+                onRefresh={() => {
+                  setStoreRefreshing(true);
+                  void Promise.all([loadCatalog(), loadInventory()]).finally(() => setStoreRefreshing(false));
+                }}
+                onSelect={setSelectedProduct}
+              />
+            </View>
+          ) : bottomTab === "inventory" ? (
+            <View style={[styles.flexTab, pageFrameStyle]}>
+              <View style={[styles.card, styles.cardFlex]}>
+                <Text style={styles.cardTitle}>{t.inventoryTitle}</Text>
+                <InventoryList
+                  items={inventory}
+                  emptyLabel={t.inventoryEmpty}
+                  renderCard={renderInventoryCard}
+                />
+              </View>
+            </View>
+          ) : (
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={[styles.page, pageFrameStyle, { paddingBottom: insets.bottom + 88 }]}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={
+            mode === "home" ? (
+              <RefreshControl refreshing={homeRefreshing} onRefresh={onHomeRefresh} tintColor={accent} colors={[accent]} />
+            ) : mode === "store" && activeStore ? (
+              <RefreshControl
+                refreshing={storeRefreshing}
+                onRefresh={async () => {
+                  setStoreRefreshing(true);
+                  try {
+                    await refreshStoreData(activeStore.id);
+                  } finally {
+                    setStoreRefreshing(false);
+                  }
+                }}
+                tintColor={accent}
+                colors={[accent]}
+              />
+            ) : undefined
+          }
+        >
       {bottomTab === "home" && mode !== "store" && mode !== "register" && (
         <>
           <View style={styles.card}>
@@ -1096,17 +1193,6 @@ export default function App() {
         </View>
       )}
 
-      {bottomTab === "inventory" && (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>{t.inventoryTitle}</Text>
-          {inventory.length === 0 ? (
-            <Text style={styles.emptyText}>{t.inventoryEmpty}</Text>
-          ) : (
-            inventory.map((item) => <ProductCard key={item.id} item={item} mode="stock" />)
-          )}
-        </View>
-      )}
-
       {mode === "register" && lastScanToken && token && bottomTab === "home" && (
         <Suspense
           fallback={
@@ -1177,38 +1263,9 @@ export default function App() {
         />
       )}
 
-      {bottomTab === "store" && (
-        <>
-          <View style={styles.screenHeader}>
-            <Text style={styles.screenTitle}>{t.navStore}</Text>
-            {catalogDisplay.length > 0 ? (
-              <View style={styles.countBadge}>
-                <Text style={styles.countBadgeText}>{t.productsBadge(catalogDisplay.length)}</Text>
-              </View>
-            ) : null}
-          </View>
-          <Text style={styles.muted}>{t.catalogStockHint}</Text>
-          {catalogDisplay.length === 0 ? (
-            <Text style={styles.emptyText}>{t.catalogEmpty}</Text>
-          ) : (
-            <View style={styles.productGrid}>
-              {catalogDisplay.map((item) => (
-                <ProductGridCard
-                  key={item.id}
-                  item={item}
-                  width={productCardWidth}
-                  currency={t.currency}
-                  noImage={t.noImage}
-                  showStock
-                  onPress={() => setSelectedProduct(item)}
-                />
-              ))}
-            </View>
-          )}
-        </>
-      )}
-
       </ScrollView>
+          )}
+        </View>
         <Modal
           visible={mode === "scan"}
           animationType="slide"
@@ -1260,8 +1317,7 @@ export default function App() {
                         showToast(`${t.cameraMountError} ${toArabicUserMessage(e.message, t.genericError)}`, "error");
                       }}
                       onBarcodeScanned={({ data }) => {
-                        setMode("home");
-                        setScanPermissionOverride(false);
+                        if (qrResolveInFlightRef.current) return;
                         void resolveQr(data);
                       }}
                     />
@@ -1287,7 +1343,10 @@ export default function App() {
         </Modal>
         {busy ? (
           <View style={styles.busyOverlay} pointerEvents="auto">
-            <ActivityIndicator size="large" color={accent} />
+            <View style={styles.busyCard}>
+              <ActivityIndicator size="large" color={accent} />
+              {busyMessage ? <Text style={styles.busyMessage}>{busyMessage}</Text> : null}
+            </View>
           </View>
         ) : null}
         <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 10) }]}>
@@ -1475,6 +1534,17 @@ const accent = theme.accent;
 
 const styles = StyleSheet.create({
   center: { flex: 1, backgroundColor: bg, padding: 24, justifyContent: "center" },
+  mainShell: { flex: 1, minHeight: 0 },
+  headerFrame: { paddingHorizontal: 16, alignSelf: "center" },
+  flexTab: {
+    flex: 1,
+    minHeight: 0,
+    width: "100%",
+    paddingHorizontal: 16,
+    alignSelf: "center",
+  },
+  catalogHint: { marginBottom: 8 },
+  cardFlex: { flex: 1, minHeight: 0 },
   page: { padding: 16, paddingBottom: 48, backgroundColor: bg, flexGrow: 1 },
   logo: { width: 160, height: 64, alignSelf: "center", marginBottom: 20 },
   logoHeader: { width: 112, height: 40 },
@@ -1738,6 +1808,22 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     zIndex: 40,
+  },
+  busyCard: {
+    backgroundColor: card,
+    borderRadius: theme.radius.xl,
+    paddingVertical: 24,
+    paddingHorizontal: 28,
+    alignItems: "center",
+    gap: 12,
+    minWidth: 200,
+    ...theme.shadow.float,
+  },
+  busyMessage: {
+    color: text,
+    fontSize: 15,
+    fontWeight: "700",
+    textAlign: "center",
   },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
   tabs: {

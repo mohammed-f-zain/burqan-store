@@ -26,7 +26,13 @@ export function matchAreaFromGoogle(
 ): { areaId: number; areaName: string; governorate: string | null } | null {
   if (!candidates.length) return null;
 
-  const byName = new Map(candidates.map((a) => [normalizePlaceName(a.name), a]));
+  const govLabel = governorateLabelFromGeocode(geocode);
+  const govAr = govLabel ? governorateFromGoogleLabel(govLabel) : null;
+  const scoped =
+    govAr && candidates.length > 40 ? candidates.filter((a) => a.governorate === govAr) : candidates;
+  const pool = scoped.length ? scoped : candidates;
+
+  const byName = new Map(pool.map((a) => [normalizePlaceName(a.name), a]));
   const labels = labelsFromGeocode(geocode);
 
   for (const label of labels) {
@@ -40,17 +46,15 @@ export function matchAreaFromGoogle(
     const direct = byName.get(norm);
     if (direct) return pickArea(direct);
 
-    for (const area of candidates) {
+    for (const area of pool) {
       if (isGovernorateCoverageArea(area.name)) continue;
       const an = normalizePlaceName(area.name);
       if (norm.includes(an) || an.includes(norm)) return pickArea(area);
     }
   }
 
-  const govLabel = governorateLabelFromGeocode(geocode);
-  const govAr = govLabel ? governorateFromGoogleLabel(govLabel) : null;
   if (govAr) {
-    const govAreas = candidates.filter((a) => a.governorate === govAr);
+    const govAreas = pool.filter((a) => a.governorate === govAr);
     const coverage = govAreas.find((a) => isGovernorateCoverageArea(a.name));
     if (coverage) return pickArea(coverage);
     if (govAreas.length === 1) return pickArea(govAreas[0]!);

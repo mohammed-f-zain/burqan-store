@@ -12,7 +12,8 @@ import {
 } from "react-native";
 import MapView, { Circle, Marker, type Region } from "react-native-maps";
 
-import { getRepPosition, LocationDeniedError } from "./getDeviceLocation";
+import { fetchJson } from "./fetchJson";
+import { getRepPosition, LocationDeniedError, LocationTimeoutError } from "./getDeviceLocation";
 import { productImageUrl } from "./productImage";
 import { theme } from "./theme";
 import type { StoreBrief } from "./storeTypes";
@@ -127,24 +128,35 @@ export default function RegisterStoreForm(props: Props) {
     return JORDAN_REGION;
   }, [lat, lng]);
 
-  const loadJordanAreas = useCallback(async () => {
-    const res = await fetch(`${props.apiBase}/api/v1/rep/areas/jordan`, { headers: props.headers });
-    const data = await res.json();
-    if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : labels.mapLoadFailed);
-    setJordanAreas(data.areas ?? []);
-  }, [props.apiBase, props.headers]);
+  const loadJordanAreas = useCallback(
+    async (nearLat: number, nearLng: number) => {
+      const url = `${props.apiBase}/api/v1/rep/areas/jordan?lat=${nearLat}&lng=${nearLng}&radiusKm=22`;
+      const { res, data } = await fetchJson<{ areas?: JordanArea[]; error?: string }>(url, {
+        headers: props.headers,
+        timeoutMs: 20_000,
+      });
+      if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : labels.mapLoadFailed);
+      setJordanAreas(data.areas ?? []);
+    },
+    [props.apiBase, props.headers]
+  );
 
   const refreshLocation = useCallback(async () => {
     setLocating(true);
     try {
-      const pos = await getRepPosition();
+      const pos = await getRepPosition({ timeoutMs: 12_000 });
       setLat(pos.lat);
       setLng(pos.lng);
-      const res = await fetch(
+      const { res, data } = await fetchJson<{
+        areaId?: number;
+        areaName?: string;
+        governorate?: string | null;
+        assignedToRep?: boolean;
+        error?: string;
+      }>(
         `${props.apiBase}/api/v1/rep/areas/resolve?lat=${pos.lat}&lng=${pos.lng}&forRegister=1`,
-        { headers: props.headers }
+        { headers: props.headers, timeoutMs: 20_000 }
       );
-      const data = await res.json();
       if (res.ok && data.areaId) {
         setAreaId(data.areaId);
         const gov = typeof data.governorate === "string" ? data.governorate : "";
@@ -157,26 +169,23 @@ export default function RegisterStoreForm(props: Props) {
         setAreaId(undefined);
         props.onNotice(typeof data.error === "string" ? data.error : labels.areaDetecting);
       }
+      void loadJordanAreas(pos.lat, pos.lng).catch((e) => {
+        props.onNotice(e instanceof Error ? e.message : labels.mapLoadFailed);
+      });
     } catch (e) {
       setAreaResolved(false);
       setAreaId(undefined);
       if (e instanceof LocationDeniedError) props.onNotice(labels.locationDenied);
+      else if (e instanceof LocationTimeoutError) props.onNotice(labels.locating);
+      else if (e instanceof Error && e.message === "network_timeout") props.onNotice(labels.mapLoadFailed);
       else props.onNotice(e instanceof Error ? e.message : labels.locating);
     } finally {
       setLocating(false);
     }
-  }, [props.apiBase, props.headers, props.onNotice]);
+  }, [props.apiBase, props.headers, props.onNotice, loadJordanAreas]);
 
   useEffect(() => {
-    (async () => {
-      try {
-        await loadJordanAreas();
-        await refreshLocation();
-      } catch (e) {
-        props.onNotice(e instanceof Error ? e.message : labels.mapLoadFailed);
-        setLocating(false);
-      }
-    })();
+    void refreshLocation();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount once
   }, []);
 
