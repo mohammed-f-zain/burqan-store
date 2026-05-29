@@ -1,7 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
+import LoyaltyBadge from "../components/LoyaltyBadge";
+import LoyaltyIcon from "../components/LoyaltyIcon";
+import PaginationBar from "../components/PaginationBar";
+import { useClientPagination } from "../hooks/useClientPagination";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
 import { mediaUrl } from "../lib/mediaUrl";
@@ -33,16 +37,20 @@ type Redemption = {
 export default function RedeemPage() {
   const { can } = useAuth();
   const { t, locale } = useLocale();
+  const canWrite = can("redeem.write") || can("products.write");
   const [products, setProducts] = useState<Product[]>([]);
   const [redemptions, setRedemptions] = useState<Redemption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [savingId, setSavingId] = useState<number | null>(null);
 
   async function load() {
     setLoading(true);
     try {
       const [pRes, rRes] = await Promise.all([
         api.get<{ products: Product[] }>("/products"),
-        can("redeem.read") ? api.get<{ redemptions: Redemption[] }>("/redeem/redemptions?limit=40") : Promise.resolve({ data: { redemptions: [] } }),
+        can("redeem.read")
+          ? api.get<{ redemptions: Redemption[] }>("/redeem/redemptions?limit=40")
+          : Promise.resolve({ data: { redemptions: [] } }),
       ]);
       setProducts(pRes.data.products ?? []);
       setRedemptions(rRes.data.redemptions ?? []);
@@ -59,107 +67,222 @@ export default function RedeemPage() {
   }, []);
 
   async function patchProduct(id: number, patch: { redeemEnabled?: boolean; redeemPointsPerUnit?: number }) {
-    if (!can("redeem.write") && !can("products.write")) return;
+    if (!canWrite) return;
+    setSavingId(id);
     try {
       await api.patch(`/products/${id}`, {
         redeemEnabled: patch.redeemEnabled,
         redeemPointsPerUnit: patch.redeemPointsPerUnit,
       });
+      setProducts((prev) =>
+        prev.map((p) =>
+          p.id === id
+            ? {
+                ...p,
+                redeem_enabled: patch.redeemEnabled ?? p.redeem_enabled,
+                redeem_points_per_unit: patch.redeemPointsPerUnit ?? p.redeem_points_per_unit,
+              }
+            : p
+        )
+      );
       toastSuccess(t.redeem.saved);
-      await load();
     } catch (e) {
       toastError(pickAxiosErrorMessage(e, t.redeem.saveFailed));
+      await load();
+    } finally {
+      setSavingId(null);
     }
   }
 
-  const prizeProducts = products.filter((p) => p.is_active);
+  const activeProducts = useMemo(() => products.filter((p) => p.is_active), [products]);
+  const enabledCount = useMemo(() => activeProducts.filter((p) => p.redeem_enabled).length, [activeProducts]);
+  const totalPointsRedeemed = useMemo(
+    () => redemptions.reduce((s, r) => s + r.totalPointsSpent, 0),
+    [redemptions]
+  );
+
+  const catalogPgn = useClientPagination(activeProducts);
 
   return (
-    <div className="page">
-      <h1>{t.redeem.title}</h1>
-      <p className="muted">{t.redeem.subtitle}</p>
+    <div className="grid redeem-page">
+      <header className="redeem-page-header card">
+        <div className="redeem-page-header-text">
+          <h1 className="redeem-page-title">
+            <LoyaltyIcon kind="star" size={28} />
+            {t.redeem.title}
+          </h1>
+          <p className="muted">{t.redeem.subtitle}</p>
+        </div>
+        <div className="dash-kpi-grid dash-kpi-grid--loyalty redeem-page-kpis">
+          <div className="dash-kpi dash-kpi--loyalty">
+            <div className="dash-kpi-label">
+              <LoyaltyIcon kind="balance" size={18} />
+              {t.redeem.statEnabled}
+            </div>
+            <div className="dash-kpi-value">{enabledCount}</div>
+          </div>
+          <div className="dash-kpi dash-kpi--loyalty">
+            <div className="dash-kpi-label">
+              <LoyaltyIcon kind="earn" size={18} />
+              {t.redeem.statRedemptions}
+            </div>
+            <div className="dash-kpi-value">{redemptions.length}</div>
+          </div>
+          <div className="dash-kpi dash-kpi--accent dash-kpi--loyalty">
+            <div className="dash-kpi-label">
+              <LoyaltyIcon kind="star" size={18} />
+              {t.redeem.statPointsRedeemed}
+            </div>
+            <div className="dash-kpi-value">{t.overview.loyaltyPoints(totalPointsRedeemed)}</div>
+          </div>
+        </div>
+      </header>
 
-      {loading ? <p className="muted">{t.common.loading}</p> : null}
-
-      <section className="dash-section" style={{ marginTop: 20 }}>
+      <div className="card">
         <h2>{t.redeem.catalogTitle}</h2>
         <p className="muted small">{t.redeem.catalogHint}</p>
-        <div className="table-wrap" style={{ marginTop: 12 }}>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>{t.redeem.colProduct}</th>
-                <th>{t.redeem.colRedeemPoints}</th>
-                <th>{t.redeem.colEnabled}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {prizeProducts.map((p) => (
-                <tr key={p.id}>
-                  <td>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      {p.image_url ? (
-                        <img src={mediaUrl(p.image_url)} alt="" style={{ width: 40, height: 40, objectFit: "cover", borderRadius: 8 }} />
-                      ) : null}
-                      <span>{p.name}</span>
-                    </div>
-                  </td>
-                  <td>
-                    <input
-                      type="number"
-                      min={0}
-                      className="input"
-                      style={{ width: 100 }}
-                      defaultValue={p.redeem_points_per_unit ?? 0}
-                      disabled={!can("redeem.write") && !can("products.write")}
-                      onBlur={(e) => {
-                        const v = parseInt(e.target.value, 10) || 0;
-                        if (v !== (p.redeem_points_per_unit ?? 0)) {
-                          void patchProduct(p.id, { redeemPointsPerUnit: v });
-                        }
-                      }}
-                    />
-                  </td>
-                  <td>
-                    <label className="checkbox-row">
-                      <input
-                        type="checkbox"
-                        checked={Boolean(p.redeem_enabled)}
-                        disabled={!can("redeem.write") && !can("products.write")}
-                        onChange={(e) => void patchProduct(p.id, { redeemEnabled: e.target.checked })}
-                      />
-                      <span>{p.redeem_enabled ? t.redeem.enabledYes : t.redeem.enabledNo}</span>
-                    </label>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+
+        {loading ? (
+          <p className="muted redeem-page-loading">{t.common.loading}</p>
+        ) : (
+          <>
+            {activeProducts.length > 0 && (
+              <PaginationBar
+                className="pagination-bar--flush"
+                page={catalogPgn.page}
+                totalPages={catalogPgn.totalPages}
+                totalItems={catalogPgn.total}
+                from={catalogPgn.from}
+                to={catalogPgn.to}
+                pageSize={catalogPgn.pageSize}
+                pageSizeOptions={catalogPgn.pageSizeOptions}
+                onPageChange={catalogPgn.setPage}
+                onPageSizeChange={catalogPgn.setPageSize}
+              />
+            )}
+            <div className="table-wrap">
+              <table className="table redeem-catalog-table">
+                <thead>
+                  <tr>
+                    <th>{t.redeem.colProduct}</th>
+                    <th>{t.redeem.colRedeemPoints}</th>
+                    <th>{t.redeem.colEnabled}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {catalogPgn.slice.length === 0 ? (
+                    <tr>
+                      <td colSpan={3} className="muted">
+                        —
+                      </td>
+                    </tr>
+                  ) : (
+                    catalogPgn.slice.map((p) => {
+                      const img = mediaUrl(p.image_url);
+                      const isSaving = savingId === p.id;
+                      return (
+                        <tr
+                          key={p.id}
+                          className={p.redeem_enabled ? "redeem-row redeem-row--on" : "redeem-row redeem-row--off"}
+                        >
+                          <td>
+                            <div className="redeem-product-cell">
+                              {img ? (
+                                <img src={img} alt="" className="redeem-product-thumb" />
+                              ) : (
+                                <div className="redeem-product-thumb redeem-product-thumb--empty" aria-hidden>
+                                  ?
+                                </div>
+                              )}
+                              <div>
+                                <div className="strong">{p.name}</div>
+                                {!p.redeem_enabled ? (
+                                  <span className="muted small">{t.redeem.inactiveProduct}</span>
+                                ) : p.redeem_points_per_unit > 0 ? (
+                                  <LoyaltyBadge
+                                    text={t.owner.redeemPerUnit(p.redeem_points_per_unit)}
+                                    variant="inline"
+                                    icon="star"
+                                  />
+                                ) : null}
+                              </div>
+                            </div>
+                          </td>
+                          <td>
+                            <label className="redeem-points-field">
+                              <input
+                                aria-label={t.redeem.colRedeemPoints}
+                                type="number"
+                                min={0}
+                                step={1}
+                                className="redeem-points-input"
+                                defaultValue={p.redeem_points_per_unit ?? 0}
+                                disabled={!canWrite || isSaving}
+                                onBlur={(e) => {
+                                  const v = parseInt(e.target.value, 10) || 0;
+                                  if (v !== (p.redeem_points_per_unit ?? 0)) {
+                                    void patchProduct(p.id, { redeemPointsPerUnit: v });
+                                  }
+                                }}
+                              />
+                              <span className="redeem-points-suffix muted small">{t.redeem.pointsPerUnitLabel}</span>
+                            </label>
+                          </td>
+                          <td>
+                            {canWrite ? (
+                              <button
+                                type="button"
+                                className={p.redeem_enabled ? "pill on" : "pill off"}
+                                disabled={isSaving}
+                                onClick={() =>
+                                  void patchProduct(p.id, { redeemEnabled: !p.redeem_enabled })
+                                }
+                              >
+                                {p.redeem_enabled ? t.redeem.toggleDisable : t.redeem.toggleEnable}
+                              </button>
+                            ) : (
+                              <span className={p.redeem_enabled ? "redeem-status-pill redeem-status-pill--on" : "redeem-status-pill"}>
+                                {p.redeem_enabled ? t.redeem.enabledYes : t.redeem.enabledNo}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
 
       {can("redeem.read") ? (
-        <section className="dash-section" style={{ marginTop: 28 }}>
+        <div className="card">
           <h2>{t.redeem.historyTitle}</h2>
           {redemptions.length === 0 ? (
             <p className="muted">{t.redeem.emptyHistory}</p>
           ) : (
-            <ul className="list-plain" style={{ marginTop: 12 }}>
+            <ul className="redeem-history-list">
               {redemptions.map((r) => (
-                <li key={r.id} className="card" style={{ marginBottom: 12, padding: 14 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-                    <strong>
-                      {r.storeName} · {t.redeem.pointsSpent(r.totalPointsSpent)}
-                    </strong>
-                    <span className="muted small">{formatMarketDateTime(r.createdAt, locale)}</span>
+                <li key={r.id} className="redeem-history-item">
+                  <div className="redeem-history-item-head">
+                    <div>
+                      <span className="redeem-history-store">{r.storeName}</span>
+                      <p className="muted small redeem-history-rep">{t.redeem.byRep(r.repName)}</p>
+                    </div>
+                    <div className="redeem-history-meta">
+                      <LoyaltyBadge text={t.redeem.pointsSpent(r.totalPointsSpent)} variant="earn" icon="earn" />
+                      <time className="muted small">{formatMarketDateTime(r.createdAt, locale)}</time>
+                    </div>
                   </div>
-                  <p className="muted small" style={{ marginTop: 4 }}>
-                    {t.redeem.byRep(r.repName)}
-                  </p>
-                  <ul className="muted small" style={{ marginTop: 8, paddingRight: 18 }}>
-                    {(r.lines as Redemption["lines"]).map((line, i) => (
+                  <ul className="redeem-history-lines">
+                    {r.lines.map((line, i) => (
                       <li key={i}>
-                        {line.productName} × {line.quantity} ({t.redeem.pointsSpent(line.pointsSpent)})
+                        <span className="redeem-history-line-name">{line.productName}</span>
+                        <span className="muted small">
+                          × {line.quantity} · {t.redeem.pointsSpent(line.pointsSpent)}
+                        </span>
                       </li>
                     ))}
                   </ul>
@@ -167,7 +290,7 @@ export default function RedeemPage() {
               ))}
             </ul>
           )}
-        </section>
+        </div>
       ) : null}
     </div>
   );

@@ -1235,3 +1235,191 @@ html[dir="rtl"] .swal-toast-burqan .swal2-icon {
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 8px;
 }
+
+/* —— Prize redemption admin —— */
+.redeem-page {
+  gap: 20px;
+}
+
+.redeem-page-header {
+  display: grid;
+  gap: 20px;
+}
+
+.redeem-page-title {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 8px;
+  font-size: 1.35rem;
+}
+
+html[dir="ltr"] .redeem-page-title {
+  flex-direction: row;
+}
+
+.redeem-page-kpis {
+  margin: 0;
+}
+
+.redeem-page-loading {
+  margin-top: 16px;
+}
+
+.redeem-catalog-table {
+  min-width: 640px;
+}
+
+.redeem-row--off {
+  opacity: 0.72;
+}
+
+.redeem-row--on td:first-child {
+  border-inline-start: 3px solid rgba(13, 148, 136, 0.55);
+}
+
+.redeem-product-cell {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: 12px;
+}
+
+html[dir="ltr"] .redeem-product-cell {
+  flex-direction: row;
+}
+
+.redeem-product-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+}
+
+.redeem-product-thumb--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.redeem-points-field {
+  display: inline-flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: 8px;
+}
+
+html[dir="ltr"] .redeem-points-field {
+  flex-direction: row;
+}
+
+.redeem-points-input {
+  width: 88px;
+  padding: 10px 12px;
+  text-align: center;
+  font-weight: 700;
+}
+
+.redeem-points-suffix {
+  white-space: nowrap;
+}
+
+.redeem-status-pill {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.redeem-status-pill--on {
+  background: rgba(13, 148, 136, 0.12);
+  border-color: rgba(13, 148, 136, 0.35);
+  color: #0d9488;
+}
+
+.redeem-history-list {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.redeem-history-item {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: var(--surface);
+}
+
+.redeem-history-item-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.redeem-history-store {
+  font-weight: 800;
+  font-size: 1rem;
+}
+
+.redeem-history-rep {
+  margin: 4px 0 0;
+}
+
+.redeem-history-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+html[dir="ltr"] .redeem-history-meta {
+  align-items: flex-end;
+}
+
+.redeem-history-lines {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 12px 0 0;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 8px;
+}
+
+.redeem-history-lines li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.redeem-history-line-name {
+  font-weight: 600;
+}
+
+@media (max-width: 720px) {
+  .redeem-page-header {
+    gap: 14px;
+  }
+
+  .redeem-history-item-head {
+    flex-direction: column;
+  }
+
+  .redeem-history-meta {
+    align-items: flex-start;
+  }
+}
