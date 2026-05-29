@@ -1,5 +1,8 @@
-/** Standard radius (km) for named neighborhoods — wider GPS zones. */
-export const MAX_DETAILED_AREA_RADIUS_KM = 2;
+/** Radius (km) for curated main neighborhoods. */
+export const MAIN_AREA_RADIUS_KM = 3.5;
 
-/** Grid spacing (km); ~2.8 km gives slight overlap between 2 km circles. */
-export const GRID_STEP_KM = 2.8;
+/** @deprecated Use MAIN_AREA_RADIUS_KM — kept for imports that clamp legacy seeds. */
+export const MAX_DETAILED_AREA_RADIUS_KM = MAIN_AREA_RADIUS_KM;
+
+/** Grid spacing (km); legacy grid (not seeded by default). */
+export const GRID_STEP_KM = 4.9;

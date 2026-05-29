@@ -190,7 +190,7 @@ export const ar = {
     geoHint: "يُستخدم لتعيين المنطقة تلقائياً من موقع الجهاز عند تسجيل المتجر.",
     governorateCoverageTitle: "تغطية المحافظات",
     governorateCoverageHint:
-      "عند التفعيل، يُستخدم دائرة المحافظة الكاملة كاحتياطي عندما لا يقع المتجر داخل أي حي (نصف قطر 2 كم).",
+      "الأحياء الرئيسية فقط (نصف قطر 3.5 كم). عند التفعيل، تغطية المحافظة تلتقط أي موقع خارج الأحياء — لتغطية الأردن بالكامل.",
     governorateCoverageOn: "تغطية كاملة",
     governorateCoverageOff: "معطّلة",
     governorateCoverageSaved: "تم تحديث تغطية المحافظة.",
@@ -202,7 +202,7 @@ export const ar = {
     mapGovernorateFilter: "المحافظة على الخريطة",
     mapAllGovernorates: "كل المحافظات",
     mapShowGovCircles: "إظهار دوائر تغطية المحافظة",
-    mapNeighborhoodLegend: "أحياء (2 كم)",
+    mapNeighborhoodLegend: "أحياء رئيسية (3.5 كم)",
     mapGovernorateLegend: "تغطية محافظة",
     mapNoGeo: "لا توجد مناطق بإحداثيات لهذه المحافظة.",
     mapFocusHint: "انقر على منطقة في القائمة أو على الدائرة في الخريطة للتمييز.",

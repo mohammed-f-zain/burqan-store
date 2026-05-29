@@ -2,8 +2,9 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { MAX_DETAILED_AREA_RADIUS_KM } from "../data/jordanAreaConstants.js";
+import { MAIN_AREA_RADIUS_KM } from "../data/jordanAreaConstants.js";
 import { allJordanAreaSeeds } from "../data/jordanAreaSeeds.js";
+import { JORDAN_MAIN_AREA_NAMES } from "../data/jordanMainAreas.js";
 import { JORDAN_GOVERNORATES } from "../data/jordanGovernorates.js";
 import { SPLIT_AREA_TO_PARENT } from "../data/jordanSplitAreaMerges.js";
 import { GOVERNORATE_AREA_SUFFIX } from "../utils/matchAreaFromGoogle.js";
@@ -100,11 +101,29 @@ async function normalizeNeighborhoodRadii() {
     `UPDATE areas SET radius_km = $1
      WHERE name NOT LIKE '%' || $2
        AND name NOT LIKE '% — شبكة %'`,
-    [MAX_DETAILED_AREA_RADIUS_KM, GOVERNORATE_AREA_SUFFIX]
+    [MAIN_AREA_RADIUS_KM, GOVERNORATE_AREA_SUFFIX]
   );
   if (updated.rowCount) {
     // eslint-disable-next-line no-console
-    console.log(`Set ${updated.rowCount} neighborhood radii to ${MAX_DETAILED_AREA_RADIUS_KM} km.`);
+    console.log(`Set ${updated.rowCount} neighborhood radii to ${MAIN_AREA_RADIUS_KM} km.`);
+  }
+}
+
+/** Remove legacy micro-areas not in the main list (only when unused). */
+async function pruneNonMainAreas() {
+  const names = [...JORDAN_MAIN_AREA_NAMES];
+  const removed = await query(
+    `DELETE FROM areas a
+     WHERE a.name NOT LIKE '%' || $1
+       AND a.name NOT LIKE '% — شبكة %'
+       AND a.name <> ALL($2::text[])
+       AND NOT EXISTS (SELECT 1 FROM stores s WHERE s.area_id = a.id)
+       AND NOT EXISTS (SELECT 1 FROM representative_areas ra WHERE ra.area_id = a.id)`,
+    [GOVERNORATE_AREA_SUFFIX, names]
+  );
+  if (removed.rowCount) {
+    // eslint-disable-next-line no-console
+    console.log(`Pruned ${removed.rowCount} unused non-main areas.`);
   }
 }
 
@@ -140,6 +159,7 @@ async function main() {
   await renameLegacyAreas();
   await mergeSplitAreasIntoParents();
   await normalizeNeighborhoodRadii();
+  await pruneNonMainAreas();
 
   for (const g of JORDAN_GOVERNORATES) {
     const name = `${g.name}${GOVERNORATE_AREA_SUFFIX}`;
@@ -158,7 +178,7 @@ async function main() {
   const { rows } = await query<{ c: string }>(`SELECT COUNT(*)::text AS c FROM areas`);
   // eslint-disable-next-line no-console
   console.log(
-    `Jordan areas upserted: ${detailed.length} neighborhoods (${MAX_DETAILED_AREA_RADIUS_KM} km) + ${JORDAN_GOVERNORATES.length} governorate coverage.`,
+    `Jordan areas upserted: ${detailed.length} main neighborhoods (${MAIN_AREA_RADIUS_KM} km) + ${JORDAN_GOVERNORATES.length} governorate coverage.`,
     `Total areas in DB:`,
     rows[0]?.c ?? "0"
   );

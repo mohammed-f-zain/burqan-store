@@ -191,7 +191,7 @@ export const en: Messages = {
     geoHint: "Used to auto-assign stores from GPS. Set center near the area on the map.",
     governorateCoverageTitle: "Governorate coverage",
     governorateCoverageHint:
-      "When enabled, the full governorate circle is used as a fallback when GPS is outside all 2 km neighborhoods.",
+      "Main neighborhoods only (3.5 km radius). When enabled, governorate coverage catches any GPS point outside them — full Jordan coverage.",
     governorateCoverageOn: "Full coverage",
     governorateCoverageOff: "Disabled",
     governorateCoverageSaved: "Governorate coverage updated.",
@@ -203,7 +203,7 @@ export const en: Messages = {
     mapGovernorateFilter: "Governorate on map",
     mapAllGovernorates: "All governorates",
     mapShowGovCircles: "Show governorate coverage circles",
-    mapNeighborhoodLegend: "Neighborhoods (2 km)",
+    mapNeighborhoodLegend: "Main neighborhoods (3.5 km)",
     mapGovernorateLegend: "Governorate coverage",
     mapNoGeo: "No areas with coordinates for this governorate.",
     mapFocusHint: "Click an area in the list or a circle on the map to highlight it.",
