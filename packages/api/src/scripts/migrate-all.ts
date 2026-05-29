@@ -15,6 +15,7 @@ const FILES = [
   "003_admin_password_reset.sql",
   "004_area_governorate.sql",
   "005_loyalty.sql",
+  "006_prize_redeem.sql",
 ] as const;
 
 async function main() {

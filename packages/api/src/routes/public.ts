@@ -322,6 +322,46 @@ router.get("/owner/orders/:orderId", async (req, res, next) => {
   }
 });
 
+/** Prize catalog for store owner (view only — redemption is via rep visit). */
+router.get("/owner/prizes", async (req, res, next) => {
+  try {
+    const { t } = tokenQuery.parse(req.query);
+    const store = await storeByOwnerToken(t);
+    if (!store) {
+      return res.status(404).json({ error: "غير موجود" });
+    }
+    const { rows } = await query<{
+      id: number;
+      name: string;
+      designation: string | null;
+      unit_label: string | null;
+      image_url: string | null;
+      redeem_points_per_unit: number;
+    }>(
+      `SELECT id, name, designation, unit_label, image_url, redeem_points_per_unit
+       FROM products
+       WHERE is_active = true
+         AND redeem_enabled = true
+         AND redeem_points_per_unit > 0
+       ORDER BY name ASC`
+    );
+    res.json({
+      loyaltyPointsBalance: store.loyalty_points_balance,
+      viewOnly: true,
+      products: rows.map((p) => ({
+        id: p.id,
+        name: p.name,
+        designation: p.designation,
+        unitLabel: p.unit_label,
+        imageUrl: p.image_url,
+        redeemPointsPerUnit: p.redeem_points_per_unit,
+      })),
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.get("/owner/products", async (req, res, next) => {
   try {
     const { t } = tokenQuery.parse(req.query);

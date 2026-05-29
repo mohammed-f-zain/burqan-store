@@ -15,6 +15,7 @@ import OrderDetailPage from "./pages/OrderDetailPage";
 import OrdersPage from "./pages/OrdersPage";
 import OverviewPage from "./pages/OverviewPage";
 import ProductsPage from "./pages/ProductsPage";
+import RedeemPage from "./pages/RedeemPage";
 import OwnerOrderDetail from "./pages/OwnerOrderDetail";
 import OwnerPortal from "./pages/OwnerPortal";
 import PublicQrRedirect from "./pages/PublicQrRedirect";
@@ -46,6 +47,7 @@ export default function App() {
                 <Route path="admins" element={<AdminsPage />} />
                 <Route path="areas" element={<AreasPage />} />
                 <Route path="products" element={<ProductsPage />} />
+                <Route path="redeem" element={<RedeemPage />} />
                 <Route path="representatives" element={<RepresentativesPage />} />
                 <Route path="fill-car" element={<FillCarPage />} />
                 <Route path="rep-sales" element={<Navigate to="/app/fill-car" replace />} />

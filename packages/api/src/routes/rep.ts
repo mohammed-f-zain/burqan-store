@@ -296,6 +296,7 @@ async function loadStoreForRep(storeId: number, rep: { id: number; areaIds: numb
     owner_portal_token: string;
     qr_public_token: string;
     area_name: string;
+    loyalty_points_balance: number;
   }>(
     `SELECT s.*, qc.public_token AS qr_public_token, a.name AS area_name
      FROM stores s
@@ -321,6 +322,7 @@ async function loadStoreForRep(storeId: number, rep: { id: number; areaIds: numb
     deferredPaymentEnabled: s.deferred_payment_enabled,
     qrPublicToken: s.qr_public_token,
     ownerPortalUrl,
+    loyaltyPointsBalance: s.loyalty_points_balance,
   };
 }
 
@@ -594,6 +596,182 @@ async function loadStoreRowForRep(storeId: number, rep: { id: number; areaIds: n
   if (!repCanAccessStore(rep, s)) throw new HttpError(403, "المتجر ليس ضمن مناطقك");
   return s;
 }
+
+/** Prize catalog for a store visit (redeem enabled products only). */
+router.get("/stores/:id/prizes", repAuthMiddleware, async (req, res, next) => {
+  try {
+    const storeId = z.coerce.number().int().positive().parse(req.params.id);
+    const rep = req.rep!;
+    await loadStoreForRep(storeId, rep);
+    const { rows: storeRows } = await query<{ loyalty_points_balance: number }>(
+      `SELECT loyalty_points_balance FROM stores WHERE id = $1`,
+      [storeId]
+    );
+    const balance = storeRows[0]?.loyalty_points_balance ?? 0;
+    const { rows: products } = await query<{
+      id: number;
+      name: string;
+      designation: string | null;
+      unit_label: string | null;
+      image_url: string | null;
+      redeem_points_per_unit: number;
+    }>(
+      `SELECT id, name, designation, unit_label, image_url, redeem_points_per_unit
+       FROM products
+       WHERE is_active = true
+         AND redeem_enabled = true
+         AND redeem_points_per_unit > 0
+       ORDER BY name ASC`
+    );
+    res.json({
+      loyaltyPointsBalance: balance,
+      products: products.map((p) => ({
+        id: p.id,
+        name: p.name,
+        designation: p.designation,
+        unitLabel: p.unit_label,
+        imageUrl: p.image_url,
+        redeemPointsPerUnit: p.redeem_points_per_unit,
+      })),
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get("/stores/:id/prize-redemptions", repAuthMiddleware, async (req, res, next) => {
+  try {
+    const storeId = z.coerce.number().int().positive().parse(req.params.id);
+    const rep = req.rep!;
+    await loadStoreForRep(storeId, rep);
+    const { rows } = await query<{
+      id: string;
+      created_at: string;
+      total_points_spent: number;
+      rep_name: string;
+    }>(
+      `SELECT pr.id::text, pr.created_at, pr.total_points_spent, r.full_name AS rep_name
+       FROM prize_redemptions pr
+       JOIN representatives r ON r.id = pr.representative_id
+       WHERE pr.store_id = $1
+       ORDER BY pr.created_at DESC
+       LIMIT 40`,
+      [storeId]
+    );
+    res.json({
+      redemptions: rows.map((r) => ({
+        id: r.id,
+        createdAt: r.created_at,
+        totalPointsSpent: r.total_points_spent,
+        repName: r.rep_name,
+      })),
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+const redeemLineSchema = z.object({
+  productId: z.number().int().positive(),
+  quantity: z.number().int().positive(),
+});
+
+const redeemSchema = z.object({
+  storeId: z.number().int().positive(),
+  lines: z.array(redeemLineSchema).min(1),
+  repLat: z.number().min(-90).max(90),
+  repLng: z.number().min(-180).max(180),
+});
+
+router.post("/prize-redemptions", repAuthMiddleware, async (req, res, next) => {
+  try {
+    const body = redeemSchema.parse(req.body);
+    const rep = req.rep!;
+    const storeRow = await loadStoreRowForRep(body.storeId, rep);
+    assertWithinScanDistance(body.repLat, body.repLng, storeRow.location_lat, storeRow.location_lng);
+
+    const c = await pool.connect();
+    try {
+      await c.query("BEGIN");
+      const balRes = await c.query<{ loyalty_points_balance: number }>(
+        `SELECT loyalty_points_balance FROM stores WHERE id = $1 FOR UPDATE`,
+        [body.storeId]
+      );
+      const balance = balRes.rows[0]?.loyalty_points_balance ?? 0;
+
+      const priced: {
+        productId: number;
+        quantity: number;
+        pointsPerUnit: number;
+        pointsSpent: number;
+      }[] = [];
+      let totalPoints = 0;
+
+      for (const line of body.lines) {
+        const pr = await c.query<{
+          redeem_points_per_unit: number;
+          redeem_enabled: boolean;
+          is_active: boolean;
+        }>(
+          `SELECT redeem_points_per_unit, redeem_enabled, is_active FROM products WHERE id = $1`,
+          [line.productId]
+        );
+        const p = pr.rows[0];
+        if (!p?.is_active || !p.redeem_enabled || p.redeem_points_per_unit <= 0) {
+          throw new HttpError(400, "منتج غير متاح للاستبدال");
+        }
+        const pointsPerUnit = p.redeem_points_per_unit;
+        const pointsSpent = pointsPerUnit * line.quantity;
+        totalPoints += pointsSpent;
+        priced.push({
+          productId: line.productId,
+          quantity: line.quantity,
+          pointsPerUnit,
+          pointsSpent,
+        });
+      }
+
+      if (totalPoints > balance) {
+        throw new HttpError(400, `رصيد النقاط غير كافٍ (المتوفر: ${balance}، المطلوب: ${totalPoints})`);
+      }
+
+      const ins = await c.query<{ id: string }>(
+        `INSERT INTO prize_redemptions (store_id, representative_id, total_points_spent)
+         VALUES ($1, $2, $3) RETURNING id`,
+        [body.storeId, rep.id, totalPoints]
+      );
+      const redemptionId = ins.rows[0]!.id;
+
+      for (const l of priced) {
+        await c.query(
+          `INSERT INTO prize_redemption_lines (redemption_id, product_id, quantity, points_per_unit, points_spent)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [redemptionId, l.productId, l.quantity, l.pointsPerUnit, l.pointsSpent]
+        );
+      }
+
+      await c.query(
+        `UPDATE stores SET loyalty_points_balance = loyalty_points_balance - $1, updated_at = now()
+         WHERE id = $2`,
+        [totalPoints, body.storeId]
+      );
+
+      await c.query("COMMIT");
+      res.status(201).json({
+        redemptionId,
+        totalPointsSpent: totalPoints,
+        loyaltyPointsBalance: balance - totalPoints,
+      });
+    } catch (e) {
+      await c.query("ROLLBACK");
+      throw e;
+    } finally {
+      c.release();
+    }
+  } catch (e) {
+    next(e);
+  }
+});
 
 router.post("/orders", repAuthMiddleware, async (req, res, next) => {
   try {

@@ -887,6 +887,8 @@ const productSchema = z.object({
   imageUrl: optionalStoredImagePathSchema,
   price: z.number().nonnegative(),
   loyaltyPointsPerUnit: z.number().int().min(0).optional(),
+  redeemPointsPerUnit: z.number().int().min(0).optional(),
+  redeemEnabled: z.boolean().optional(),
 });
 
 router.get(
@@ -897,7 +899,7 @@ router.get(
     try {
       const { rows } = await query(
         `SELECT id, name, designation, unit_label, carton_spec, dimensions_cm, carton_weight_kg, image_url, price,
-                loyalty_points_per_unit, is_active, created_at
+                loyalty_points_per_unit, redeem_points_per_unit, redeem_enabled, is_active, created_at
          FROM products ORDER BY id DESC`
       );
       res.json({ products: rows });
@@ -915,8 +917,9 @@ router.post(
     try {
       const body = productSchema.parse(req.body);
       const { rows } = await query(
-        `INSERT INTO products (name, designation, unit_label, carton_spec, dimensions_cm, carton_weight_kg, image_url, price, loyalty_points_per_unit)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+        `INSERT INTO products (name, designation, unit_label, carton_spec, dimensions_cm, carton_weight_kg, image_url, price,
+                              loyalty_points_per_unit, redeem_points_per_unit, redeem_enabled)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
          RETURNING *`,
         [
           body.name,
@@ -928,6 +931,8 @@ router.post(
           body.imageUrl || null,
           body.price,
           body.loyaltyPointsPerUnit ?? 0,
+          body.redeemPointsPerUnit ?? 0,
+          body.redeemEnabled ?? false,
         ]
       );
       res.status(201).json({ product: rows[0] });
@@ -947,6 +952,8 @@ const productPatchSchema = z.object({
   imageUrl: optionalStoredImagePathNullableSchema,
   price: z.number().nonnegative().optional(),
   loyaltyPointsPerUnit: z.number().int().min(0).optional(),
+  redeemPointsPerUnit: z.number().int().min(0).optional(),
+  redeemEnabled: z.boolean().optional(),
   isActive: z.boolean().optional(),
 });
 
@@ -970,6 +977,10 @@ router.patch(
       if (body.loyaltyPointsPerUnit !== undefined) {
         map.push(["loyalty_points_per_unit", body.loyaltyPointsPerUnit]);
       }
+      if (body.redeemPointsPerUnit !== undefined) {
+        map.push(["redeem_points_per_unit", body.redeemPointsPerUnit]);
+      }
+      if (body.redeemEnabled !== undefined) map.push(["redeem_enabled", body.redeemEnabled]);
       if (body.isActive !== undefined) map.push(["is_active", body.isActive]);
       if (map.length === 0) throw new HttpError(400, "No fields to update");
       const sets = map.map(([col], idx) => `${col} = $${idx + 1}`).join(", ");
@@ -1002,6 +1013,64 @@ router.delete(
       const { rowCount } = await query(`DELETE FROM products WHERE id = $1`, [id]);
       if (!rowCount) throw new HttpError(404, "المنتج غير موجود");
       res.status(204).send();
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+router.get(
+  "/redeem/redemptions",
+  adminAuthMiddleware,
+  requireAdminPermission("redeem.read"),
+  async (req, res, next) => {
+    try {
+      const limit = Math.min(100, Math.max(1, z.coerce.number().int().parse(req.query.limit ?? 50)));
+      const { rows } = await query<{
+        id: string;
+        created_at: string;
+        total_points_spent: number;
+        store_id: number;
+        store_name: string;
+        rep_name: string;
+        lines_json: string;
+      }>(
+        `SELECT pr.id::text, pr.created_at, pr.total_points_spent, pr.store_id, s.name AS store_name,
+                r.full_name AS rep_name,
+                COALESCE(
+                  json_agg(
+                    json_build_object(
+                      'productId', p.id,
+                      'productName', p.name,
+                      'quantity', prl.quantity,
+                      'pointsPerUnit', prl.points_per_unit,
+                      'pointsSpent', prl.points_spent
+                    )
+                    ORDER BY prl.id
+                  ) FILTER (WHERE prl.id IS NOT NULL),
+                  '[]'
+                )::text AS lines_json
+         FROM prize_redemptions pr
+         JOIN stores s ON s.id = pr.store_id
+         JOIN representatives r ON r.id = pr.representative_id
+         LEFT JOIN prize_redemption_lines prl ON prl.redemption_id = pr.id
+         LEFT JOIN products p ON p.id = prl.product_id
+         GROUP BY pr.id, pr.created_at, pr.total_points_spent, pr.store_id, s.name, r.full_name
+         ORDER BY pr.created_at DESC
+         LIMIT $1`,
+        [limit]
+      );
+      res.json({
+        redemptions: rows.map((row) => ({
+          id: row.id,
+          createdAt: row.created_at,
+          totalPointsSpent: row.total_points_spent,
+          storeId: row.store_id,
+          storeName: row.store_name,
+          repName: row.rep_name,
+          lines: JSON.parse(row.lines_json) as unknown[],
+        })),
+      });
     } catch (e) {
       next(e);
     }

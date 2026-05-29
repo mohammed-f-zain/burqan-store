@@ -19,6 +19,8 @@ export const PERMISSIONS = [
   "orders.delete",
   "qr_pool.read",
   "qr_pool.write",
+  "redeem.read",
+  "redeem.write",
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];

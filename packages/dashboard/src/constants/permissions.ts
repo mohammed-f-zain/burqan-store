@@ -20,6 +20,8 @@ export const PERMISSION_KEYS = [
   "orders.delete",
   "qr_pool.read",
   "qr_pool.write",
+  "redeem.read",
+  "redeem.write",
 ] as const;
 
 export type PermissionKey = (typeof PERMISSION_KEYS)[number];

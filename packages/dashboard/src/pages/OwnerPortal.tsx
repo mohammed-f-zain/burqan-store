@@ -10,7 +10,16 @@ import { useOwnerArabic } from "../owner/useOwnerArabic";
 import { formatMarketDateTime } from "../utils/formatMarketDateTime";
 import { publicApi } from "../publicApi";
 
-type Tab = "overview" | "orders" | "products" | "visits";
+type Tab = "overview" | "orders" | "products" | "prizes" | "visits";
+
+type OwnerPrizeProduct = {
+  id: number;
+  name: string;
+  designation: string | null;
+  unit_label: string | null;
+  image_url: string | null;
+  redeemPointsPerUnit: number;
+};
 
 type OwnerSummary = {
   store: {
@@ -80,6 +89,9 @@ export default function OwnerPortal() {
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [productsLoading, setProductsLoading] = useState(false);
+  const [prizes, setPrizes] = useState<OwnerPrizeProduct[]>([]);
+  const [prizesBalance, setPrizesBalance] = useState(0);
+  const [prizesLoading, setPrizesLoading] = useState(false);
 
   const loadSummary = useCallback(async () => {
     if (!token) {
@@ -122,6 +134,34 @@ export default function OwnerPortal() {
       cancelled = true;
     };
   }, [tab, token, products.length]);
+
+  useEffect(() => {
+    if (tab !== "prizes" || !token || prizes.length > 0) return;
+    let cancelled = false;
+    setPrizesLoading(true);
+    (async () => {
+      try {
+        const res = await publicApi.get<{
+          loyaltyPointsBalance: number;
+          products: OwnerPrizeProduct[];
+        }>("/owner/prizes", { params: { t: token } });
+        if (!cancelled) {
+          setPrizes(res.data.products ?? []);
+          setPrizesBalance(res.data.loyaltyPointsBalance ?? 0);
+        }
+      } catch {
+        if (!cancelled) {
+          setPrizes([]);
+          setPrizesBalance(data?.loyalty.balance ?? 0);
+        }
+      } finally {
+        if (!cancelled) setPrizesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, token, prizes.length, data?.loyalty.balance]);
 
   const storeImage = data?.store.imageUrl ? mediaUrl(data.store.imageUrl) : undefined;
 
@@ -176,7 +216,7 @@ export default function OwnerPortal() {
       </div>
 
       <nav className="owner-tabs" aria-label={t.owner.tabsAria}>
-        {(["overview", "orders", "products", "visits"] as const).map((key) => (
+        {(["overview", "orders", "products", "prizes", "visits"] as const).map((key) => (
           <button key={key} type="button" className={`owner-tab${tab === key ? " owner-tab--on" : ""}`} onClick={() => setTab(key)}>
             {t.owner.tabs[key]}
           </button>
@@ -284,6 +324,47 @@ export default function OwnerPortal() {
                         <span className="owner-product-cta">{t.owner.viewProduct} ‹</span>
                       </div>
                     </button>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        )}
+
+        {tab === "prizes" && (
+          <section className="owner-section">
+            <h2 className="owner-section-title">{t.owner.prizesTitle}</h2>
+            <p className="owner-muted" style={{ marginBottom: 12 }}>
+              {t.owner.prizesViewOnly}
+            </p>
+            <div className="owner-dash-hero-card owner-dash-hero-card--loyalty" style={{ marginBottom: 16 }}>
+              <span className="owner-dash-hero-kicker">{t.owner.loyaltyBalance}</span>
+              <p className="owner-dash-hero-value">{t.owner.loyaltyPoints(prizesBalance)}</p>
+            </div>
+            {prizesLoading ? (
+              <p className="owner-muted">{t.common.loading}</p>
+            ) : prizes.length === 0 ? (
+              <p className="owner-empty">{t.owner.emptyPrizes}</p>
+            ) : (
+              <div className="owner-products-grid">
+                {prizes.map((p) => {
+                  const img = mediaUrl(p.image_url);
+                  return (
+                    <article key={p.id} className="owner-product owner-product-card" style={{ cursor: "default" }}>
+                      {img ? (
+                        <img src={img} alt="" className="owner-product-img" />
+                      ) : (
+                        <div className="owner-product-img owner-product-img--empty">{t.owner.noImage}</div>
+                      )}
+                      <div className="owner-product-body">
+                        <h3 className="owner-product-name">{p.name}</h3>
+                        <LoyaltyBadge
+                          text={t.owner.redeemPerUnit(p.redeemPointsPerUnit)}
+                          variant="pill"
+                          icon="star"
+                        />
+                      </div>
+                    </article>
                   );
                 })}
               </div>

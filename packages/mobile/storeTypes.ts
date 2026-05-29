@@ -21,4 +21,14 @@ export type StoreBrief = {
   areaName?: string | null;
   deferredPaymentEnabled: boolean;
   ownerPortalUrl?: string;
+  loyaltyPointsBalance?: number;
+};
+
+export type PrizeProduct = {
+  id: number;
+  name: string;
+  designation?: string | null;
+  unit_label?: string | null;
+  image_url?: string | null;
+  redeemPointsPerUnit: number;
 };

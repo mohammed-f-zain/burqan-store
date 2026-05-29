@@ -93,6 +93,16 @@ const t = {
   tabVisits: "زيارات",
   tabOrders: "طلبات",
   tabSell: "السلة",
+  tabRedeem: "الجوائز",
+  redeemBalance: "رصيد نقاط المتجر",
+  redeemPointsUnit: (n: number) => `${n} نقطة / وحدة`,
+  redeemCartPoints: (n: number) => `المجموع: ${n} نقطة`,
+  submitRedeem: "تأكيد الاستبدال",
+  redeemSaved: "تم استبدال الجوائز وخصم النقاط.",
+  redeemFailed: "فشل الاستبدال",
+  redeemEmpty: "لا توجد جوائز متاحة للاستبدال.",
+  redeemAddItems: "أضف منتجات للاستبدال",
+  redeemInsufficient: "رصيد النقاط غير كافٍ لهذا الاستبدال",
   priceLabel: "السعر",
   unit: "الوحدة",
   description: "الوصف / التعيين",
@@ -242,7 +252,7 @@ type Area = { id: number; name: string };
 import DailyStoresByArea from "./DailyStoresByArea";
 import EndVisitModal from "./EndVisitModal";
 import StorePeekModal from "./StorePeekModal";
-import type { DailyStoreCard, StoreBrief } from "./storeTypes";
+import type { DailyStoreCard, PrizeProduct, StoreBrief } from "./storeTypes";
 export type { StoreBrief } from "./storeTypes";
 
 type BottomTab = "home" | "inventory" | "store" | "profile";
@@ -361,7 +371,10 @@ export default function App() {
   const [manualToken, setManualToken] = useState("");
   const [areas, setAreas] = useState<Area[]>([]);
   const [activeStore, setActiveStore] = useState<StoreBrief | null>(null);
-  const [storeTab, setStoreTab] = useState<"info" | "visits" | "orders" | "sell">("info");
+  const [storeTab, setStoreTab] = useState<"info" | "visits" | "orders" | "sell" | "redeem">("info");
+  const [prizeProducts, setPrizeProducts] = useState<PrizeProduct[]>([]);
+  const [redeemCart, setRedeemCart] = useState<Record<number, number>>({});
+  const [storePointsBalance, setStorePointsBalance] = useState(0);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [visits, setVisits] = useState<{ id: string; visited_at: string; note: string | null }[]>([]);
   const [orders, setOrders] = useState<unknown[]>([]);
@@ -655,6 +668,8 @@ export default function App() {
         setBottomTab("home");
       } else if (data.store) {
         setActiveStore(data.store);
+        setStorePointsBalance(data.store.loyaltyPointsBalance ?? 0);
+        setRedeemCart({});
         setVisitHadOrder(false);
         setMode("store");
         setBottomTab("home");
@@ -812,16 +827,97 @@ export default function App() {
     visits: t.tabVisits,
     orders: t.tabOrders,
     sell: t.tabSell,
+    redeem: t.tabRedeem,
   };
+
+  const redeemCartCount = useMemo(
+    () => Object.values(redeemCart).reduce((sum, q) => sum + q, 0),
+    [redeemCart]
+  );
 
   const cartItemCount = useMemo(
     () => Object.values(cart).reduce((sum, q) => sum + q, 0),
     [cart]
   );
 
+  const loadPrizes = useCallback(async () => {
+    if (!token || !activeStore) return;
+    try {
+      const data = await apiGet(`/api/v1/rep/stores/${activeStore.id}/prizes`);
+      const rows = (data.products ?? []) as PrizeProduct[];
+      setPrizeProducts(rows);
+      setStorePointsBalance(Number(data.loyaltyPointsBalance) || activeStore.loyaltyPointsBalance || 0);
+    } catch {
+      setPrizeProducts([]);
+    }
+  }, [apiGet, token, activeStore]);
+
+  useEffect(() => {
+    if (storeTab === "redeem" && activeStore) void loadPrizes();
+  }, [storeTab, activeStore, loadPrizes]);
+
+  const redeemCartTotal = useMemo(() => {
+    return Object.entries(redeemCart).reduce((sum, [pid, qty]) => {
+      const p = prizeProducts.find((x) => x.id === parseInt(pid, 10));
+      return sum + (p?.redeemPointsPerUnit ?? 0) * qty;
+    }, 0);
+  }, [redeemCart, prizeProducts]);
+
+  async function submitRedeem() {
+    if (!activeStore) return;
+    const lines = Object.entries(redeemCart)
+      .filter(([, q]) => q > 0)
+      .map(([productId, quantity]) => ({ productId: parseInt(productId, 10), quantity }));
+    if (!lines.length) {
+      showToast(t.redeemAddItems, "info");
+      return;
+    }
+    if (redeemCartTotal > storePointsBalance) {
+      showToast(t.redeemInsufficient, "error");
+      return;
+    }
+    setBusy(true);
+    try {
+      const pos = await getRepPosition({ timeoutMs: 12_000 });
+      const res = await apiPost("/api/v1/rep/prize-redemptions", {
+        storeId: activeStore.id,
+        lines,
+        repLat: pos.lat,
+        repLng: pos.lng,
+      });
+      setRedeemCart({});
+      const bal = Number(res.loyaltyPointsBalance);
+      if (!Number.isNaN(bal)) {
+        setStorePointsBalance(bal);
+        setActiveStore((s) => (s ? { ...s, loyaltyPointsBalance: bal } : s));
+      }
+      showToast(t.redeemSaved, "success");
+      void loadPrizes();
+    } catch (e) {
+      if (e instanceof LocationDeniedError) showToast(t.locationDenied, "error");
+      else showToast(e instanceof Error ? e.message : t.redeemFailed, "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function setRedeemQty(pid: number, delta: number) {
+    const p = prizeProducts.find((x) => x.id === pid);
+    if (!p) return;
+    setRedeemCart((c) => {
+      const q = (c[pid] ?? 0) + delta;
+      const next = { ...c };
+      if (q <= 0) delete next[pid];
+      else next[pid] = q;
+      return next;
+    });
+  }
+
   const endStoreSession = useCallback(() => {
     setActiveStore(null);
     setCart({});
+    setRedeemCart({});
+    setPrizeProducts([]);
     setVisitHadOrder(false);
     setMode("home");
     setEndVisitOpen(false);
@@ -1091,11 +1187,12 @@ export default function App() {
             </View>
           </View>
           <View style={styles.tabs}>
-            {(["info", "visits", "orders", "sell"] as const).map((tab) => (
+            {(["info", "visits", "orders", "sell", "redeem"] as const).map((tab) => (
               <Pressable key={tab} style={[styles.tab, storeTab === tab && styles.tabOn]} onPress={() => setStoreTab(tab)}>
                 <Text style={[styles.tabText, storeTab === tab && styles.tabTextOn]}>
                   {tabLabels[tab]}
                   {tab === "sell" && cartItemCount > 0 ? ` (${cartItemCount})` : ""}
+                  {tab === "redeem" && redeemCartCount > 0 ? ` (${redeemCartCount})` : ""}
                 </Text>
               </Pressable>
             ))}
@@ -1165,6 +1262,52 @@ export default function App() {
                   </View>
                 ))
               )}
+            </View>
+          )}
+
+          {storeTab === "redeem" && (
+            <View style={styles.panel}>
+              <View style={styles.redeemBalanceBox}>
+                <Text style={styles.redeemBalanceLabel}>{t.redeemBalance}</Text>
+                <Text style={styles.redeemBalanceValue}>{storePointsBalance}</Text>
+              </View>
+              {prizeProducts.length === 0 ? (
+                <Text style={styles.emptyText}>{t.redeemEmpty}</Text>
+              ) : null}
+              {prizeProducts.map((item) => {
+                const q = redeemCart[item.id] ?? 0;
+                const linePts = item.redeemPointsPerUnit * q;
+                return (
+                  <ProductCard
+                    key={item.id}
+                    item={{
+                      id: item.id,
+                      name: item.name,
+                      price: String(item.redeemPointsPerUnit),
+                      designation: item.designation ?? null,
+                      unit_label: item.unit_label ?? null,
+                      image_url: item.image_url ?? null,
+                      quantity: 0,
+                    }}
+                    mode="redeem"
+                    cartQty={q}
+                    redeemLinePoints={linePts}
+                    onMinus={() => setRedeemQty(item.id, -1)}
+                    onPlus={() => setRedeemQty(item.id, 1)}
+                  />
+                );
+              })}
+              {redeemCartCount > 0 ? (
+                <>
+                  <Text style={styles.redeemCartTotal}>{t.redeemCartPoints(redeemCartTotal)}</Text>
+                  <Pressable
+                    style={[styles.primary, styles.primaryLg, redeemCartTotal > storePointsBalance && { opacity: 0.5 }]}
+                    onPress={() => void submitRedeem()}
+                  >
+                    <Text style={styles.primaryText}>{t.submitRedeem}</Text>
+                  </Pressable>
+                </>
+              ) : null}
             </View>
           )}
 
@@ -1512,9 +1655,10 @@ function BottomNavItem(props: {
 
 function ProductCard(props: {
   item: Product;
-  mode: "stock" | "sell";
+  mode: "stock" | "sell" | "redeem";
   cartQty?: number;
   atMax?: boolean;
+  redeemLinePoints?: number;
   onMinus?: () => void;
   onPlus?: () => void;
 }) {
@@ -1537,14 +1681,23 @@ function ProductCard(props: {
         ) : null}
         {props.item.unit_label ? <Text style={styles.productMeta}>{props.item.unit_label}</Text> : null}
         <View style={styles.productPriceRow}>
-          <Text style={styles.productPrice}>
-            {props.item.price} {t.currency}
-          </Text>
-          <Text style={styles.productStock}>
-            {t.stock}: {props.item.quantity}
-          </Text>
+          {props.mode === "redeem" ? (
+            <Text style={styles.productPrice}>{t.redeemPointsUnit(parseInt(props.item.price, 10) || 0)}</Text>
+          ) : (
+            <>
+              <Text style={styles.productPrice}>
+                {props.item.price} {t.currency}
+              </Text>
+              <Text style={styles.productStock}>
+                {t.stock}: {props.item.quantity}
+              </Text>
+            </>
+          )}
         </View>
-        {props.mode === "sell" && props.onMinus && props.onPlus ? (
+        {props.mode === "redeem" && (props.cartQty ?? 0) > 0 && props.redeemLinePoints != null ? (
+          <Text style={styles.redeemLineTotal}>{t.redeemCartPoints(props.redeemLinePoints)}</Text>
+        ) : null}
+        {(props.mode === "sell" || props.mode === "redeem") && props.onMinus && props.onPlus ? (
           <View style={styles.qtyRow}>
             <Pressable style={styles.qtyBtnLg} onPress={props.onMinus}>
               <Text style={styles.qtyBtnText}>−</Text>
@@ -1881,6 +2034,19 @@ const styles = StyleSheet.create({
   },
   listRow: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: line },
   productRow: { flexDirection: "row", alignItems: "center", paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: line },
+  redeemBalanceBox: {
+    backgroundColor: "rgba(13, 148, 136, 0.12)",
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 14,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  redeemBalanceLabel: { color: muted, fontSize: 14, fontWeight: "600" },
+  redeemBalanceValue: { color: "#0d9488", fontSize: 22, fontWeight: "800" },
+  redeemCartTotal: { color: text, fontSize: 16, fontWeight: "800", marginTop: 12, marginBottom: 8, textAlign: "right" },
+  redeemLineTotal: { color: "#0d9488", fontSize: 13, fontWeight: "700", marginTop: 6, textAlign: "right" },
   productCard: {
     flexDirection: "row-reverse",
     alignItems: "flex-start",
