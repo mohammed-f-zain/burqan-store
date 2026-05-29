@@ -131,13 +131,10 @@ router.get("/areas/resolve", repAuthMiddleware, async (req, res, next) => {
     const resolved = forRegister
       ? await resolveAreaIdFromAllAreas(lat, lng)
       : await resolveAreaIdForRep(lat, lng, rep.areaIds);
-    if (forRegister && !rep.areaIds.includes(resolved.areaId)) {
-      throw new HttpError(
-        403,
-        `الموقع ضمن «${resolved.areaName}» وهذه المنطقة غير مخصصة لك. تواصل مع الإدارة.`
-      );
-    }
-    res.json(resolved);
+    res.json({
+      ...resolved,
+      assignedToRep: rep.areaIds.includes(resolved.areaId),
+    });
   } catch (e) {
     next(e);
   }
@@ -255,7 +252,16 @@ async function recordRepVisit(repId: number, storeId: number, note?: string | nu
   return rows[0];
 }
 
-async function loadStoreForRep(storeId: number, rep: { areaIds: number[] }) {
+function repCanAccessStore(
+  rep: { id: number; areaIds: number[] },
+  store: { area_id: number; registered_by_representative_id: number | null }
+): boolean {
+  return (
+    rep.areaIds.includes(store.area_id) || store.registered_by_representative_id === rep.id
+  );
+}
+
+async function loadStoreForRep(storeId: number, rep: { id: number; areaIds: number[] }) {
   const { rows } = await query<{
     id: number;
     name: string;
@@ -266,6 +272,7 @@ async function loadStoreForRep(storeId: number, rep: { areaIds: number[] }) {
     address_text: string | null;
     image_url: string | null;
     area_id: number;
+    registered_by_representative_id: number | null;
     deferred_payment_enabled: boolean;
     owner_portal_token: string;
     qr_public_token: string;
@@ -280,7 +287,7 @@ async function loadStoreForRep(storeId: number, rep: { areaIds: number[] }) {
   );
   const s = rows[0];
   if (!s) throw new HttpError(404, "المتجر غير موجود");
-  if (!rep.areaIds.includes(s.area_id)) throw new HttpError(403, "المتجر ليس ضمن مناطقك");
+  if (!repCanAccessStore(rep, s)) throw new HttpError(403, "المتجر ليس ضمن مناطقك");
   const ownerPortalUrl = `${config.ownerPortalBaseUrl}/owner?t=${encodeURIComponent(s.owner_portal_token)}`;
   return {
     id: s.id,
@@ -314,15 +321,8 @@ router.post("/stores/register", repAuthMiddleware, async (req, res, next) => {
   try {
     const body = registerStoreSchema.parse(req.body);
     const rep = req.rep!;
-    let areaId = body.areaId;
-    if (areaId == null) {
-      const resolved = await resolveAreaIdFromAllAreas(body.locationLat, body.locationLng);
-      areaId = resolved.areaId;
-    }
-    if (!rep.areaIds.includes(areaId)) {
-      const { rows: an } = await query<{ name: string }>(`SELECT name FROM areas WHERE id = $1`, [areaId]);
-      throw new HttpError(403, `المنطقة «${an[0]?.name ?? areaId}» غير مخصصة لك`);
-    }
+    const resolved = await resolveAreaIdFromAllAreas(body.locationLat, body.locationLng);
+    const areaId = resolved.areaId;
 
     const c = await pool.connect();
     try {
@@ -364,7 +364,11 @@ router.post("/stores/register", repAuthMiddleware, async (req, res, next) => {
       );
       await c.query("COMMIT");
       const store = await loadStoreForRep(storeId, rep);
-      res.status(201).json({ store });
+      res.status(201).json({
+        store,
+        areaName: resolved.areaName,
+        assignedToRep: rep.areaIds.includes(areaId),
+      });
     } catch (e) {
       await c.query("ROLLBACK");
       throw e;
@@ -553,19 +557,22 @@ const orderSchema = z.object({
   repLng: z.number().min(-180).max(180),
 });
 
-async function loadStoreRowForRep(storeId: number, rep: { areaIds: number[] }) {
+async function loadStoreRowForRep(storeId: number, rep: { id: number; areaIds: number[] }) {
   const { rows } = await query<{
     id: number;
     area_id: number;
+    registered_by_representative_id: number | null;
     location_lat: number;
     location_lng: number;
     deferred_payment_enabled: boolean;
-  }>(`SELECT id, area_id, location_lat, location_lng, deferred_payment_enabled FROM stores WHERE id = $1`, [
-    storeId,
-  ]);
+  }>(
+    `SELECT id, area_id, registered_by_representative_id, location_lat, location_lng, deferred_payment_enabled
+     FROM stores WHERE id = $1`,
+    [storeId]
+  );
   const s = rows[0];
   if (!s) throw new HttpError(404, "المتجر غير موجود");
-  if (!rep.areaIds.includes(s.area_id)) throw new HttpError(403, "المتجر ليس ضمن مناطقك");
+  if (!repCanAccessStore(rep, s)) throw new HttpError(403, "المتجر ليس ضمن مناطقك");
   return s;
 }
 

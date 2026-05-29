@@ -29,7 +29,8 @@ const labels = {
   title: "تسجيل متجر جديد",
   areaAuto: "المنطقة (تلقائي من موقعك)",
   areaDetecting: "جاري تحديد المنطقة…",
-  areaNotAssigned: "هذه المنطقة غير مخصصة لك",
+  areaOutsideRep: "خارج مناطقك — يُسجَّل هنا ويظهر لمندوبي هذه المنطقة",
+  areaInRep: "ضمن مناطقك",
   refreshLocation: "تحديث الموقع",
   storeName: "اسم المتجر",
   storePhone: "هاتف المتجر",
@@ -91,7 +92,8 @@ export default function RegisterStoreForm(props: Props) {
   const [address, setAddress] = useState("");
   const [areaId, setAreaId] = useState<number | undefined>();
   const [areaName, setAreaName] = useState("");
-  const [areaAllowed, setAreaAllowed] = useState(true);
+  const [areaAssignedToRep, setAreaAssignedToRep] = useState(true);
+  const [areaResolved, setAreaResolved] = useState(false);
   const [jordanAreas, setJordanAreas] = useState<JordanArea[]>([]);
   const [locating, setLocating] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -148,13 +150,16 @@ export default function RegisterStoreForm(props: Props) {
         const gov = typeof data.governorate === "string" ? data.governorate : "";
         const nm = data.areaName ?? "";
         setAreaName(gov && nm ? `${nm} · ${gov}` : nm);
-        setAreaAllowed(true);
+        setAreaAssignedToRep(data.assignedToRep !== false);
+        setAreaResolved(true);
       } else {
-        setAreaAllowed(false);
+        setAreaResolved(false);
+        setAreaId(undefined);
         props.onNotice(typeof data.error === "string" ? data.error : labels.areaDetecting);
       }
     } catch (e) {
-      setAreaAllowed(false);
+      setAreaResolved(false);
+      setAreaId(undefined);
       if (e instanceof LocationDeniedError) props.onNotice(labels.locationDenied);
       else props.onNotice(e instanceof Error ? e.message : labels.locating);
     } finally {
@@ -220,7 +225,7 @@ export default function RegisterStoreForm(props: Props) {
   }
 
   async function submit() {
-    if (!areaId || lat == null || lng == null || !areaAllowed) {
+    if (!areaId || lat == null || lng == null || !areaResolved) {
       props.onNotice(labels.locating);
       return;
     }
@@ -243,7 +248,11 @@ export default function RegisterStoreForm(props: Props) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? labels.registerFailed);
-      props.onDone(labels.storeCreated(data.store?.id ?? 0), data.store as StoreBrief);
+      const hint =
+        data.assignedToRep === false && typeof data.areaName === "string"
+          ? `${labels.storeCreated(data.store?.id ?? 0)} — ${labels.areaOutsideRep} (${data.areaName})`
+          : labels.storeCreated(data.store?.id ?? 0);
+      props.onDone(hint, data.store as StoreBrief);
     } catch (e) {
       props.onDone(e instanceof Error ? e.message : labels.registerFailed);
     } finally {
@@ -264,11 +273,15 @@ export default function RegisterStoreForm(props: Props) {
           <Text style={styles.muted}>{labels.areaDetecting}</Text>
         </View>
       ) : (
-        <View style={[styles.areaBadge, !areaAllowed && styles.areaBadgeWarn]}>
+        <View style={[styles.areaBadge, !areaAssignedToRep && styles.areaBadgeInfo]}>
           <Text style={styles.areaBadgeText}>{areaName || "—"}</Text>
         </View>
       )}
-      {!areaAllowed && !locating ? <Text style={styles.warn}>{labels.areaNotAssigned}</Text> : null}
+      {!locating && areaResolved ? (
+        <Text style={areaAssignedToRep ? styles.areaHintOk : styles.areaHintInfo}>
+          {areaAssignedToRep ? labels.areaInRep : labels.areaOutsideRep}
+        </Text>
+      ) : null}
 
       <View style={styles.mapWrap}>
         <MapView
@@ -342,7 +355,7 @@ export default function RegisterStoreForm(props: Props) {
         <Pressable style={styles.secondaryBtn} onPress={() => props.onDone(labels.cancel)}>
           <Text style={styles.secondaryText}>{labels.cancel}</Text>
         </Pressable>
-        <Pressable style={styles.primaryBtn} onPress={() => void submit()} disabled={busy || locating || !areaAllowed}>
+        <Pressable style={styles.primaryBtn} onPress={() => void submit()} disabled={busy || locating || !areaResolved}>
           {busy ? (
             <ActivityIndicator color={theme.onAccent} />
           ) : (
@@ -396,8 +409,26 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.accent,
   },
-  areaBadgeWarn: { backgroundColor: "rgba(225, 29, 72, 0.08)", borderColor: theme.danger },
+  areaBadgeInfo: {
+    backgroundColor: "rgba(34, 211, 238, 0.12)",
+    borderColor: "rgba(37, 99, 235, 0.35)",
+  },
   areaBadgeText: { color: theme.accentDark, fontWeight: "800", fontSize: 15 },
+  areaHintOk: {
+    color: "#16a34a",
+    fontSize: 13,
+    marginTop: 6,
+    textAlign: "right",
+    fontWeight: "600",
+  },
+  areaHintInfo: {
+    color: theme.accentDark,
+    fontSize: 13,
+    marginTop: 6,
+    textAlign: "right",
+    lineHeight: 20,
+    fontWeight: "600",
+  },
   mapWrap: {
     marginTop: 12,
     height: 220,
