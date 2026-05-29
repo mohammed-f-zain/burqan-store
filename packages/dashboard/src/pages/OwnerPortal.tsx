@@ -16,8 +16,8 @@ type OwnerPrizeProduct = {
   id: number;
   name: string;
   designation: string | null;
-  unit_label: string | null;
-  image_url: string | null;
+  unitLabel: string | null;
+  imageUrl: string | null;
   redeemPointsPerUnit: number;
 };
 
@@ -348,7 +348,7 @@ export default function OwnerPortal() {
             ) : (
               <div className="owner-products-grid">
                 {prizes.map((p) => {
-                  const img = mediaUrl(p.image_url);
+                  const img = mediaUrl(p.imageUrl);
                   return (
                     <article key={p.id} className="owner-product owner-product-card" style={{ cursor: "default" }}>
                       {img ? (
