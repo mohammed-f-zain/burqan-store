@@ -10,6 +10,7 @@ import { pickAxiosErrorMessage } from "../lib/apiError";
 import { mediaUrl } from "../lib/mediaUrl";
 import { confirmDanger } from "../lib/swalConfirm";
 import { toastError, toastSuccess } from "../lib/toast";
+import { isNoBuyReasonNote } from "../constants/noBuyReasons";
 import { formatMarketDateTime } from "../utils/formatMarketDateTime";
 import { qrPayload } from "../utils/qrPayload";
 
@@ -295,7 +296,13 @@ export default function StoreDetailPage() {
               <li key={v.id}>
                 <strong>{formatMarketDateTime(v.visited_at)}</strong>
                 {v.rep_name ? ` · ${v.rep_name}` : ""}
-                {v.note ? <span className="muted"> — {v.note}</span> : null}
+                {v.note ? (
+                  isNoBuyReasonNote(v.note) ? (
+                    <span className="no-buy-pill"> — {v.note}</span>
+                  ) : (
+                    <span className="muted"> — {v.note}</span>
+                  )
+                ) : null}
               </li>
             ))}
           </ul>

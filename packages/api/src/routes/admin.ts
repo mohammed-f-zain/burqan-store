@@ -20,6 +20,7 @@ import { signAdminToken } from "../utils/jwt.js";
 import { countUnassignedQrCodes, insertQrCodes } from "../lib/generateQrCodes.js";
 import { optionalStoredImagePathNullableSchema, optionalStoredImagePathSchema } from "../utils/storedImagePath.js";
 import { JORDAN_GOVERNORATES } from "../data/jordanGovernorates.js";
+import { NO_BUY_REASONS } from "../data/noBuyReasons.js";
 import { GOVERNORATE_AREA_SUFFIX } from "../utils/matchAreaFromGoogle.js";
 
 const router = Router();
@@ -181,6 +182,9 @@ router.get(
         { rows: loyaltyTotals },
         { rows: topStoresLoyalty },
         { rows: recentOrders },
+        { rows: noBuyByReasonRows },
+        { rows: noBuyMonthCount },
+        { rows: recentNoBuyVisits },
       ] = await Promise.all([
         query<{
           order_count: string;
@@ -294,7 +298,44 @@ router.get(
            ORDER BY o.id DESC
            LIMIT 8`
         ),
+        query<{ note: string; count: string }>(
+          `SELECT v.note, COUNT(*)::text AS count
+           FROM visits v
+           WHERE v.note = ANY($1::text[])
+             AND v.visited_at >= ${monthStart}
+           GROUP BY v.note`,
+          [NO_BUY_REASONS]
+        ),
+        query<{ count: string }>(
+          `SELECT COUNT(*)::text AS count
+           FROM visits v
+           WHERE v.note = ANY($1::text[])
+             AND v.visited_at >= ${monthStart}`,
+          [NO_BUY_REASONS]
+        ),
+        query<{
+          id: string;
+          visited_at: string;
+          note: string;
+          store_id: number;
+          store_name: string;
+          area_name: string;
+          rep_name: string;
+        }>(
+          `SELECT v.id::text, v.visited_at, v.note, s.id AS store_id, s.name AS store_name,
+                  a.name AS area_name, r.full_name AS rep_name
+           FROM visits v
+           JOIN stores s ON s.id = v.store_id
+           JOIN areas a ON a.id = s.area_id
+           JOIN representatives r ON r.id = v.representative_id
+           WHERE v.note = ANY($1::text[])
+           ORDER BY v.id DESC
+           LIMIT 15`,
+          [NO_BUY_REASONS]
+        ),
       ]);
+
+      const noBuyCountByNote = new Map(noBuyByReasonRows.map((r) => [r.note, parseInt(r.count, 10)]));
 
       const t = totals[0];
       const p = period[0];
@@ -357,6 +398,22 @@ router.get(
           createdAt: row.created_at,
           repName: row.rep_name,
         })),
+        noBuyVisits: {
+          monthCount: parseInt(noBuyMonthCount[0]?.count ?? "0", 10),
+          byReason: NO_BUY_REASONS.map((reason) => ({
+            reason,
+            count: noBuyCountByNote.get(reason) ?? 0,
+          })),
+          recent: recentNoBuyVisits.map((row) => ({
+            id: row.id,
+            visitedAt: row.visited_at,
+            reason: row.note,
+            storeId: row.store_id,
+            storeName: row.store_name,
+            areaName: row.area_name,
+            repName: row.rep_name,
+          })),
+        },
       });
     } catch (e) {
       next(e);
@@ -1553,6 +1610,63 @@ router.get(
       );
       if (!rows[0]) throw new HttpError(404, "Store not found");
       res.json({ store: rows[0] });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+const visitsListQuerySchema = z.object({
+  noBuyOnly: z
+    .enum(["1", "0", "true", "false"])
+    .optional()
+    .transform((v) => v === "1" || v === "true"),
+});
+
+router.get(
+  "/visits",
+  adminAuthMiddleware,
+  requireAdminPermission("stores.read"),
+  async (req, res, next) => {
+    try {
+      const q = visitsListQuerySchema.parse(req.query);
+      const params = q.noBuyOnly ? [[...NO_BUY_REASONS]] : [];
+      const noBuyFilter = q.noBuyOnly ? `AND v.note = ANY($1::text[])` : "";
+      const { rows } = await query<{
+        id: string;
+        visited_at: string;
+        note: string | null;
+        store_id: number;
+        store_name: string;
+        area_name: string;
+        rep_id: number;
+        rep_name: string;
+      }>(
+        `SELECT v.id::text, v.visited_at, v.note, s.id AS store_id, s.name AS store_name,
+                a.name AS area_name, r.id AS rep_id, r.full_name AS rep_name
+         FROM visits v
+         JOIN stores s ON s.id = v.store_id
+         JOIN areas a ON a.id = s.area_id
+         JOIN representatives r ON r.id = v.representative_id
+         WHERE 1=1 ${noBuyFilter}
+         ORDER BY v.id DESC
+         LIMIT 300`,
+        params
+      );
+      res.json({
+        visits: rows.map((v) => ({
+          id: v.id,
+          visitedAt: v.visited_at,
+          note: v.note,
+          isNoBuyReason: v.note != null && (NO_BUY_REASONS as readonly string[]).includes(v.note),
+          storeId: v.store_id,
+          storeName: v.store_name,
+          areaName: v.area_name,
+          repId: v.rep_id,
+          repName: v.rep_name,
+        })),
+        noBuyReasons: [...NO_BUY_REASONS],
+      });
     } catch (e) {
       next(e);
     }

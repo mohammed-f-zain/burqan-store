@@ -28,6 +28,7 @@ export const ar = {
     representatives: "مندوبو المبيعات",
     fillCar: "تعبئة السيارة",
     stores: "المتاجر",
+    visits: "زيارات بدون شراء",
     orders: "الطلبات",
     qrPool: "رموز البطاقات",
     account: "الحساب",
@@ -108,6 +109,23 @@ export const ar = {
     currency: "د.أ",
     payCash: "نقدي",
     payDeferred: "آجل",
+    noBuyTitle: "زيارات بدون شراء",
+    noBuyHint: "أسباب إغلاق الزيارة دون طلب (من تطبيق المندوب).",
+    noBuyMonthCount: "بدون شراء هذا الشهر",
+    noBuyViewAll: "عرض الكل",
+    noBuyEmpty: "لا توجد زيارات بدون شراء مسجّلة بعد.",
+  },
+
+  visits: {
+    title: "زيارات بدون شراء",
+    hint: "عند إغلاق زيارة دون طلب يختار المندوب أحد الأسباب الثلاثة التالية.",
+    noBuyOnly: "عرض زيارات بدون شراء فقط",
+    empty: "لا توجد زيارات مطابقة.",
+    loadFailed: "تعذّر تحميل الزيارات.",
+    colTime: "الوقت",
+    colStore: "المتجر",
+    colRep: "المندوب",
+    colReason: "السبب",
   },
 
   roles: {

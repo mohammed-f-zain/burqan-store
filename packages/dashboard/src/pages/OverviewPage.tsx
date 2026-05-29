@@ -76,6 +76,19 @@ type Analytics = {
     createdAt: string;
     repName: string;
   }[];
+  noBuyVisits: {
+    monthCount: number;
+    byReason: { reason: string; count: number }[];
+    recent: {
+      id: string;
+      visitedAt: string;
+      reason: string;
+      storeId: number;
+      storeName: string;
+      areaName: string;
+      repName: string;
+    }[];
+  };
 };
 
 export default function OverviewPage() {
@@ -274,6 +287,56 @@ export default function OverviewPage() {
               </div>
 
               {!hasAnalyticsData && <p className="muted">{t.overview.noAnalytics}</p>}
+
+              {analytics.noBuyVisits && (
+                <section className="dash-section dash-section--no-buy">
+                  <div className="dash-section-head">
+                    <h4 className="dash-section-title">{t.overview.noBuyTitle}</h4>
+                    <Link to="/app/visits" className="linkish small">
+                      {t.overview.noBuyViewAll}
+                    </Link>
+                  </div>
+                  <p className="muted small">{t.overview.noBuyHint}</p>
+                  <div className="dash-kpi-grid dash-kpi-grid--sub" style={{ marginBottom: 12 }}>
+                    <div className="dash-kpi dash-kpi--compact">
+                      <div className="dash-kpi-label">{t.overview.noBuyMonthCount}</div>
+                      <div className="dash-kpi-value dash-kpi-value--sm">{analytics.noBuyVisits.monthCount}</div>
+                    </div>
+                  </div>
+                  <div className="visits-reason-chips visits-reason-chips--overview">
+                    {analytics.noBuyVisits.byReason.map((row) => (
+                      <span key={row.reason} className="visits-reason-chip">
+                        {row.reason}
+                        <span className="visits-reason-chip-count">{row.count}</span>
+                      </span>
+                    ))}
+                  </div>
+                  {analytics.noBuyVisits.recent.length > 0 ? (
+                    <ul className="dash-recent-list" style={{ marginTop: 12 }}>
+                      {analytics.noBuyVisits.recent.map((v) => (
+                        <li key={v.id}>
+                          <div className="dash-recent-row dash-recent-row--static">
+                            <div>
+                              <Link to={`/app/stores/${v.storeId}`} className="dash-recent-store linkish">
+                                {v.storeName}
+                              </Link>
+                              <div className="muted small">
+                                {v.areaName} · {v.repName}
+                              </div>
+                            </div>
+                            <div className="dash-recent-meta">
+                              <span className="no-buy-pill">{v.reason}</span>
+                              <span className="muted small">{formatMarketDateTime(v.visitedAt)}</span>
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="muted small">{t.overview.noBuyEmpty}</p>
+                  )}
+                </section>
+              )}
 
               <section className="dash-section dash-section--loyalty">
                 <SectionTitleWithIcon icon={<LoyaltyIcon kind="balance" size={22} />} className="dash-section-title">

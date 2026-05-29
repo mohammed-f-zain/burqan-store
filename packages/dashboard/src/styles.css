@@ -684,6 +684,69 @@ button.ghost {
   color: var(--accent);
 }
 
+.no-buy-pill {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(239, 68, 68, 0.12);
+  color: #dc2626;
+  line-height: 1.35;
+  max-width: 280px;
+}
+
+.visits-reason-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.visits-reason-chips--overview {
+  margin-top: 0;
+}
+
+.visits-reason-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: var(--surface-2, rgba(0, 0, 0, 0.04));
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+}
+
+.visits-reason-chip-count {
+  font-weight: 700;
+  font-size: 13px;
+  min-width: 1.25em;
+  text-align: center;
+}
+
+.visits-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.dash-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.dash-recent-row--static {
+  cursor: default;
+  text-decoration: none;
+}
+
 .center-msg {
   min-height: 40vh;
   display: flex;

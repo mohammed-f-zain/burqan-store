@@ -92,7 +92,19 @@ const t = {
   tabInfo: "معلومات",
   tabVisits: "زيارات",
   tabOrders: "طلبات",
-  tabSell: "السلة",
+  tabSell: "طلب",
+  cartTitle: "ملخص الطلب",
+  cartEmptyHint: "اضغط + لإضافة منتجات من القائمة أعلاه",
+  invoiceTitle: "فاتورة الطلب",
+  invoiceOrderNo: "رقم",
+  invoiceProduct: "المنتج",
+  invoiceQty: "كم",
+  invoiceLineTotal: "المجموع",
+  invoiceTotal: "الإجمالي",
+  invoicePrint: "طباعة (طابعة حرارية)",
+  invoiceClose: "تم",
+  invoicePrintFailed: "تعذّرت الطباعة — تحقق من اتصال الطابعة",
+  startOrder: "بدء طلب جديد",
   tabRedeem: "الجوائز",
   redeemBalance: "رصيد نقاط المتجر",
   redeemPointsUnit: (n: number) => `${n} نقطة / وحدة`,
@@ -208,12 +220,14 @@ const t = {
   visitEndGoCart: "الذهاب إلى السلة",
   visitEndConfirm: "إنهاء الزيارة",
   visitEndNoteLabel: "ملاحظة الزيارة (اختياري)",
-  visitEndNoBuyNoteLabel: "سبب عدم الشراء (مطلوب)",
+  visitEndNoBuyNoteLabel: "سبب عدم الشراء",
+  visitEndNoBuyPickHint: "اختر سبباً واحداً",
   visitEndNotePlaceholder: "اكتب ملاحظة عن الزيارة…",
-  visitEndNoBuyNotePlaceholder: "لماذا لم يشتِ صاحب المتجر؟ (مثال: لا حاجة، مخزون كافٍ، سعر…)",
-  visitEndNoBuyNoteRequired: "يرجى توضيح سبب عدم الشراء قبل إنهاء الزيارة",
+  visitEndNoBuyNoteRequired: "يرجى اختيار سبب عدم الشراء",
   visitEndNoBuyMessage: "لم تُسجَّل أي مشتريات. اذكر سبب عدم الشراء قبل إغلاق الزيارة.",
   visitEndNoteFailed: "تعذّر حفظ ملاحظة الزيارة",
+  closeStoreBeforeScan: "أنهِ زيارة المتجر الحالي (إغلاق) قبل مسح متجر آخر",
+  resumeOpenVisit: "زيارة قيد التنفيذ — اضغط للمتابعة",
 } as const;
 
 function formatPaymentType(type: string): string {
@@ -251,13 +265,14 @@ function mapProductRow(r: {
 type Area = { id: number; name: string };
 import DailyStoresByArea from "./DailyStoresByArea";
 import EndVisitModal from "./EndVisitModal";
+import OrderInvoiceModal from "./OrderInvoiceModal";
+import StoreCartPanel from "./StoreCartPanel";
 import StorePeekModal from "./StorePeekModal";
+import type { ReceiptData } from "./receiptFormat";
 import type { DailyStoreCard, PrizeProduct, StoreBrief } from "./storeTypes";
 export type { StoreBrief } from "./storeTypes";
 
 type BottomTab = "home" | "inventory" | "store" | "profile";
-type RepOrderRow = { id: string; payment_type: string; total_amount: string; created_at: string };
-
 function formatStoreLocation(
   store: Pick<StoreBrief, "addressText" | "areaName">,
   unknownLabel: string
@@ -371,13 +386,11 @@ export default function App() {
   const [manualToken, setManualToken] = useState("");
   const [areas, setAreas] = useState<Area[]>([]);
   const [activeStore, setActiveStore] = useState<StoreBrief | null>(null);
-  const [storeTab, setStoreTab] = useState<"info" | "visits" | "orders" | "sell" | "redeem">("info");
+  const [storeTab, setStoreTab] = useState<"info" | "sell" | "redeem">("sell");
   const [prizeProducts, setPrizeProducts] = useState<PrizeProduct[]>([]);
   const [redeemCart, setRedeemCart] = useState<Record<number, number>>({});
   const [storePointsBalance, setStorePointsBalance] = useState(0);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [visits, setVisits] = useState<{ id: string; visited_at: string; note: string | null }[]>([]);
-  const [orders, setOrders] = useState<unknown[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<Record<number, number>>({});
   const [paymentType, setPaymentType] = useState<"cash" | "deferred">("cash");
@@ -388,6 +401,8 @@ export default function App() {
   const [endVisitOpen, setEndVisitOpen] = useState(false);
   const [endVisitBusy, setEndVisitBusy] = useState(false);
   const [visitHadOrder, setVisitHadOrder] = useState(false);
+  const [orderReceipt, setOrderReceipt] = useState<ReceiptData | null>(null);
+  const [orderReceiptOpen, setOrderReceiptOpen] = useState(false);
   const [storeRefreshing, setStoreRefreshing] = useState(false);
   const [bottomTab, setBottomTab] = useState<BottomTab>("home");
   const [inventory, setInventory] = useState<Product[]>([]);
@@ -636,6 +651,11 @@ export default function App() {
 
   async function resolveQr(raw: string) {
     if (!token || qrResolveInFlightRef.current) return;
+    if (activeStore) {
+      showToast(t.closeStoreBeforeScan, "info");
+      setMode("home");
+      return;
+    }
     const publicToken = parseQrPublicToken(raw);
     if (!publicToken || publicToken.length < 16) {
       showToast(t.qrInvalid, "error");
@@ -673,7 +693,7 @@ export default function App() {
         setVisitHadOrder(false);
         setMode("store");
         setBottomTab("home");
-        setStoreTab("info");
+        setStoreTab("sell");
         showToast(t.visitRecorded, "success");
         void Promise.all([refreshStoreData(data.store.id), loadDailyStores()]);
       } else {
@@ -694,6 +714,10 @@ export default function App() {
   /** iPhone/Android: native full-screen QR UI when available; otherwise in-app camera modal. */
   async function openQrScanner() {
     hideToast();
+    if (activeStore) {
+      showToast(t.closeStoreBeforeScan, "info");
+      return;
+    }
     if (!permission?.granted) {
       const r = await requestPermission();
       if (!r.granted) {
@@ -726,13 +750,7 @@ export default function App() {
   const refreshStoreData = useCallback(
     async (storeId: number) => {
       try {
-        const [v, o, inv] = await Promise.all([
-          apiGet(`/api/v1/rep/stores/${storeId}/visits`),
-          apiGet(`/api/v1/rep/stores/${storeId}/orders`),
-          apiGet("/api/v1/rep/inventory"),
-        ]);
-        setVisits(v.visits ?? []);
-        setOrders(o.orders ?? []);
+        const inv = await apiGet("/api/v1/rep/inventory");
         const rows = (inv.inventory ?? []) as Parameters<typeof mapProductRow>[0][];
         const mapped = rows.map(mapProductRow).filter((r) => r.quantity > 0);
         setProducts(mapped);
@@ -791,18 +809,50 @@ export default function App() {
     setBusy(true);
     try {
       const pos = await getRepPosition();
-      await apiPost("/api/v1/rep/orders", {
+      const data = (await apiPost("/api/v1/rep/orders", {
         storeId: activeStore.id,
         paymentType,
         lines,
         repLat: pos.lat,
         repLng: pos.lng,
+      })) as {
+        orderId?: string;
+        totalAmount?: number;
+        paymentType?: string;
+        storeName?: string;
+        lines?: { productName: string; quantity: number; unitPrice: number; lineTotal: number }[];
+      };
+      const receiptLines =
+        data.lines?.map((l) => ({
+          productName: l.productName,
+          quantity: l.quantity,
+          unitPrice: l.unitPrice,
+          lineTotal: l.lineTotal,
+        })) ??
+        cartLines.map(({ product, qty }) => ({
+          productName: product.name,
+          quantity: qty,
+          unitPrice: parseFloat(product.price) || 0,
+          lineTotal: (parseFloat(product.price) || 0) * qty,
+        }));
+      const total =
+        typeof data.totalAmount === "number"
+          ? data.totalAmount
+          : receiptLines.reduce((s, l) => s + l.lineTotal, 0);
+      setOrderReceipt({
+        orderId: String(data.orderId ?? ""),
+        storeName: data.storeName ?? activeStore.name,
+        paymentLabel: formatPaymentType(data.paymentType ?? paymentType),
+        currency: t.currency,
+        lines: receiptLines,
+        totalAmount: total,
+        createdAt: new Date(),
       });
       setCart({});
       setVisitHadOrder(true);
+      setOrderReceiptOpen(true);
       showToast(t.orderSaved, "success");
-      await refreshStoreData(activeStore.id);
-      setStoreTab("orders");
+      await Promise.all([refreshStoreData(activeStore.id), loadInventory()]);
     } catch (e) {
       if (e instanceof LocationDeniedError) showToast(t.locationDenied, "error");
       else showToast(e instanceof Error ? e.message : t.orderFailed, "error");
@@ -824,8 +874,6 @@ export default function App() {
 
   const tabLabels: Record<typeof storeTab, string> = {
     info: t.tabInfo,
-    visits: t.tabVisits,
-    orders: t.tabOrders,
     sell: t.tabSell,
     redeem: t.tabRedeem,
   };
@@ -844,7 +892,15 @@ export default function App() {
     if (!token || !activeStore) return;
     try {
       const data = await apiGet(`/api/v1/rep/stores/${activeStore.id}/prizes`);
-      const rows = (data.products ?? []) as PrizeProduct[];
+      type PrizeRow = PrizeProduct & { imageUrl?: string | null; unitLabel?: string | null };
+      const rows = ((data.products ?? []) as PrizeRow[]).map((p) => ({
+        id: p.id,
+        name: p.name,
+        designation: p.designation ?? null,
+        unit_label: p.unitLabel ?? p.unit_label ?? null,
+        image_url: p.imageUrl ?? p.image_url ?? null,
+        redeemPointsPerUnit: p.redeemPointsPerUnit,
+      }));
       setPrizeProducts(rows);
       setStorePointsBalance(Number(data.loyaltyPointsBalance) || activeStore.loyaltyPointsBalance || 0);
     } catch {
@@ -919,6 +975,8 @@ export default function App() {
     setRedeemCart({});
     setPrizeProducts([]);
     setVisitHadOrder(false);
+    setOrderReceipt(null);
+    setOrderReceiptOpen(false);
     setMode("home");
     setEndVisitOpen(false);
     void loadDailyStores();
@@ -958,6 +1016,14 @@ export default function App() {
       })
       .filter((x): x is { product: Product; qty: number } => x != null);
   }, [cart, products]);
+
+  const cartTotalAmount = useMemo(
+    () =>
+      cartLines.reduce((sum, { product, qty }) => sum + (parseFloat(product.price) || 0) * qty, 0),
+    [cartLines]
+  );
+
+  const storeTabOrder = ["sell", "info", "redeem"] as const;
 
   const productDetailLabels = useMemo(
     () => ({
@@ -1112,7 +1178,7 @@ export default function App() {
             ) : undefined
           }
         >
-      {bottomTab === "home" && mode !== "store" && mode !== "register" && (
+      {bottomTab === "home" && mode !== "store" && mode !== "register" && !activeStore && (
         <>
           <View style={styles.card}>
             <Pressable style={styles.scanPrimary} onPress={() => void openQrScanner()}>
@@ -1130,15 +1196,6 @@ export default function App() {
               <Text style={styles.secondaryText}>{t.lookup}</Text>
             </Pressable>
           </View>
-          {activeStore ? (
-            <Pressable style={styles.resumeCard} onPress={() => setMode("store")}>
-              <View style={styles.resumeBody}>
-                <Text style={styles.resumeName}>{activeStore.name}</Text>
-                <Text style={styles.resumeMeta}>{activeStore.ownerName}</Text>
-              </View>
-              <Text style={styles.resumeArrow}>‹</Text>
-            </Pressable>
-          ) : null}
 
           <DailyStoresByArea
             stores={dailyStores}
@@ -1168,6 +1225,17 @@ export default function App() {
         </>
       )}
 
+      {bottomTab === "home" && activeStore && mode !== "store" && mode !== "register" && (
+        <Pressable style={styles.resumeCard} onPress={() => setMode("store")}>
+          <View style={styles.resumeBody}>
+            <Text style={styles.resumeHint}>{t.resumeOpenVisit}</Text>
+            <Text style={styles.resumeName}>{activeStore.name}</Text>
+            <Text style={styles.resumeMeta}>{activeStore.ownerName}</Text>
+          </View>
+          <Text style={styles.resumeArrow}>‹</Text>
+        </Pressable>
+      )}
+
       {bottomTab === "home" && mode === "store" && activeStore && (
         <View style={styles.card}>
           <View style={styles.rowBetween}>
@@ -1187,7 +1255,7 @@ export default function App() {
             </View>
           </View>
           <View style={styles.tabs}>
-            {(["info", "visits", "orders", "sell", "redeem"] as const).map((tab) => (
+            {storeTabOrder.map((tab) => (
               <Pressable key={tab} style={[styles.tab, storeTab === tab && styles.tabOn]} onPress={() => setStoreTab(tab)}>
                 <Text style={[styles.tabText, storeTab === tab && styles.tabTextOn]}>
                   {tabLabels[tab]}
@@ -1230,38 +1298,9 @@ export default function App() {
                 </Pressable>
               </View>
               <Text style={styles.muted}>{t.visitAutoHint}</Text>
-            </View>
-          )}
-
-          {storeTab === "visits" && (
-            <View style={{ marginTop: 12 }}>
-              {visits.length === 0 ? (
-                <Text style={styles.emptyText}>{t.emptyVisits}</Text>
-              ) : (
-                visits.map((item) => (
-                  <View key={item.id} style={styles.listRow}>
-                    <Text style={styles.body}>{formatMarketDateTime(item.visited_at)}</Text>
-                    {item.note ? <Text style={styles.muted}>{item.note}</Text> : null}
-                  </View>
-                ))
-              )}
-            </View>
-          )}
-
-          {storeTab === "orders" && (
-            <View style={{ marginTop: 12 }}>
-              {(orders as RepOrderRow[]).length === 0 ? (
-                <Text style={styles.emptyText}>{t.emptyOrders}</Text>
-              ) : (
-                (orders as RepOrderRow[]).map((item) => (
-                  <View key={String(item.id)} style={styles.listRow}>
-                    <Text style={styles.body}>
-                      #{item.id} · {formatPaymentType(item.payment_type)} · {item.total_amount} {t.currency}
-                    </Text>
-                    <Text style={styles.muted}>{formatMarketDateTime(item.created_at)}</Text>
-                  </View>
-                ))
-              )}
+              <Pressable style={[styles.primary, { marginTop: 16 }]} onPress={() => setStoreTab("sell")}>
+                <Text style={styles.primaryText}>{t.startOrder}</Text>
+              </Pressable>
             </View>
           )}
 
@@ -1315,42 +1354,46 @@ export default function App() {
             <View style={styles.panel}>
               {products.length === 0 ? (
                 <Text style={styles.emptyText}>{t.sellEmpty}</Text>
+              ) : (
+                products.map((item) => {
+                  const q = cart[item.id] ?? 0;
+                  const atMax = q >= item.quantity;
+                  return (
+                    <ProductCard
+                      key={item.id}
+                      item={item}
+                      mode="sell"
+                      cartQty={q}
+                      atMax={atMax}
+                      onMinus={() => setQty(item.id, -1)}
+                      onPlus={() => setQty(item.id, 1)}
+                    />
+                  );
+                })
+              )}
+              {cartLines.length === 0 && products.length > 0 ? (
+                <Text style={styles.muted}>{t.cartEmptyHint}</Text>
               ) : null}
-              {products.map((item) => {
-                const q = cart[item.id] ?? 0;
-                const atMax = q >= item.quantity;
-                return (
-                  <ProductCard
-                    key={item.id}
-                    item={item}
-                    mode="sell"
-                    cartQty={q}
-                    atMax={atMax}
-                    onMinus={() => setQty(item.id, -1)}
-                    onPlus={() => setQty(item.id, 1)}
-                  />
-                );
-              })}
               {cartLines.length > 0 ? (
-                <>
-                  <View style={styles.segmented}>
-                    <Pressable
-                      style={[styles.segment, paymentType === "cash" && styles.segmentOn]}
-                      onPress={() => setPaymentType("cash")}
-                    >
-                      <Text style={[styles.segmentText, paymentType === "cash" && styles.segmentTextOn]}>{t.cash}</Text>
-                    </Pressable>
-                    <Pressable
-                      style={[styles.segment, paymentType === "deferred" && styles.segmentOn]}
-                      onPress={() => setPaymentType("deferred")}
-                    >
-                      <Text style={[styles.segmentText, paymentType === "deferred" && styles.segmentTextOn]}>{t.deferredPay}</Text>
-                    </Pressable>
-                  </View>
-                  <Pressable style={[styles.primary, styles.primaryLg]} onPress={() => void submitOrder()}>
-                    <Text style={styles.primaryText}>{t.submitOrder}</Text>
-                  </Pressable>
-                </>
+                <StoreCartPanel
+                  lines={cartLines}
+                  paymentType={paymentType}
+                  deferredEnabled={activeStore.deferredPaymentEnabled}
+                  totalAmount={cartTotalAmount}
+                  labels={{
+                    cartTitle: t.cartTitle,
+                    cartEmpty: t.cartEmptyHint,
+                    payment: t.payment,
+                    cash: t.cash,
+                    deferredPay: t.deferredPay,
+                    submitOrder: t.submitOrder,
+                    total: t.invoiceTotal,
+                    currency: t.currency,
+                    qty: t.invoiceQty,
+                  }}
+                  onPaymentChange={setPaymentType}
+                  onSubmit={() => void submitOrder()}
+                />
               ) : null}
             </View>
           )}
@@ -1377,7 +1420,7 @@ export default function App() {
                 setActiveStore(store);
                 setMode("store");
                 setBottomTab("home");
-                setStoreTab("info");
+                setStoreTab("sell");
                 await Promise.all([refreshStoreData(store.id), loadDailyStores()]);
               } else {
                 setMode("home");
@@ -1584,6 +1627,30 @@ export default function App() {
         onMinus={() => selectedProduct && setQty(selectedProduct.id, -1)}
         onPlus={() => selectedProduct && setQty(selectedProduct.id, 1)}
       />
+      <OrderInvoiceModal
+        visible={orderReceiptOpen}
+        receipt={orderReceipt}
+        labels={{
+          title: t.invoiceTitle,
+          orderNo: t.invoiceOrderNo,
+          payment: t.payment,
+          product: t.invoiceProduct,
+          qty: t.invoiceQty,
+          unitPrice: t.priceLabel,
+          lineTotal: t.invoiceLineTotal,
+          total: t.invoiceTotal,
+          print: t.invoicePrint,
+          close: t.invoiceClose,
+          printFailed: t.invoicePrintFailed,
+          currency: t.currency,
+        }}
+        onClose={() => {
+          setOrderReceiptOpen(false);
+          setOrderReceipt(null);
+          setStoreTab("sell");
+        }}
+        onNotice={(msg, kind) => showToast(msg, kind ?? "info")}
+      />
       <EndVisitModal
         visible={endVisitOpen}
         cartItemCount={cartItemCount}
@@ -1594,7 +1661,8 @@ export default function App() {
           message: noPurchaseEndVisit ? t.visitEndNoBuyMessage : t.visitEndMessage,
           messageCart: t.visitEndMessageCart,
           noteLabel: noPurchaseEndVisit ? t.visitEndNoBuyNoteLabel : t.visitEndNoteLabel,
-          notePlaceholder: noPurchaseEndVisit ? t.visitEndNoBuyNotePlaceholder : t.visitEndNotePlaceholder,
+          notePlaceholder: t.visitEndNotePlaceholder,
+          pickReasonHint: noPurchaseEndVisit ? t.visitEndNoBuyPickHint : undefined,
           stay: t.visitEndStay,
           goCart: t.visitEndGoCart,
           confirm: t.visitEndConfirm,
@@ -1825,6 +1893,7 @@ const styles = StyleSheet.create({
     ...theme.shadow.card,
   },
   resumeBody: { flex: 1 },
+  resumeHint: { color: accent, fontSize: 12, fontWeight: "700", textAlign: "right", marginBottom: 4 },
   resumeName: { color: text, fontSize: 17, fontWeight: "800", textAlign: "right" },
   resumeMeta: { color: muted, fontSize: 13, marginTop: 2, textAlign: "right" },
   resumeArrow: { color: accent, fontSize: 28, fontWeight: "300", marginLeft: 8 },

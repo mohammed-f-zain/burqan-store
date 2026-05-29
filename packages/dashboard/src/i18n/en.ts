@@ -28,6 +28,7 @@ export const en: Messages = {
     representatives: "Sales reps",
     fillCar: "Fill car",
     stores: "Stores",
+    visits: "Visits without purchase",
     orders: "Orders",
     qrPool: "Card QR codes",
     account: "Account",
@@ -108,6 +109,23 @@ export const en: Messages = {
     currency: "JOD",
     payCash: "Cash",
     payDeferred: "Deferred",
+    noBuyTitle: "Visits without purchase",
+    noBuyHint: "Reasons reps select when closing a visit without placing an order.",
+    noBuyMonthCount: "No-purchase visits this month",
+    noBuyViewAll: "View all",
+    noBuyEmpty: "No no-purchase visits recorded yet.",
+  },
+
+  visits: {
+    title: "Visits without purchase",
+    hint: "When a rep closes a visit without an order, they pick one of three fixed reasons.",
+    noBuyOnly: "Show no-purchase visits only",
+    empty: "No matching visits.",
+    loadFailed: "Could not load visits.",
+    colTime: "Time",
+    colStore: "Store",
+    colRep: "Rep",
+    colReason: "Reason",
   },
 
   roles: {

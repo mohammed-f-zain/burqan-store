@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { Router } from "express";
 import { z } from "zod";
 
+import { NO_BUY_REASONS } from "../data/noBuyReasons.js";
 import { imageUpload } from "../lib/uploadConfig.js";
 import { query, pool } from "../db/pool.js";
 import { repAuthMiddleware } from "../middleware/repAuth.js";
@@ -477,6 +478,9 @@ router.patch("/stores/:id/today-visit-note", repAuthMiddleware, async (req, res,
     const rep = req.rep!;
     await loadStoreForRep(storeId, rep);
     const note = body.note?.trim() ? body.note.trim() : null;
+    if (note && !(NO_BUY_REASONS as readonly string[]).includes(note)) {
+      throw new HttpError(400, "سبب عدم الشراء غير صالح");
+    }
     const { rows } = await query<{ id: string; visited_at: string; note: string | null }>(
       `UPDATE visits SET note = $1
        WHERE id = (
@@ -791,6 +795,7 @@ router.post("/orders", repAuthMiddleware, async (req, res, next) => {
       let total = 0;
       const priced: {
         productId: number;
+        productName: string;
         quantity: number;
         unitPrice: number;
         lineTotal: number;
@@ -798,10 +803,14 @@ router.post("/orders", repAuthMiddleware, async (req, res, next) => {
       }[] = [];
       let orderLoyaltyTotal = 0;
       for (const line of body.lines) {
-        const pr = await c.query<{ price: string; is_active: boolean; loyalty_points_per_unit: number }>(
-          `SELECT price, is_active, loyalty_points_per_unit FROM products WHERE id = $1`,
-          [line.productId]
-        );
+        const pr = await c.query<{
+          price: string;
+          is_active: boolean;
+          loyalty_points_per_unit: number;
+          name: string;
+        }>(`SELECT price, is_active, loyalty_points_per_unit, name FROM products WHERE id = $1`, [
+          line.productId,
+        ]);
         const p = pr.rows[0];
         if (!p?.is_active) throw new HttpError(400, "منتج غير صالح");
         const inv = await c.query<{ quantity: number }>(
@@ -821,6 +830,7 @@ router.post("/orders", repAuthMiddleware, async (req, res, next) => {
         orderLoyaltyTotal += loyaltyPoints;
         priced.push({
           productId: line.productId,
+          productName: p.name,
           quantity: line.quantity,
           unitPrice: unit,
           lineTotal,
@@ -854,7 +864,20 @@ router.post("/orders", repAuthMiddleware, async (req, res, next) => {
         );
       }
       await c.query("COMMIT");
-      res.status(201).json({ orderId, totalAmount: total, loyaltyPointsEarned: orderLoyaltyTotal });
+      res.status(201).json({
+        orderId,
+        totalAmount: total,
+        loyaltyPointsEarned: orderLoyaltyTotal,
+        paymentType: body.paymentType,
+        storeName: store.name,
+        lines: priced.map((l) => ({
+          productId: l.productId,
+          productName: l.productName,
+          quantity: l.quantity,
+          unitPrice: l.unitPrice,
+          lineTotal: l.lineTotal,
+        })),
+      });
     } catch (e) {
       await c.query("ROLLBACK");
       throw e;

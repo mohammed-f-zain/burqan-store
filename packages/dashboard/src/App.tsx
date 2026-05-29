@@ -25,6 +25,7 @@ import RepresentativesPage from "./pages/RepresentativesPage";
 import RolesPage from "./pages/RolesPage";
 import StoreDetailPage from "./pages/StoreDetailPage";
 import StoresPage from "./pages/StoresPage";
+import VisitsPage from "./pages/VisitsPage";
 
 export default function App() {
   return (
@@ -53,6 +54,7 @@ export default function App() {
                 <Route path="rep-sales" element={<Navigate to="/app/fill-car" replace />} />
                 <Route path="stores" element={<StoresPage />} />
                   <Route path="stores/:id" element={<StoreDetailPage />} />
+                  <Route path="visits" element={<VisitsPage />} />
                   <Route path="orders" element={<OrdersPage />} />
                   <Route path="orders/:id" element={<OrderDetailPage />} />
                   <Route path="qr-pool" element={<QrPoolPage />} />

@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { NO_BUY_REASONS } from "./noBuyReasons";
 import { theme } from "./theme";
 
 export type EndVisitLabels = {
@@ -22,6 +23,7 @@ export type EndVisitLabels = {
   stay: string;
   goCart: string;
   confirm: string;
+  pickReasonHint?: string;
 };
 
 type Props = {
@@ -38,13 +40,17 @@ type Props = {
 export default function EndVisitModal(props: Props) {
   const { visible, cartItemCount, noteRequired, busy, labels } = props;
   const [note, setNote] = useState("");
+  const [noBuyReason, setNoBuyReason] = useState<string | null>(null);
 
   useEffect(() => {
-    if (visible) setNote("");
+    if (visible) {
+      setNote("");
+      setNoBuyReason(null);
+    }
   }, [visible]);
 
   const message = cartItemCount > 0 ? labels.messageCart(cartItemCount) : labels.message;
-  const canConfirm = !noteRequired || note.trim().length > 0;
+  const canConfirm = noteRequired ? noBuyReason != null : true;
 
   return (
     <Modal visible={visible} animationType="fade" transparent onRequestClose={props.onStay}>
@@ -58,18 +64,47 @@ export default function EndVisitModal(props: Props) {
             <Text style={styles.title}>{labels.title}</Text>
             <Text style={styles.message}>{message}</Text>
 
-            <Text style={[styles.noteLabel, noteRequired && styles.noteLabelRequired]}>{labels.noteLabel}</Text>
-            <TextInput
-              style={styles.noteInput}
-              value={note}
-              onChangeText={setNote}
-              placeholder={labels.notePlaceholder}
-              placeholderTextColor={theme.muted}
-              multiline
-              textAlignVertical="top"
-              textAlign="right"
-              editable={!busy}
-            />
+            {noteRequired ? (
+              <>
+                <Text style={[styles.noteLabel, styles.noteLabelRequired]}>{labels.noteLabel}</Text>
+                {labels.pickReasonHint ? (
+                  <Text style={styles.reasonHint}>{labels.pickReasonHint}</Text>
+                ) : null}
+                <View style={styles.reasonList}>
+                  {NO_BUY_REASONS.map((reason) => {
+                    const selected = noBuyReason === reason;
+                    return (
+                      <Pressable
+                        key={reason}
+                        style={[styles.reasonRow, selected && styles.reasonRowOn]}
+                        onPress={() => setNoBuyReason(reason)}
+                        disabled={busy}
+                      >
+                        <View style={[styles.radio, selected && styles.radioOn]}>
+                          {selected ? <View style={styles.radioDot} /> : null}
+                        </View>
+                        <Text style={[styles.reasonText, selected && styles.reasonTextOn]}>{reason}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={styles.noteLabel}>{labels.noteLabel}</Text>
+                <TextInput
+                  style={styles.noteInput}
+                  value={note}
+                  onChangeText={setNote}
+                  placeholder={labels.notePlaceholder}
+                  placeholderTextColor={theme.muted}
+                  multiline
+                  textAlignVertical="top"
+                  textAlign="right"
+                  editable={!busy}
+                />
+              </>
+            )}
 
             <View style={styles.actions}>
               <Pressable style={styles.stayBtn} onPress={props.onStay} disabled={busy}>
@@ -82,7 +117,7 @@ export default function EndVisitModal(props: Props) {
               ) : null}
               <Pressable
                 style={[styles.confirmBtn, (busy || !canConfirm) && styles.btnDisabled]}
-                onPress={() => props.onConfirm(note.trim())}
+                onPress={() => props.onConfirm(noteRequired ? noBuyReason! : note.trim())}
                 disabled={busy || !canConfirm}
               >
                 <Text style={styles.confirmBtnText}>{labels.confirm}</Text>
@@ -138,6 +173,52 @@ const styles = StyleSheet.create({
     color: theme.danger,
     fontWeight: "700",
   },
+  reasonHint: {
+    color: theme.muted,
+    fontSize: 12,
+    textAlign: "right",
+    marginBottom: 10,
+  },
+  reasonList: { gap: 8, marginBottom: 16 },
+  reasonRow: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: theme.line,
+    backgroundColor: "#f8fafc",
+  },
+  reasonRowOn: {
+    borderColor: theme.accent,
+    backgroundColor: theme.accentSoft,
+  },
+  radio: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: theme.line,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  radioOn: { borderColor: theme.accent },
+  radioDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: theme.accent,
+  },
+  reasonText: {
+    flex: 1,
+    color: theme.text,
+    fontSize: 15,
+    fontWeight: "600",
+    textAlign: "right",
+  },
+  reasonTextOn: { color: theme.accentDark, fontWeight: "800" },
   noteInput: {
     minHeight: 88,
     maxHeight: 140,
