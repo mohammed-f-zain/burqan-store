@@ -7,6 +7,9 @@ import { normalizePlaceName } from "../utils/normalizeArabic.js";
 const RAW_ALIASES: Record<string, string> = {
   "طبربور": "طبربور",
   tabarbour: "طبربور",
+  "jabal tabarbour": "طبربور",
+  "الهاشمي الشمالي": "الهاشمي الشمالي",
+  "al hashimi": "الهاشمي الشمالي",
   "أبو عليا": "أبو عليا",
   "ابو عليا": "أبو عليا",
   "abu alia": "أبو عليا",

@@ -203,7 +203,7 @@ export const en: Messages = {
     mapGovernorateFilter: "Governorate on map",
     mapAllGovernorates: "All governorates",
     mapShowGovCircles: "Show governorate coverage circles",
-    mapNeighborhoodLegend: "Main neighborhoods (3.5 km)",
+    mapNeighborhoodLegend: "Main neighborhoods",
     mapGovernorateLegend: "Governorate coverage",
     mapNoGeo: "No areas with coordinates for this governorate.",
     mapFocusHint: "Click an area in the list or a circle on the map to highlight it.",

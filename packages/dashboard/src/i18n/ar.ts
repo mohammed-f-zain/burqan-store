@@ -202,7 +202,7 @@ export const ar = {
     mapGovernorateFilter: "المحافظة على الخريطة",
     mapAllGovernorates: "كل المحافظات",
     mapShowGovCircles: "إظهار دوائر تغطية المحافظة",
-    mapNeighborhoodLegend: "أحياء رئيسية (3.5 كم)",
+    mapNeighborhoodLegend: "أحياء رئيسية",
     mapGovernorateLegend: "تغطية محافظة",
     mapNoGeo: "لا توجد مناطق بإحداثيات لهذه المحافظة.",
     mapFocusHint: "انقر على منطقة في القائمة أو على الدائرة في الخريطة للتمييز.",

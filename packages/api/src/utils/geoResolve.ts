@@ -1,7 +1,7 @@
 import { query } from "../db/pool.js";
 import { areaBboxParams, EXCLUDE_GRID_AREA_SQL, GOVERNORATE_COVERAGE_ACTIVE_SQL } from "./areaQuery.js";
 import { HttpError } from "./errors.js";
-import { haversineMeters } from "./geoDistance.js";
+import { pickFromCircles } from "./geoPick.js";
 import { isGoogleGeocodeEnabled, reverseGeocode } from "./googleGeocode.js";
 import { GOVERNORATE_AREA_SUFFIX, matchAreaFromGoogle } from "./matchAreaFromGoogle.js";
 
@@ -25,58 +25,23 @@ export type ResolvedArea = {
   source?: "google" | "gps";
 };
 
-function pickFromCircles(lat: number, lng: number, rows: AreaGeo[]): ResolvedArea {
-  const withCenter = rows.filter((a) => a.center_lat != null && a.center_lng != null);
-  if (!withCenter.length) {
-    const fallback = rows[0]!;
-    return { areaId: fallback.id, areaName: fallback.name, governorate: fallback.governorate, source: "gps" };
-  }
-
-  const scored = withCenter.map((a) => {
-    const distM = haversineMeters(lat, lng, a.center_lat!, a.center_lng!);
-    const radiusM = parseFloat(String(a.radius_km)) * 1000;
-    return { area: a, distM, inside: distM <= radiusM };
-  });
-
-  const isGovCoverage = (name: string) => name.endsWith(GOVERNORATE_AREA_SUFFIX);
-
-  const inside = scored
-    .filter((s) => s.inside)
-    .sort((a, b) => {
-      const ra = parseFloat(String(a.area.radius_km));
-      const rb = parseFloat(String(b.area.radius_km));
-      if (ra !== rb) return ra - rb;
-      const aGov = isGovCoverage(a.area.name) ? 1 : 0;
-      const bGov = isGovCoverage(b.area.name) ? 1 : 0;
-      if (aGov !== bGov) return aGov - bGov;
-      return a.distM - b.distM;
-    });
-
-  const insideDetailed = inside.filter((s) => !isGovCoverage(s.area.name));
-  const pick = insideDetailed[0] ?? inside[0];
-  if (pick) {
-    const a = pick.area;
-    return { areaId: a.id, areaName: a.name, governorate: a.governorate, source: "gps" };
-  }
-
-  scored.sort((a, b) => a.distM - b.distM);
-  const nearest = scored[0]!.area;
-  return { areaId: nearest.id, areaName: nearest.name, governorate: nearest.governorate, source: "gps" };
-}
-
 async function resolveWithGoogleThenCircles(
   lat: number,
   lng: number,
   rows: AreaGeo[]
 ): Promise<ResolvedArea> {
-  if (rows.length > GOOGLE_MATCH_MAX_CANDIDATES) {
-    return pickFromCircles(lat, lng, rows);
+  const gpsPick = pickFromCircles(lat, lng, rows);
+
+  // GPS inside a main neighborhood wins — avoids Google mis-labeling (e.g. Hashimi vs Tabarbour).
+  if (gpsPick.insideMainNeighborhood) {
+    return { ...gpsPick, source: "gps" };
   }
-  if (isGoogleGeocodeEnabled()) {
+
+  if (rows.length <= GOOGLE_MATCH_MAX_CANDIDATES && isGoogleGeocodeEnabled()) {
     try {
       const geocode = await reverseGeocode(lat, lng);
       if (geocode) {
-        const matched = matchAreaFromGoogle(geocode, rows);
+        const matched = matchAreaFromGoogle(geocode, rows, lat, lng);
         if (matched) return { ...matched, source: "google" };
       }
     } catch (e) {
@@ -84,7 +49,8 @@ async function resolveWithGoogleThenCircles(
       console.warn("[geo] Google geocode failed, using GPS circles:", e);
     }
   }
-  return pickFromCircles(lat, lng, rows);
+
+  return { ...gpsPick, source: "gps" };
 }
 
 /** Pick best area among rep assignments for a GPS point. */
