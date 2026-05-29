@@ -23,11 +23,12 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { formatMarketDateTime } from "./formatMarketDateTime";
 import { parseQrPublicToken } from "./parseQrToken";
+import { IN_APP_QR_BARCODE_TYPES, shouldUseSystemQrScanner } from "./qrScanner";
 import {
-  IN_APP_QR_BARCODE_TYPES,
-  isSystemQrScannerAvailable,
-  SYSTEM_QR_BARCODE_TYPES,
-} from "./qrScanner";
+  cancelSystemQrScanSession,
+  ensureSystemQrScanListener,
+  presentSystemQrScanner,
+} from "./systemQrScanner";
 import { fetchJson } from "./fetchJson";
 import {
   ensureLocationPermission,
@@ -317,39 +318,43 @@ export default function App() {
   const [cameraPreviewReady, setCameraPreviewReady] = useState(false);
   /** Mount native camera after the modal is on-screen so layout/size is non-zero (avoids black preview). */
   const [cameraSessionActive, setCameraSessionActive] = useState(false);
-  /** System QR scanner listener — must not be removed when `launchScanner` promise resolves (that can happen as soon as the UI opens). */
-  const modernBarcodeSubRef = useRef<{ remove: () => void } | null>(null);
   const qrResolveInFlightRef = useRef(false);
+  const [inAppScanEnabled, setInAppScanEnabled] = useState(false);
   const lastBarcodeAtRef = useRef(0);
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
 
   const canUseCamera = Boolean(permission?.granted || scanPermissionOverride);
 
   useEffect(() => {
-    return () => {
-      modernBarcodeSubRef.current?.remove();
-      modernBarcodeSubRef.current = null;
-    };
+    ensureSystemQrScanListener();
   }, []);
 
   useEffect(() => {
     if (mode !== "scan" || !canUseCamera) {
       setCameraSessionActive(false);
       setCameraPreviewReady(false);
+      setInAppScanEnabled(false);
       return;
     }
     setCameraPreviewReady(false);
+    setInAppScanEnabled(false);
     if (Platform.OS === "ios") {
       setCameraSessionActive(true);
-      const previewFallback = setTimeout(() => setCameraPreviewReady(true), 600);
-      return () => clearTimeout(previewFallback);
+      const enableScan = setTimeout(() => {
+        setCameraPreviewReady(true);
+        setInAppScanEnabled(true);
+      }, 400);
+      return () => clearTimeout(enableScan);
     }
     setCameraSessionActive(false);
     const startCam = setTimeout(() => setCameraSessionActive(true), 200);
-    const previewFallback = setTimeout(() => setCameraPreviewReady(true), 2500);
+    const enableScan = setTimeout(() => {
+      setCameraPreviewReady(true);
+      setInAppScanEnabled(true);
+    }, 2500);
     return () => {
       clearTimeout(startCam);
-      clearTimeout(previewFallback);
+      clearTimeout(enableScan);
     };
   }, [mode, canUseCamera]);
   const [lastScanToken, setLastScanToken] = useState<string | null>(null);
@@ -521,8 +526,7 @@ export default function App() {
   }, [apiGet, token]);
 
   const clearSession = useCallback(() => {
-    modernBarcodeSubRef.current?.remove();
-    modernBarcodeSubRef.current = null;
+    cancelSystemQrScanSession();
     void clearRepToken();
     setToken(null);
     setRepProfile(null);
@@ -693,41 +697,11 @@ export default function App() {
       void getRepPosition({ timeoutMs: 10_000 }).catch(() => {});
     }
 
-    if (isSystemQrScannerAvailable()) {
-      modernBarcodeSubRef.current?.remove();
-      modernBarcodeSubRef.current = null;
-
-      let scanned = false;
-      const cleanupSub = () => {
-        if (modernBarcodeSubRef.current) {
-          modernBarcodeSubRef.current.remove();
-          modernBarcodeSubRef.current = null;
-        }
-      };
-
-      const sub = CameraView.onModernBarcodeScanned((ev) => {
-        if (qrResolveInFlightRef.current || scanned) return;
-        const data = typeof ev?.data === "string" ? ev.data.trim() : "";
-        if (!data) return;
-        scanned = true;
-        cleanupSub();
-        if (Platform.OS === "ios") {
-          void CameraView.dismissScanner().catch(() => {});
-        }
+    if (shouldUseSystemQrScanner()) {
+      presentSystemQrScanner((data) => {
+        if (qrResolveInFlightRef.current) return;
         void resolveQr(data);
       });
-      modernBarcodeSubRef.current = sub;
-
-      try {
-        await CameraView.launchScanner({ barcodeTypes: [...SYSTEM_QR_BARCODE_TYPES] });
-      } catch (e) {
-        if (!scanned) {
-          const msg = e instanceof Error ? e.message : String(e);
-          if (msg && !/cancel/i.test(msg)) showToast(msg, "error");
-        }
-      } finally {
-        if (!scanned) cleanupSub();
-      }
       return;
     }
 
@@ -1318,6 +1292,7 @@ export default function App() {
           animationType="slide"
           presentationStyle="fullScreen"
           onRequestClose={() => {
+            cancelSystemQrScanSession();
             setMode("home");
             setScanPermissionOverride(false);
           }}
@@ -1368,12 +1343,13 @@ export default function App() {
                         showToast(`${t.cameraMountError} ${toArabicUserMessage(e.message, t.genericError)}`, "error");
                       }}
                       onBarcodeScanned={
-                        cameraPreviewReady
+                        inAppScanEnabled
                           ? ({ data }) => {
                               if (qrResolveInFlightRef.current) return;
                               const now = Date.now();
                               if (now - lastBarcodeAtRef.current < 1200) return;
                               lastBarcodeAtRef.current = now;
+                              cancelSystemQrScanSession();
                               void resolveQr(data);
                             }
                           : undefined
@@ -1389,6 +1365,7 @@ export default function App() {
                 <Pressable
                   style={styles.closeScan}
                   onPress={() => {
+                    cancelSystemQrScanSession();
                     setMode("home");
                     setScanPermissionOverride(false);
                   }}

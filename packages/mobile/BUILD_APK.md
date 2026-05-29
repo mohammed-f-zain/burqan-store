@@ -12,7 +12,7 @@
 5. **Local API only** (optional): copy `.env.example` → `.env` and set `EXPO_PUBLIC_API_USE_LOCAL=1`, then run `npm run api:dev` (port 4000) and allow Node through macOS Firewall.
 6. If Metro tunnel is slow, `expo start --tunnel` still uses the live API unless you set `USE_LOCAL=1`.
 7. **Maps** in store registration may be blank in Expo Go — use the **APK** or a dev build for full maps; the rest of the app should still work.
-8. **QR on iPhone** uses the **system QR scanner** (Apple default UI on iOS 16+). Allow **Camera** and **Location** when prompted — if “جاري التحقق…” hangs, enable Location for برقan in Settings.
+8. **QR on iPhone (APK/IPA / dev build):** system QR scanner (iOS 16+). **Expo Go on iPhone** uses the in-app camera (Expo Go limitation). Allow **Camera** + **Location**. Pull latest and `npx expo start -c` after updates.
 
 ---
 
