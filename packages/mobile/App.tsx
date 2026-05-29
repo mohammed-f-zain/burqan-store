@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as ExpoSplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -30,7 +30,8 @@ import ProductDetailModal, { type Product } from "./ProductDetailModal";
 import ProductGridCard from "./ProductGridCard";
 import { productImageUrl } from "./productImage";
 import ProfileScreen, { type RepProfile } from "./ProfileScreen";
-import RegisterStoreForm from "./RegisterStoreForm";
+/** Lazy: react-native-maps can break Expo Go if loaded at startup. */
+const RegisterStoreForm = lazy(() => import("./RegisterStoreForm"));
 import { clearRepToken, loadStoredRepToken, saveRepToken } from "./repSession";
 import SplashScreen from "./SplashScreen";
 import ToastOverlay, { type ToastKind } from "./ToastOverlay";
@@ -450,13 +451,18 @@ export default function App() {
     (async () => {
       const minSplashMs = 2400;
       const started = Date.now();
-      const stored = await loadStoredRepToken();
-      if (!cancelled && stored) setToken(stored);
-      const remaining = minSplashMs - (Date.now() - started);
-      if (remaining > 0) await new Promise((r) => setTimeout(r, remaining));
-      if (!cancelled) {
-        setShowSplash(false);
-        await ExpoSplashScreen.hideAsync().catch(() => {});
+      try {
+        const stored = await loadStoredRepToken();
+        if (!cancelled && stored) setToken(stored);
+      } catch {
+        /* ignore — still show login */
+      } finally {
+        const remaining = minSplashMs - (Date.now() - started);
+        if (remaining > 0) await new Promise((r) => setTimeout(r, remaining));
+        if (!cancelled) {
+          setShowSplash(false);
+          await ExpoSplashScreen.hideAsync().catch(() => {});
+        }
       }
     })();
     return () => {
@@ -1073,27 +1079,35 @@ export default function App() {
       )}
 
       {mode === "register" && lastScanToken && token && bottomTab === "home" && (
-        <RegisterStoreForm
-          qrPublicToken={lastScanToken}
-          headers={headers}
-          apiBase={API_BASE}
-          authToken={token}
-          onNotice={(msg) => showToast(msg, "info")}
-          onDone={async (msg, store) => {
-            showToast(msg, store ? "success" : msg === t.cancelled ? "info" : "error");
-            if (store) {
-              setActiveStore(store);
-              setMode("store");
-              setBottomTab("home");
-              setStoreTab("info");
-              await Promise.all([refreshStoreData(store.id), loadDailyStores()]);
-            } else {
-              setMode("home");
-              setBottomTab("home");
-              setLastScanToken(null);
-            }
-          }}
-        />
+        <Suspense
+          fallback={
+            <View style={styles.center}>
+              <ActivityIndicator color={accent} size="large" />
+            </View>
+          }
+        >
+          <RegisterStoreForm
+            qrPublicToken={lastScanToken}
+            headers={headers}
+            apiBase={API_BASE}
+            authToken={token}
+            onNotice={(msg) => showToast(msg, "info")}
+            onDone={async (msg, store) => {
+              showToast(msg, store ? "success" : msg === t.cancelled ? "info" : "error");
+              if (store) {
+                setActiveStore(store);
+                setMode("store");
+                setBottomTab("home");
+                setStoreTab("info");
+                await Promise.all([refreshStoreData(store.id), loadDailyStores()]);
+              } else {
+                setMode("home");
+                setBottomTab("home");
+                setLastScanToken(null);
+              }
+            }}
+          />
+        </Suspense>
       )}
 
       {bottomTab === "profile" && (
