@@ -1,7 +1,7 @@
 import { MAX_DETAILED_AREA_RADIUS_KM } from "./jordanAreaConstants.js";
-import { buildGovernorateGridAreas } from "./jordanGovernorateGrid.js";
 import { JORDAN_DETAILED_AREAS, type JordanAreaSeed } from "./jordanDetailedAreas.js";
 import { JORDAN_EXTENDED_NEIGHBORHOODS } from "./jordanNeighborhoodsExtended.js";
+import { JORDAN_REAL_NEIGHBORHOODS } from "./jordanRealNeighborhoods.js";
 
 function clampDetailedRadius(area: JordanAreaSeed): JordanAreaSeed {
   return {
@@ -10,15 +10,15 @@ function clampDetailedRadius(area: JordanAreaSeed): JordanAreaSeed {
   };
 }
 
-/** All detailed seeds: neighborhoods + extended + 1 km grid (deduped by name). */
+/** All detailed seeds: real neighborhood names only (deduped by name). */
 export function allJordanAreaSeeds(): JordanAreaSeed[] {
   const merged: JordanAreaSeed[] = [];
   const seen = new Set<string>();
 
   for (const raw of [
     ...JORDAN_DETAILED_AREAS,
+    ...JORDAN_REAL_NEIGHBORHOODS,
     ...JORDAN_EXTENDED_NEIGHBORHOODS,
-    ...buildGovernorateGridAreas(),
   ]) {
     const a = clampDetailedRadius(raw);
     if (seen.has(a.name)) continue;

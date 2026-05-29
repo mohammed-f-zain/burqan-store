@@ -24,6 +24,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { formatMarketDateTime } from "./formatMarketDateTime";
 import { parseQrPublicToken } from "./parseQrToken";
 import { getRepPosition, LocationDeniedError } from "./getDeviceLocation";
+import { isTabletDevice, tabletContentMaxWidth } from "./deviceLayout";
 import { resolveApiBase } from "./resolveApiBase";
 import { toArabicUserMessage } from "./arabicMessage";
 import ProductDetailModal, { type Product } from "./ProductDetailModal";
@@ -135,6 +136,17 @@ const t = {
   dailyStoresAllVisited: "تمت زيارة كل المتاجر اليوم — أحسنت!",
   dailyStoresCount: (visited: number, total: number) => `${visited} / ${total} تمت زيارته`,
   dailyStoresVisited: "تمت زيارته",
+  dailyStoresUnknownArea: "منطقة غير محددة",
+  dailyStoresAreaCount: (n: number) => `${n} متجر`,
+  dailyStoresPendingCount: (n: number) => `${n} باقٍ`,
+  dailyStoresPending: "باقٍ",
+  dailyStoresSearchPlaceholder: "بحث عن متجر أو صاحب…",
+  dailyStoresFilterAll: "الكل",
+  dailyStoresFilterPending: "باقي زيارات",
+  dailyStoresFilterDone: "تمت",
+  dailyStoresExpandAll: "فتح الكل",
+  dailyStoresCollapseAll: "إغلاق الكل",
+  dailyStoresNoSearchResults: "لا نتائج — جرّب بحثاً آخر",
   storeOwner: "صاحب المتجر",
   callStore: "اتصال بالمتجر",
   productsBadge: (n: number) => String(n),
@@ -190,6 +202,7 @@ function mapProductRow(r: {
 }
 
 type Area = { id: number; name: string };
+import DailyStoresByArea from "./DailyStoresByArea";
 import EndVisitModal from "./EndVisitModal";
 import StorePeekModal from "./StorePeekModal";
 import type { DailyStoreCard, StoreBrief } from "./storeTypes";
@@ -212,6 +225,18 @@ function formatStoreLocation(
 export default function App() {
   const insets = useSafeAreaInsets();
   const { width: winW, height: winH } = useWindowDimensions();
+  const isTablet = useMemo(() => isTabletDevice(), [winW, winH]);
+  const pageMaxWidth = useMemo(
+    () => (isTablet ? tabletContentMaxWidth(winW, winH) : undefined),
+    [isTablet, winW, winH]
+  );
+  const pageFrameStyle = useMemo(
+    () =>
+      pageMaxWidth
+        ? { maxWidth: pageMaxWidth, width: "100%" as const, alignSelf: "center" as const }
+        : undefined,
+    [pageMaxWidth]
+  );
   /** Extra space under the Dynamic Island / status bar (larger on iPhone with island). */
   const scanTopMargin = Platform.OS === "ios" ? 36 : 16;
   const scanBottomChrome = Math.max(insets.bottom, 16);
@@ -410,6 +435,11 @@ export default function App() {
       quantity: stockById.get(p.id) ?? 0,
     }));
   }, [catalogProducts, inventory]);
+
+  const repAreaNames = useMemo(
+    () => (repProfile?.areas ?? []).map((a) => a.name),
+    [repProfile?.areas]
+  );
 
   const loadDailyStores = useCallback(async () => {
     if (!token) return;
@@ -775,7 +805,7 @@ export default function App() {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: bg }} edges={["top", "bottom", "left", "right"]}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-          <View style={styles.center}>
+          <View style={[styles.center, pageFrameStyle]}>
             <StatusBar style="dark" />
             <Image source={require("./assets/burqanlogo.png")} style={styles.logo} resizeMode="contain" />
             <View style={styles.loginCard}>
@@ -803,7 +833,7 @@ export default function App() {
         <StatusBar style="dark" />
         <ScrollView
           style={{ flex: 1 }}
-          contentContainerStyle={[styles.page, { paddingBottom: insets.bottom + 88 }]}
+          contentContainerStyle={[styles.page, pageFrameStyle, { paddingBottom: insets.bottom + 88 }]}
           keyboardShouldPersistTaps="handled"
           refreshControl={
             mode === "home" ? (
@@ -896,59 +926,31 @@ export default function App() {
             </Pressable>
           ) : null}
 
-          <View style={styles.dailySection}>
-            <View style={styles.rowBetween}>
-              <Text style={styles.cardTitle}>{t.dailyStoresTitle}</Text>
-              {!dailyStoresLoading && dailyStores.length > 0 ? (
-                <Text style={styles.dailyCount}>
-                  {t.dailyStoresCount(
-                    dailyStores.filter((s) => s.visitedToday).length,
-                    dailyStores.length
-                  )}
-                </Text>
-              ) : null}
-            </View>
-            <Text style={styles.muted}>{t.dailyStoresHint}</Text>
-            {dailyStoresLoading ? (
-              <ActivityIndicator color={accent} style={{ marginTop: 16 }} />
-            ) : dailyStores.length === 0 ? (
-              <Text style={styles.emptyText}>{t.dailyStoresEmpty}</Text>
-            ) : (
-              <>
-                {dailyStores.every((s) => s.visitedToday) ? (
-                  <Text style={styles.dailyAllDone}>{t.dailyStoresAllVisited}</Text>
-                ) : null}
-                {dailyStores.map((s) => (
-                  <Pressable
-                    key={s.id}
-                    style={[styles.dailyStoreCard, s.visitedToday && styles.dailyStoreCardVisited]}
-                    onPress={() => setPeekStore(s)}
-                  >
-                    <View style={styles.dailyStoreBody}>
-                      <Text style={styles.dailyStoreName}>{s.name}</Text>
-                      <Text style={styles.dailyStoreMeta}>
-                        {s.areaName ? `${s.areaName} · ` : ""}
-                        {s.ownerName}
-                      </Text>
-                      {s.visitedToday && s.visitNote ? (
-                        <Text style={styles.dailyStoreNote} numberOfLines={2}>
-                          {s.visitNote}
-                        </Text>
-                      ) : null}
-                    </View>
-                    {s.visitedToday ? (
-                      <View style={styles.dailyVisitedBadge}>
-                        <Text style={styles.dailyVisitedCheck}>✓</Text>
-                        <Text style={styles.dailyVisitedText}>{t.dailyStoresVisited}</Text>
-                      </View>
-                    ) : (
-                      <Text style={styles.resumeArrow}>‹</Text>
-                    )}
-                  </Pressable>
-                ))}
-              </>
-            )}
-          </View>
+          <DailyStoresByArea
+            stores={dailyStores}
+            repAreaNames={repAreaNames}
+            loading={dailyStoresLoading}
+            title={t.dailyStoresTitle}
+            labels={{
+              hint: t.dailyStoresHint,
+              empty: t.dailyStoresEmpty,
+              allVisited: t.dailyStoresAllVisited,
+              count: t.dailyStoresCount,
+              visited: t.dailyStoresVisited,
+              pending: t.dailyStoresPending,
+              unknownArea: t.dailyStoresUnknownArea,
+              storeCount: t.dailyStoresAreaCount,
+              pendingCount: t.dailyStoresPendingCount,
+              searchPlaceholder: t.dailyStoresSearchPlaceholder,
+              filterAll: t.dailyStoresFilterAll,
+              filterPending: t.dailyStoresFilterPending,
+              filterDone: t.dailyStoresFilterDone,
+              expandAll: t.dailyStoresExpandAll,
+              collapseAll: t.dailyStoresCollapseAll,
+              noSearchResults: t.dailyStoresNoSearchResults,
+            }}
+            onSelectStore={setPeekStore}
+          />
         </>
       )}
 

@@ -19,7 +19,13 @@
         "NSLocationWhenInUseUsageDescription": "Burqan uses your location to register stores, verify you are at the store, and assign the correct area.",
         "NSAppTransportSecurity": {
           "NSAllowsLocalNetworking": true
-        }
+        },
+        "UISupportedInterfaceOrientations": ["UIInterfaceOrientationPortrait"],
+        "UISupportedInterfaceOrientations~ipad": [
+          "UIInterfaceOrientationLandscapeLeft",
+          "UIInterfaceOrientationLandscapeRight",
+          "UIInterfaceOrientationPortrait"
+        ]
       }
     },
     "android": {

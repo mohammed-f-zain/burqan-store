@@ -56,39 +56,40 @@ export const JORDAN_DETAILED_AREAS: JordanAreaSeed[] = [
   { name: "الهاشمي الجنوبي", governorate: "عمان", centerLat: 31.978, centerLng: 35.978, radiusKm: 2.5 },
   { name: "المطار", governorate: "عمان", centerLat: 31.722, centerLng: 35.993, radiusKm: 4.0 },
   // —— الزرقاء ——
-  { name: "الزرقاء — وسط المدينة", governorate: "الزرقاء", centerLat: 32.0728, centerLng: 36.0876, radiusKm: 3.0 },
+  { name: "وسط الزرقاء", governorate: "الزرقاء", centerLat: 32.0728, centerLng: 36.0876, radiusKm: 3.0 },
   { name: "الزرقاء الجديدة", governorate: "الزرقاء", centerLat: 32.048, centerLng: 36.118, radiusKm: 3.5 },
   { name: "الرصيفة", governorate: "الزرقاء", centerLat: 32.018, centerLng: 36.048, radiusKm: 4.0 },
   { name: "الهاشمية", governorate: "الزرقاء", centerLat: 32.128, centerLng: 36.128, radiusKm: 3.5 },
   // —— إربد ——
-  { name: "إربد — وسط المدينة", governorate: "إربد", centerLat: 32.5556, centerLng: 35.85, radiusKm: 3.0 },
-  { name: "إربد — الحي الشرقي", governorate: "إربد", centerLat: 32.548, centerLng: 35.868, radiusKm: 2.8 },
-  { name: "إربد — الحي الغربي", governorate: "إربد", centerLat: 32.558, centerLng: 35.828, radiusKm: 2.8 },
+  { name: "وسط إربد", governorate: "إربد", centerLat: 32.5556, centerLng: 35.85, radiusKm: 3.0 },
+  { name: "حي الشرقي", governorate: "إربد", centerLat: 32.548, centerLng: 35.868, radiusKm: 2.8 },
+  { name: "حي الغربي", governorate: "إربد", centerLat: 32.558, centerLng: 35.828, radiusKm: 2.8 },
   { name: "الرمثا", governorate: "إربد", centerLat: 32.558, centerLng: 36.008, radiusKm: 4.0 },
   // —— البلقاء ——
   { name: "السلط", governorate: "البلقاء", centerLat: 32.0367, centerLng: 35.7278, radiusKm: 3.5 },
   { name: "الفحيص", governorate: "البلقاء", centerLat: 31.918, centerLng: 35.768, radiusKm: 3.0 },
   { name: "ماحص", governorate: "البلقاء", centerLat: 31.978, centerLng: 35.758, radiusKm: 3.0 },
   // —— مادبا ——
-  { name: "مادبا — وسط المدينة", governorate: "مادبا", centerLat: 31.716, centerLng: 35.7939, radiusKm: 3.0 },
+  { name: "وسط مادبا", governorate: "مادبا", centerLat: 31.716, centerLng: 35.7939, radiusKm: 3.0 },
   { name: "ذيبان", governorate: "مادبا", centerLat: 31.498, centerLng: 35.768, radiusKm: 4.0 },
   // —— المفرق ——
-  { name: "المفرق — وسط المدينة", governorate: "المفرق", centerLat: 32.3424, centerLng: 36.208, radiusKm: 4.0 },
+  { name: "وسط المفرق", governorate: "المفرق", centerLat: 32.3424, centerLng: 36.208, radiusKm: 4.0 },
   { name: "الرويشد", governorate: "المفرق", centerLat: 32.518, centerLng: 38.208, radiusKm: 5.0 },
   // —— العقبة ——
-  { name: "العقبة — وسط المدينة", governorate: "العقبة", centerLat: 29.532, centerLng: 35.0063, radiusKm: 3.5 },
+  { name: "وسط العقبة", governorate: "العقبة", centerLat: 29.532, centerLng: 35.0063, radiusKm: 3.5 },
   { name: "الشاطئ الجنوبي", governorate: "العقبة", centerLat: 29.518, centerLng: 34.988, radiusKm: 3.0 },
   // —— الكرك ——
-  { name: "الكرك — وسط المدينة", governorate: "الكرك", centerLat: 31.1853, centerLng: 35.7048, radiusKm: 3.5 },
+  { name: "وسط الكرك", governorate: "الكرك", centerLat: 31.1853, centerLng: 35.7048, radiusKm: 3.5 },
   // —— معان ——
-  { name: "معان — وسط المدينة", governorate: "معان", centerLat: 30.1962, centerLng: 35.7341, radiusKm: 4.0 },
-  { name: "وادي موسى / البتراء", governorate: "معان", centerLat: 30.328, centerLng: 35.478, radiusKm: 5.0 },
+  { name: "وسط معان", governorate: "معان", centerLat: 30.1962, centerLng: 35.7341, radiusKm: 4.0 },
+  { name: "وادي موسى", governorate: "معان", centerLat: 30.328, centerLng: 35.478, radiusKm: 5.0 },
+  { name: "البتراء", governorate: "معان", centerLat: 30.338, centerLng: 35.468, radiusKm: 5.0 },
   // —— الطفيلة ——
-  { name: "الطفيلة — وسط المدينة", governorate: "الطفيلة", centerLat: 30.8375, centerLng: 35.6167, radiusKm: 3.5 },
+  { name: "وسط الطفيلة", governorate: "الطفيلة", centerLat: 30.8375, centerLng: 35.6167, radiusKm: 3.5 },
   // —— جرش / عجلون ——
-  { name: "جرش — وسط المدينة", governorate: "جرش", centerLat: 32.2722, centerLng: 35.8993, radiusKm: 3.0 },
+  { name: "وسط جرش", governorate: "جرش", centerLat: 32.2722, centerLng: 35.8993, radiusKm: 3.0 },
   { name: "سوف", governorate: "جرش", centerLat: 32.318, centerLng: 35.838, radiusKm: 3.5 },
-  { name: "عجلون — وسط المدينة", governorate: "عجلون", centerLat: 32.3326, centerLng: 35.7517, radiusKm: 3.0 },
+  { name: "وسط عجلون", governorate: "عجلون", centerLat: 32.3326, centerLng: 35.7517, radiusKm: 3.0 },
   { name: "عنجرة", governorate: "عجلون", centerLat: 32.408, centerLng: 35.768, radiusKm: 3.5 },
   // —— إربد إضافي ——
   { name: "الحصن", governorate: "إربد", centerLat: 32.488, centerLng: 35.728, radiusKm: 3.5 },
