@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { JORDAN_DETAILED_AREAS } from "../data/jordanDetailedAreas.js";
+import { allJordanAreaSeeds } from "../data/jordanAreaSeeds.js";
 import { JORDAN_GOVERNORATES } from "../data/jordanGovernorates.js";
 import { GOVERNORATE_AREA_SUFFIX } from "../utils/matchAreaFromGoogle.js";
 import { query, pool } from "../db/pool.js";
@@ -18,7 +18,8 @@ async function ensureGovernorateColumn() {
 async function main() {
   await ensureGovernorateColumn();
 
-  for (const a of JORDAN_DETAILED_AREAS) {
+  const detailed = allJordanAreaSeeds();
+  for (const a of detailed) {
     await query(
       `INSERT INTO areas (name, center_lat, center_lng, radius_km, governorate)
        VALUES ($1, $2, $3, $4, $5)
@@ -48,7 +49,7 @@ async function main() {
   const { rows } = await query<{ c: string }>(`SELECT COUNT(*)::text AS c FROM areas`);
   // eslint-disable-next-line no-console
   console.log(
-    `Jordan areas upserted: ${JORDAN_DETAILED_AREAS.length} detailed + ${JORDAN_GOVERNORATES.length} governorate coverage.`,
+    `Jordan areas upserted: ${detailed.length} detailed (max 1 km) + ${JORDAN_GOVERNORATES.length} governorate coverage.`,
     `Total areas in DB:`,
     rows[0]?.c ?? "0"
   );

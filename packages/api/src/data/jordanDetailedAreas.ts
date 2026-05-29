@@ -1,6 +1,6 @@
 /**
- * Detailed Jordan service areas (neighborhoods / zones), not whole governorates.
- * GPS assignment uses center + radius_km; smaller radius = finer zones.
+ * Named Jordan neighborhoods (Amman + major cities).
+ * Radius is capped to 1 km on seed — see jordanAreaSeeds.ts + governorate grid.
  */
 export type JordanAreaSeed = {
   name: string;

@@ -2,7 +2,7 @@ import { query } from "../db/pool.js";
 import { HttpError } from "./errors.js";
 import { haversineMeters } from "./geoDistance.js";
 import { isGoogleGeocodeEnabled, reverseGeocode } from "./googleGeocode.js";
-import { matchAreaFromGoogle } from "./matchAreaFromGoogle.js";
+import { GOVERNORATE_AREA_SUFFIX, matchAreaFromGoogle } from "./matchAreaFromGoogle.js";
 
 export type AreaGeo = {
   id: number;
@@ -34,9 +34,24 @@ function pickFromCircles(lat: number, lng: number, rows: AreaGeo[]): ResolvedAre
     return { area: a, distM, inside: distM <= radiusM };
   });
 
-  const inside = scored.filter((s) => s.inside).sort((a, b) => a.distM - b.distM);
-  if (inside[0]) {
-    const a = inside[0].area;
+  const isGovCoverage = (name: string) => name.endsWith(GOVERNORATE_AREA_SUFFIX);
+
+  const inside = scored
+    .filter((s) => s.inside)
+    .sort((a, b) => {
+      const ra = parseFloat(String(a.area.radius_km));
+      const rb = parseFloat(String(b.area.radius_km));
+      if (ra !== rb) return ra - rb;
+      const aGov = isGovCoverage(a.area.name) ? 1 : 0;
+      const bGov = isGovCoverage(b.area.name) ? 1 : 0;
+      if (aGov !== bGov) return aGov - bGov;
+      return a.distM - b.distM;
+    });
+
+  const insideDetailed = inside.filter((s) => !isGovCoverage(s.area.name));
+  const pick = insideDetailed[0] ?? inside[0];
+  if (pick) {
+    const a = pick.area;
     return { areaId: a.id, areaName: a.name, governorate: a.governorate, source: "gps" };
   }
 

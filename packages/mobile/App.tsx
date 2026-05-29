@@ -124,6 +124,9 @@ const t = {
   profileNoAreas: "لا مناطق مربوطة",
   profileNoCar: "—",
   profileLoadFailed: "تعذّر تحميل الملف الشخصي",
+  profileRetry: "إعادة المحاولة",
+  profileErrorHint: "تحقق من الاتصال بالخادم أو سجّل الخروج وأعد تسجيل الدخول.",
+  sessionExpired: "انتهت الجلسة — سجّل الدخول مرة أخرى",
   welcome: (name: string) => `مرحباً، ${name}`,
   homeSubtitle: "امسح رمز المتجر لبدء الزيارة والبيع",
   dailyStoresTitle: "متاجر مناطقي اليوم",
@@ -221,6 +224,8 @@ export default function App() {
   const [token, setToken] = useState<string | null>(null);
   const [showSplash, setShowSplash] = useState(true);
   const [repProfile, setRepProfile] = useState<RepProfile | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
   const [profileRefreshing, setProfileRefreshing] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -419,14 +424,42 @@ export default function App() {
     }
   }, [apiGet, token]);
 
+  const clearSession = useCallback(() => {
+    modernBarcodeSubRef.current?.remove();
+    modernBarcodeSubRef.current = null;
+    void clearRepToken();
+    setToken(null);
+    setRepProfile(null);
+    setProfileError(null);
+    setProfileLoading(false);
+    setActiveStore(null);
+    setDailyStores([]);
+    setPeekStore(null);
+    setMode("home");
+    setBottomTab("home");
+    hideToast();
+  }, [hideToast]);
+
+  const signOut = clearSession;
+
   const loadProfile = useCallback(async () => {
     if (!token) return;
+    setProfileLoading(true);
+    setProfileError(null);
     try {
-      const data = await apiGet("/api/v1/rep/me");
+      const res = await fetch(`${API_BASE}/api/v1/rep/me`, { headers });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401 || res.status === 403) {
+        showToast(t.sessionExpired, "info");
+        clearSession();
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(typeof data.error === "string" ? data.error : t.profileLoadFailed);
+      }
       const r = data.representative as Partial<RepProfile> | undefined;
       if (!r?.id) {
-        setRepProfile(null);
-        return;
+        throw new Error(t.profileLoadFailed);
       }
       setRepProfile({
         id: r.id,
@@ -441,10 +474,16 @@ export default function App() {
           totalUnits: r.inventory?.totalUnits ?? 0,
         },
       });
-    } catch {
-      showToast(t.profileLoadFailed, "error");
+      setProfileError(null);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : t.profileLoadFailed;
+      setProfileError(msg);
+      setRepProfile(null);
+      showToast(msg, "error");
+    } finally {
+      setProfileLoading(false);
     }
-  }, [apiGet, token, showToast]);
+  }, [headers, token, clearSession, showToast]);
 
   useEffect(() => {
     let cancelled = false;
@@ -473,26 +512,14 @@ export default function App() {
   useEffect(() => {
     if (!token) {
       setRepProfile(null);
+      setProfileError(null);
+      setProfileLoading(false);
       return;
     }
     void loadProfile();
     void loadInventory();
     void loadDailyStores();
   }, [token, loadProfile, loadInventory, loadDailyStores]);
-
-  const signOut = useCallback(() => {
-    modernBarcodeSubRef.current?.remove();
-    modernBarcodeSubRef.current = null;
-    void clearRepToken();
-    setToken(null);
-    setRepProfile(null);
-    setActiveStore(null);
-    setDailyStores([]);
-    setPeekStore(null);
-    setMode("home");
-    setBottomTab("home");
-    hideToast();
-  }, [hideToast]);
 
   async function resolveQr(raw: string) {
     if (!token) return;
@@ -1113,7 +1140,8 @@ export default function App() {
       {bottomTab === "profile" && (
         <ProfileScreen
           profile={repProfile}
-          loading={!repProfile && !!token}
+          loading={profileLoading}
+          error={profileError}
           refreshing={profileRefreshing}
           labels={{
             title: t.profileTitle,
@@ -1125,6 +1153,8 @@ export default function App() {
             sku: t.profileSku,
             units: t.profileUnits,
             signOut: t.profileSignOut,
+            retry: t.profileRetry,
+            errorHint: t.profileErrorHint,
             viewInventory: t.navInventory,
             noAreas: t.profileNoAreas,
             noCarPlate: t.profileNoCar,

@@ -10,8 +10,8 @@ async function main() {
   const phSuper = await hashPassword(superPassword);
   const phRep = await hashPassword(repPassword);
 
-  const { JORDAN_DETAILED_AREAS } = await import("../data/jordanDetailedAreas.js");
-  for (const a of JORDAN_DETAILED_AREAS) {
+  const { allJordanAreaSeeds } = await import("../data/jordanAreaSeeds.js");
+  for (const a of allJordanAreaSeeds()) {
     await query(
       `INSERT INTO areas (name, center_lat, center_lng, radius_km, governorate)
        VALUES ($1, $2, $3, $4, $5)
