@@ -16,6 +16,7 @@ const FILES = [
   "004_area_governorate.sql",
   "005_loyalty.sql",
   "006_prize_redeem.sql",
+  "007_area_2km_governorate_coverage.sql",
 ] as const;
 
 async function main() {

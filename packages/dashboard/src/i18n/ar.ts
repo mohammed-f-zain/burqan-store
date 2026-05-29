@@ -188,6 +188,14 @@ export const ar = {
     centerLng: "خط الطول (مركز المنطقة)",
     radiusKm: "نصف القطر (كم)",
     geoHint: "يُستخدم لتعيين المنطقة تلقائياً من موقع الجهاز عند تسجيل المتجر.",
+    governorateCoverageTitle: "تغطية المحافظات",
+    governorateCoverageHint:
+      "عند التفعيل، يُستخدم دائرة المحافظة الكاملة كاحتياطي عندما لا يقع المتجر داخل أي حي (نصف قطر 2 كم).",
+    governorateCoverageOn: "تغطية كاملة",
+    governorateCoverageOff: "معطّلة",
+    governorateCoverageSaved: "تم تحديث تغطية المحافظة.",
+    governorateCoverageFailed: "تعذّر تحديث تغطية المحافظة.",
+    governorateCoverageLoadFailed: "تعذّر تحميل تغطية المحافظات.",
   },
 
   products: {

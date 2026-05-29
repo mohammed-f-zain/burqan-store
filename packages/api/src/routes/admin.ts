@@ -19,6 +19,8 @@ import { hashPassword, verifyPassword } from "../utils/password.js";
 import { signAdminToken } from "../utils/jwt.js";
 import { countUnassignedQrCodes, insertQrCodes } from "../lib/generateQrCodes.js";
 import { optionalStoredImagePathNullableSchema, optionalStoredImagePathSchema } from "../utils/storedImagePath.js";
+import { JORDAN_GOVERNORATES } from "../data/jordanGovernorates.js";
+import { GOVERNORATE_AREA_SUFFIX } from "../utils/matchAreaFromGoogle.js";
 
 const router = Router();
 
@@ -848,6 +850,75 @@ router.patch(
       if (e instanceof DatabaseError && e.code === "23505") {
         return res.status(409).json({ error: "اسم المنطقة مستخدم بالفعل" });
       }
+      next(e);
+    }
+  }
+);
+
+router.get(
+  "/areas/governorate-coverage",
+  adminAuthMiddleware,
+  requireAdminPermission("areas.read"),
+  async (_req, res, next) => {
+    try {
+      const items = [];
+      for (const g of JORDAN_GOVERNORATES) {
+        const areaName = `${g.name}${GOVERNORATE_AREA_SUFFIX}`;
+        const { rows } = await query<{
+          id: number;
+          governorate_full_coverage: boolean;
+          radius_km: string;
+        }>(
+          `SELECT id, governorate_full_coverage, radius_km FROM areas WHERE name = $1 LIMIT 1`,
+          [areaName]
+        );
+        const row = rows[0];
+        items.push({
+          governorate: g.name,
+          areaId: row?.id ?? null,
+          areaName,
+          enabled: row?.governorate_full_coverage ?? true,
+          centerLat: g.centerLat,
+          centerLng: g.centerLng,
+          radiusKm: row ? parseFloat(row.radius_km) : g.radiusKm,
+        });
+      }
+      res.json({ governorates: items });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+const governorateCoverageSchema = z.object({
+  governorate: z.string().trim().min(2).max(64),
+  enabled: z.boolean(),
+});
+
+router.patch(
+  "/areas/governorate-coverage",
+  adminAuthMiddleware,
+  requireAdminPermission("areas.write"),
+  async (req, res, next) => {
+    try {
+      const body = governorateCoverageSchema.parse(req.body);
+      const known = JORDAN_GOVERNORATES.some((g) => g.name === body.governorate);
+      if (!known) throw new HttpError(400, "محافظة غير معروفة");
+      const areaName = `${body.governorate}${GOVERNORATE_AREA_SUFFIX}`;
+      const { rows } = await query(
+        `UPDATE areas SET governorate_full_coverage = $1 WHERE name = $2
+         RETURNING id, name, governorate, governorate_full_coverage, radius_km`,
+        [body.enabled, areaName]
+      );
+      if (!rows[0]) throw new HttpError(404, "منطقة تغطية المحافظة غير موجودة — شغّل seed:jordan-areas");
+      res.json({
+        governorate: body.governorate,
+        areaId: rows[0].id,
+        areaName: rows[0].name,
+        enabled: rows[0].governorate_full_coverage,
+        radiusKm: parseFloat(String(rows[0].radius_km)),
+      });
+    } catch (e) {
       next(e);
     }
   }

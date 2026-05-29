@@ -189,6 +189,14 @@ export const en: Messages = {
     centerLng: "Center longitude",
     radiusKm: "Radius (km)",
     geoHint: "Used to auto-assign stores from GPS. Set center near the area on the map.",
+    governorateCoverageTitle: "Governorate coverage",
+    governorateCoverageHint:
+      "When enabled, the full governorate circle is used as a fallback when GPS is outside all 2 km neighborhoods.",
+    governorateCoverageOn: "Full coverage",
+    governorateCoverageOff: "Disabled",
+    governorateCoverageSaved: "Governorate coverage updated.",
+    governorateCoverageFailed: "Could not update governorate coverage.",
+    governorateCoverageLoadFailed: "Could not load governorate coverage.",
   },
 
   products: {

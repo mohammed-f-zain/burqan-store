@@ -18,7 +18,7 @@ import {
   resolveAreaIdFromAllAreas,
 } from "../utils/geo.js";
 import { parseQrPublicToken } from "../utils/qrToken.js";
-import { areaBboxParams, EXCLUDE_GRID_AREA_SQL } from "../utils/areaQuery.js";
+import { areaBboxParams, EXCLUDE_GRID_AREA_SQL, GOVERNORATE_COVERAGE_ACTIVE_SQL } from "../utils/areaQuery.js";
 
 const router = Router();
 
@@ -154,7 +154,7 @@ router.get("/areas/jordan", repAuthMiddleware, async (req, res, next) => {
     const params: (number | string)[] = [];
     let bboxSql = "";
     if (q.lat != null && q.lng != null) {
-      const radiusKm = q.radiusKm ?? 22;
+      const radiusKm = q.radiusKm ?? 28;
       const box = areaBboxParams(q.lat, q.lng, radiusKm);
       bboxSql = ` AND center_lat BETWEEN $1 AND $2 AND center_lng BETWEEN $3 AND $4`;
       params.push(box.minLat, box.maxLat, box.minLng, box.maxLng);
@@ -170,7 +170,8 @@ router.get("/areas/jordan", repAuthMiddleware, async (req, res, next) => {
       `SELECT id, name, governorate, center_lat, center_lng, radius_km
        FROM areas
        WHERE center_lat IS NOT NULL AND center_lng IS NOT NULL
-         AND ${EXCLUDE_GRID_AREA_SQL}${bboxSql}
+         AND ${EXCLUDE_GRID_AREA_SQL}
+         AND ${GOVERNORATE_COVERAGE_ACTIVE_SQL}${bboxSql}
        ORDER BY governorate NULLS LAST, name ASC`,
       params
     );

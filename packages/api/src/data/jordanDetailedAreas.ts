@@ -1,6 +1,6 @@
 /**
  * Named Jordan neighborhoods (Amman + major cities).
- * Radius is capped to 1 km on seed — see jordanAreaSeeds.ts + governorate grid.
+ * Radius is set to 2 km on seed — see jordanAreaSeeds.ts.
  */
 export type JordanAreaSeed = {
   name: string;

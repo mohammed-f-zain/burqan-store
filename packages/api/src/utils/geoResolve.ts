@@ -1,11 +1,11 @@
 import { query } from "../db/pool.js";
-import { areaBboxParams, EXCLUDE_GRID_AREA_SQL } from "./areaQuery.js";
+import { areaBboxParams, EXCLUDE_GRID_AREA_SQL, GOVERNORATE_COVERAGE_ACTIVE_SQL } from "./areaQuery.js";
 import { HttpError } from "./errors.js";
 import { haversineMeters } from "./geoDistance.js";
 import { isGoogleGeocodeEnabled, reverseGeocode } from "./googleGeocode.js";
 import { GOVERNORATE_AREA_SUFFIX, matchAreaFromGoogle } from "./matchAreaFromGoogle.js";
 
-const NEARBY_AREA_RADIUS_KM = 28;
+const NEARBY_AREA_RADIUS_KM = 36;
 const GOOGLE_MATCH_MAX_CANDIDATES = 120;
 
 export type AreaGeo = {
@@ -111,6 +111,7 @@ async function loadAreasNearPoint(lat: number, lng: number, radiusKm: number): P
      FROM areas
      WHERE center_lat IS NOT NULL AND center_lng IS NOT NULL
        AND ${EXCLUDE_GRID_AREA_SQL}
+       AND ${GOVERNORATE_COVERAGE_ACTIVE_SQL}
        AND center_lat BETWEEN $1 AND $2
        AND center_lng BETWEEN $3 AND $4
      ORDER BY id ASC`,
@@ -131,6 +132,7 @@ export async function resolveAreaIdFromAllAreas(lat: number, lng: number): Promi
        FROM areas
        WHERE center_lat IS NOT NULL AND center_lng IS NOT NULL
          AND ${EXCLUDE_GRID_AREA_SQL}
+         AND ${GOVERNORATE_COVERAGE_ACTIVE_SQL}
          AND name LIKE '%' || $1
        ORDER BY id ASC`,
       [GOVERNORATE_AREA_SUFFIX]

@@ -17,14 +17,28 @@ type Area = {
   radius_km?: string | number | null;
 };
 
+type GovernorateCoverage = {
+  governorate: string;
+  areaId: number | null;
+  areaName: string;
+  enabled: boolean;
+  centerLat: number;
+  centerLng: number;
+  radiusKm: number;
+};
+
+const GOVERNORATE_COVERAGE_SUFFIX = " — تغطية المحافظة";
+
 export default function AreasPage() {
   const { can } = useAuth();
   const { t } = useLocale();
   const [areas, setAreas] = useState<Area[]>([]);
+  const [govCoverage, setGovCoverage] = useState<GovernorateCoverage[]>([]);
   const [name, setName] = useState("");
   const [governorate, setGovernorate] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
+  const [coverageBusy, setCoverageBusy] = useState<string | null>(null);
 
   const governorateOptions = useMemo(() => {
     const s = new Set<string>();
@@ -34,13 +48,27 @@ export default function AreasPage() {
     return [...s].sort((a, b) => a.localeCompare(b, "ar"));
   }, [areas]);
 
+  const neighborhoodAreas = useMemo(
+    () => areas.filter((a) => !a.name.endsWith(GOVERNORATE_COVERAGE_SUFFIX)),
+    [areas]
+  );
+
   async function load() {
     const { data } = await api.get<{ areas: Area[] }>("/areas");
     setAreas(data.areas);
   }
 
+  async function loadGovernorateCoverage() {
+    const { data } = await api.get<{ governorates: GovernorateCoverage[] }>(
+      "/areas/governorate-coverage"
+    );
+    setGovCoverage(data.governorates);
+  }
+
   useEffect(() => {
-    void load().catch(() => toastError(t.areas.addFailed));
+    void Promise.all([load(), loadGovernorateCoverage()]).catch(() =>
+      toastError(t.areas.governorateCoverageLoadFailed)
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps -- initial load only
   }, []);
 
@@ -57,6 +85,25 @@ export default function AreasPage() {
       toastSuccess(t.areas.added);
     } catch (err) {
       toastError(pickAxiosErrorMessage(err, t.areas.addFailed));
+    }
+  }
+
+  async function toggleGovernorateCoverage(item: GovernorateCoverage, enabled: boolean) {
+    if (!can("areas.write")) return;
+    setCoverageBusy(item.governorate);
+    try {
+      await api.patch("/areas/governorate-coverage", {
+        governorate: item.governorate,
+        enabled,
+      });
+      setGovCoverage((prev) =>
+        prev.map((g) => (g.governorate === item.governorate ? { ...g, enabled } : g))
+      );
+      toastSuccess(t.areas.governorateCoverageSaved);
+    } catch (err) {
+      toastError(pickAxiosErrorMessage(err, t.areas.governorateCoverageFailed));
+    } finally {
+      setCoverageBusy(null);
     }
   }
 
@@ -106,6 +153,40 @@ export default function AreasPage() {
   return (
     <div className="grid">
       <div className="card">
+        <h2>{t.areas.governorateCoverageTitle}</h2>
+        <p className="muted small" style={{ marginBottom: 12 }}>
+          {t.areas.governorateCoverageHint}
+        </p>
+        <div className="gov-coverage-grid">
+          {govCoverage.map((g) => (
+            <div className="gov-coverage-row" key={g.governorate}>
+              <div>
+                <strong>{g.governorate}</strong>
+                <div className="muted small">
+                  {g.areaName} · {g.radiusKm} km
+                </div>
+              </div>
+              {write ? (
+                <label className="gov-coverage-toggle">
+                  <input
+                    type="checkbox"
+                    checked={g.enabled}
+                    disabled={coverageBusy === g.governorate}
+                    onChange={(e) => void toggleGovernorateCoverage(g, e.target.checked)}
+                  />
+                  <span>{g.enabled ? t.areas.governorateCoverageOn : t.areas.governorateCoverageOff}</span>
+                </label>
+              ) : (
+                <span className="muted small">
+                  {g.enabled ? t.areas.governorateCoverageOn : t.areas.governorateCoverageOff}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="card">
         <h2>{t.areas.title}</h2>
         {write && (
           <form onSubmit={onAdd} className="form" style={{ maxWidth: 520 }}>
@@ -131,11 +212,11 @@ export default function AreasPage() {
         )}
       </div>
       <div className="card">
-        {areas.length === 0 ? (
+        {neighborhoodAreas.length === 0 ? (
           <p className="muted">{t.areas.empty}</p>
         ) : (
           <AreaGovernorateGroups
-            areas={areas}
+            areas={neighborhoodAreas}
             unassignedLabel={t.areas.unassignedGroup}
             expandAllLabel={t.areas.expandAll}
             collapseAllLabel={t.areas.collapseAll}
