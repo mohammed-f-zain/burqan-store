@@ -44,4 +44,6 @@ export const config = {
   smtpPass: process.env.SMTP_PASS?.replace(/\s+/g, "") || undefined,
   smtpFrom: process.env.SMTP_FROM?.trim() || process.env.SMTP_USER?.trim() || "noreply@burqan.store",
   adminResetTokenMinutes: parseInt(process.env.ADMIN_RESET_TOKEN_MINUTES ?? "60", 10),
+  /** Google Maps Geocoding API key — accurate area from GPS (optional; falls back to circles). */
+  googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY?.trim() || undefined,
 };

@@ -87,5 +87,19 @@ export const JORDAN_DETAILED_AREAS: JordanAreaSeed[] = [
   { name: "الطفيلة — وسط المدينة", governorate: "الطفيلة", centerLat: 30.8375, centerLng: 35.6167, radiusKm: 3.5 },
   // —— جرش / عجلون ——
   { name: "جرش — وسط المدينة", governorate: "جرش", centerLat: 32.2722, centerLng: 35.8993, radiusKm: 3.0 },
+  { name: "سوف", governorate: "جرش", centerLat: 32.318, centerLng: 35.838, radiusKm: 3.5 },
   { name: "عجلون — وسط المدينة", governorate: "عجلون", centerLat: 32.3326, centerLng: 35.7517, radiusKm: 3.0 },
+  { name: "عنجرة", governorate: "عجلون", centerLat: 32.408, centerLng: 35.768, radiusKm: 3.5 },
+  // —— إربد إضافي ——
+  { name: "الحصن", governorate: "إربد", centerLat: 32.488, centerLng: 35.728, radiusKm: 3.5 },
+  { name: "كفرنجة", governorate: "إربد", centerLat: 32.438, centerLng: 35.698, radiusKm: 3.5 },
+  { name: "بيت راس", governorate: "إربد", centerLat: 32.638, centerLng: 35.728, radiusKm: 3.5 },
+  // —— المفرق إضافي ——
+  { name: "الخالدية", governorate: "المفرق", centerLat: 32.178, centerLng: 36.298, radiusKm: 4.0 },
+  { name: "الصالحية", governorate: "المفرق", centerLat: 32.268, centerLng: 36.058, radiusKm: 4.0 },
+  // —— الكرك / معان / مادبا إضافي ——
+  { name: "القصر", governorate: "الكرك", centerLat: 31.178, centerLng: 35.698, radiusKm: 4.0 },
+  { name: "الشوبك", governorate: "معان", centerLat: 30.528, centerLng: 35.928, radiusKm: 4.5 },
+  { name: "ماعين", governorate: "مادبا", centerLat: 31.668, centerLng: 35.738, radiusKm: 3.5 },
+  { name: "دليل", governorate: "مادبا", centerLat: 31.748, centerLng: 35.768, radiusKm: 3.5 },
 ];

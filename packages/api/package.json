@@ -12,6 +12,7 @@
     "migrate:geo": "tsx src/scripts/migrate-geo.ts",
     "seed": "tsx src/scripts/seed.ts",
     "seed:jordan-areas": "tsx src/scripts/seed-jordan-areas.ts",
+    "geocode:jordan-areas": "tsx src/scripts/geocode-jordan-areas.ts",
     "reset:commerce": "tsx src/scripts/reset-commerce.ts",
     "gen:qr": "tsx src/scripts/generateQrPool.ts",
     "reset-admin": "tsx src/scripts/reset-admin-password.ts",
