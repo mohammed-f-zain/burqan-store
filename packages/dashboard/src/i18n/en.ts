@@ -197,6 +197,17 @@ export const en: Messages = {
     governorateCoverageSaved: "Governorate coverage updated.",
     governorateCoverageFailed: "Could not update governorate coverage.",
     governorateCoverageLoadFailed: "Could not load governorate coverage.",
+    mapTitle: "Coverage map",
+    mapShow: "Show area circles on map",
+    mapHide: "Hide map",
+    mapGovernorateFilter: "Governorate on map",
+    mapAllGovernorates: "All governorates",
+    mapShowGovCircles: "Show governorate coverage circles",
+    mapNeighborhoodLegend: "Neighborhoods (2 km)",
+    mapGovernorateLegend: "Governorate coverage",
+    mapNoGeo: "No areas with coordinates for this governorate.",
+    mapFocusHint: "Click an area in the list or a circle on the map to highlight it.",
+    mapViewOnMap: "View on map",
   },
 
   products: {

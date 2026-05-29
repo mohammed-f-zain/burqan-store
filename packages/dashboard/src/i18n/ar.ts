@@ -196,6 +196,17 @@ export const ar = {
     governorateCoverageSaved: "تم تحديث تغطية المحافظة.",
     governorateCoverageFailed: "تعذّر تحديث تغطية المحافظة.",
     governorateCoverageLoadFailed: "تعذّر تحميل تغطية المحافظات.",
+    mapTitle: "خريطة التغطية",
+    mapShow: "عرض دوائر المناطق على الخريطة",
+    mapHide: "إخفاء الخريطة",
+    mapGovernorateFilter: "المحافظة على الخريطة",
+    mapAllGovernorates: "كل المحافظات",
+    mapShowGovCircles: "إظهار دوائر تغطية المحافظة",
+    mapNeighborhoodLegend: "أحياء (2 كم)",
+    mapGovernorateLegend: "تغطية محافظة",
+    mapNoGeo: "لا توجد مناطق بإحداثيات لهذه المحافظة.",
+    mapFocusHint: "انقر على منطقة في القائمة أو على الدائرة في الخريطة للتمييز.",
+    mapViewOnMap: "عرض على الخريطة",
   },
 
   products: {

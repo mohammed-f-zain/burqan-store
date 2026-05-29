@@ -1,10 +1,12 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { api } from "../api";
+import AreaCoverageMap from "../components/AreaCoverageMap";
 import AreaGovernorateGroups from "../components/AreaGovernorateGroups";
 import { useAuth } from "../auth/AuthContext";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
+import { parseAreaCircle, type MapAreaCircle } from "../lib/areaMapGeo";
 import { confirmDanger } from "../lib/swalConfirm";
 import { toastError, toastSuccess } from "../lib/toast";
 
@@ -28,10 +30,12 @@ type GovernorateCoverage = {
 };
 
 const GOVERNORATE_COVERAGE_SUFFIX = " — تغطية المحافظة";
+const MAP_FILTER_ALL = "__all__";
 
 export default function AreasPage() {
   const { can } = useAuth();
   const { t } = useLocale();
+  const mapSectionRef = useRef<HTMLDivElement>(null);
   const [areas, setAreas] = useState<Area[]>([]);
   const [govCoverage, setGovCoverage] = useState<GovernorateCoverage[]>([]);
   const [name, setName] = useState("");
@@ -39,6 +43,10 @@ export default function AreasPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
   const [coverageBusy, setCoverageBusy] = useState<string | null>(null);
+  const [showMap, setShowMap] = useState(false);
+  const [mapGovFilter, setMapGovFilter] = useState("عمان");
+  const [showGovCirclesOnMap, setShowGovCirclesOnMap] = useState(true);
+  const [highlightAreaId, setHighlightAreaId] = useState<number | null>(null);
 
   const governorateOptions = useMemo(() => {
     const s = new Set<string>();
@@ -48,10 +56,56 @@ export default function AreasPage() {
     return [...s].sort((a, b) => a.localeCompare(b, "ar"));
   }, [areas]);
 
+  const mapGovernorateOptions = useMemo(() => {
+    const s = new Set(governorateOptions);
+    for (const g of govCoverage) s.add(g.governorate);
+    return [MAP_FILTER_ALL, ...[...s].sort((a, b) => a.localeCompare(b, "ar"))];
+  }, [governorateOptions, govCoverage]);
+
   const neighborhoodAreas = useMemo(
     () => areas.filter((a) => !a.name.endsWith(GOVERNORATE_COVERAGE_SUFFIX)),
     [areas]
   );
+
+  const mapCircles = useMemo((): MapAreaCircle[] => {
+    const out: MapAreaCircle[] = [];
+    for (const a of neighborhoodAreas) {
+      if (mapGovFilter !== MAP_FILTER_ALL && a.governorate !== mapGovFilter) continue;
+      const c = parseAreaCircle({ ...a, isGovernorateCoverage: false });
+      if (c) out.push(c);
+    }
+    if (showGovCirclesOnMap) {
+      for (const g of govCoverage) {
+        if (!g.enabled) continue;
+        if (mapGovFilter !== MAP_FILTER_ALL && g.governorate !== mapGovFilter) continue;
+        if (g.areaId == null) continue;
+        out.push({
+          id: g.areaId,
+          name: g.areaName,
+          governorate: g.governorate,
+          centerLat: g.centerLat,
+          centerLng: g.centerLng,
+          radiusKm: g.radiusKm,
+          isGovernorateCoverage: true,
+        });
+      }
+    }
+    return out;
+  }, [neighborhoodAreas, govCoverage, mapGovFilter, showGovCirclesOnMap]);
+
+  const onMapSelectArea = useCallback((id: number) => {
+    setHighlightAreaId(id);
+  }, []);
+
+  function focusAreaOnMap(area: Area) {
+    const gov = area.governorate?.trim();
+    if (gov) setMapGovFilter(gov);
+    setHighlightAreaId(area.id);
+    setShowMap(true);
+    requestAnimationFrame(() => {
+      mapSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
 
   async function load() {
     const { data } = await api.get<{ areas: Area[] }>("/areas");
@@ -141,6 +195,7 @@ export default function AreasPage() {
     try {
       await api.delete(`/areas/${id}`);
       if (editingId === id) cancelEdit();
+      if (highlightAreaId === id) setHighlightAreaId(null);
       await load();
       toastSuccess(t.areas.deleted);
     } catch (err) {
@@ -186,6 +241,61 @@ export default function AreasPage() {
         </div>
       </div>
 
+      <div className="card" ref={mapSectionRef}>
+        <div className="row spread" style={{ flexWrap: "wrap", gap: 12, marginBottom: 8 }}>
+          <h2 style={{ margin: 0 }}>{t.areas.mapTitle}</h2>
+          <button type="button" className="ghost" onClick={() => setShowMap((v) => !v)}>
+            {showMap ? t.areas.mapHide : t.areas.mapShow}
+          </button>
+        </div>
+        {showMap ? (
+          <>
+            <div className="area-map-toolbar">
+              <label>
+                {t.areas.mapGovernorateFilter}
+                <select value={mapGovFilter} onChange={(e) => setMapGovFilter(e.target.value)}>
+                  <option value={MAP_FILTER_ALL}>{t.areas.mapAllGovernorates}</option>
+                  {mapGovernorateOptions
+                    .filter((g) => g !== MAP_FILTER_ALL)
+                    .map((g) => (
+                      <option key={g} value={g}>
+                        {g}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={showGovCirclesOnMap}
+                  onChange={(e) => setShowGovCirclesOnMap(e.target.checked)}
+                />
+                {t.areas.mapShowGovCircles}
+              </label>
+              <div className="area-map-legend">
+                <span className="area-map-legend-item">
+                  <span className="area-map-legend-swatch" aria-hidden />
+                  {t.areas.mapNeighborhoodLegend}
+                </span>
+                <span className="area-map-legend-item">
+                  <span className="area-map-legend-swatch area-map-legend-swatch--gov" aria-hidden />
+                  {t.areas.mapGovernorateLegend}
+                </span>
+              </div>
+            </div>
+            <p className="muted small" style={{ marginBottom: 10 }}>
+              {t.areas.mapFocusHint}
+            </p>
+            <AreaCoverageMap
+              areas={mapCircles}
+              highlightId={highlightAreaId}
+              onSelectArea={onMapSelectArea}
+              emptyLabel={t.areas.mapNoGeo}
+            />
+          </>
+        ) : null}
+      </div>
+
       <div className="card">
         <h2>{t.areas.title}</h2>
         {write && (
@@ -223,7 +333,10 @@ export default function AreasPage() {
             defaultOpen
           >
             {(a) => (
-              <div className="area-gov-row" key={a.id}>
+              <div
+                className={`area-gov-row${highlightAreaId === a.id ? " area-gov-row--highlight" : ""}`}
+                key={a.id}
+              >
                 <div className="area-gov-row__main">
                   {editingId === a.id ? (
                     <input
@@ -243,29 +356,36 @@ export default function AreasPage() {
                     </>
                   )}
                 </div>
-                {write && (
-                  <div className="row spread" style={{ gap: 8, flexWrap: "wrap" }}>
-                    {editingId === a.id ? (
-                      <>
-                        <button type="button" className="primary" onClick={() => void saveEdit()}>
-                          {t.areas.save}
-                        </button>
-                        <button type="button" className="ghost" onClick={cancelEdit}>
-                          {t.areas.cancel}
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button type="button" className="ghost" onClick={() => startEdit(a)}>
-                          {t.areas.edit}
-                        </button>
-                        <button type="button" className="ghost danger" onClick={() => void remove(a.id)}>
-                          {t.areas.delete}
-                        </button>
-                      </>
-                    )}
-                  </div>
-                )}
+                <div className="row spread" style={{ gap: 8, flexWrap: "wrap" }}>
+                  {parseAreaCircle(a) ? (
+                    <button type="button" className="ghost" onClick={() => focusAreaOnMap(a)}>
+                      {t.areas.mapViewOnMap}
+                    </button>
+                  ) : null}
+                  {write && (
+                    <>
+                      {editingId === a.id ? (
+                        <>
+                          <button type="button" className="primary" onClick={() => void saveEdit()}>
+                            {t.areas.save}
+                          </button>
+                          <button type="button" className="ghost" onClick={cancelEdit}>
+                            {t.areas.cancel}
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button type="button" className="ghost" onClick={() => startEdit(a)}>
+                            {t.areas.edit}
+                          </button>
+                          <button type="button" className="ghost danger" onClick={() => void remove(a.id)}>
+                            {t.areas.delete}
+                          </button>
+                        </>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
             )}
           </AreaGovernorateGroups>

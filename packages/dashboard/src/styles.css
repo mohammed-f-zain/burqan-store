@@ -1262,6 +1262,80 @@ html[dir="rtl"] .swal-toast-burqan .swal2-icon {
   cursor: pointer;
 }
 
+.area-map-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  margin-bottom: 12px;
+}
+
+.area-map-toolbar label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.area-map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-left: auto;
+}
+
+.area-map-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.area-map-legend-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid #1d6fd4;
+  background: rgba(59, 142, 237, 0.25);
+}
+
+.area-map-legend-swatch--gov {
+  border-color: #b45309;
+  background: rgba(245, 158, 11, 0.2);
+  border-style: dashed;
+}
+
+.area-coverage-map-wrap {
+  position: relative;
+}
+
+.area-coverage-map-empty {
+  position: absolute;
+  z-index: 500;
+  top: 12px;
+  left: 12px;
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--card);
+  border: 1px solid var(--line);
+}
+
+.area-coverage-map {
+  height: min(62vh, 520px);
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  overflow: hidden;
+  z-index: 0;
+}
+
+.area-gov-row--highlight {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
 /* —— Prize redemption admin —— */
 .redeem-page {
   gap: 20px;
