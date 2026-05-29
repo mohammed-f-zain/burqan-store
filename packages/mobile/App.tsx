@@ -23,9 +23,18 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { formatMarketDateTime } from "./formatMarketDateTime";
 import { parseQrPublicToken } from "./parseQrToken";
-import { QR_BARCODE_TYPES, shouldUseSystemQrScanner } from "./qrScanner";
+import {
+  IN_APP_QR_BARCODE_TYPES,
+  isSystemQrScannerAvailable,
+  SYSTEM_QR_BARCODE_TYPES,
+} from "./qrScanner";
 import { fetchJson } from "./fetchJson";
-import { getRepPosition, LocationDeniedError, LocationTimeoutError } from "./getDeviceLocation";
+import {
+  ensureLocationPermission,
+  getRepPosition,
+  LocationDeniedError,
+  LocationTimeoutError,
+} from "./getDeviceLocation";
 import ProductCatalogGrid from "./ProductCatalogGrid";
 import InventoryList from "./InventoryList";
 import {
@@ -330,9 +339,14 @@ export default function App() {
       return;
     }
     setCameraPreviewReady(false);
+    if (Platform.OS === "ios") {
+      setCameraSessionActive(true);
+      const previewFallback = setTimeout(() => setCameraPreviewReady(true), 600);
+      return () => clearTimeout(previewFallback);
+    }
     setCameraSessionActive(false);
     const startCam = setTimeout(() => setCameraSessionActive(true), 200);
-    const previewFallback = setTimeout(() => setCameraPreviewReady(true), 3500);
+    const previewFallback = setTimeout(() => setCameraPreviewReady(true), 2500);
     return () => {
       clearTimeout(startCam);
       clearTimeout(previewFallback);
@@ -614,12 +628,12 @@ export default function App() {
     qrResolveInFlightRef.current = true;
     setMode("home");
     setScanPermissionOverride(false);
-    setBusy(true);
-    setBusyMessage(t.qrResolving);
     hideToast();
 
     try {
       const pos = await getRepPosition({ timeoutMs: 12_000 });
+      setBusy(true);
+      setBusyMessage(t.qrResolving);
       const { res, data } = await fetchJson<{
         status?: string;
         store?: StoreBrief;
@@ -658,7 +672,7 @@ export default function App() {
     }
   }
 
-  /** Android: system Code Scanner when available. iOS: in-app camera (system scanner callback is unreliable). */
+  /** iPhone/Android: native full-screen QR UI when available; otherwise in-app camera modal. */
   async function openQrScanner() {
     hideToast();
     if (!permission?.granted) {
@@ -672,26 +686,48 @@ export default function App() {
       setScanPermissionOverride(true);
     }
 
-    if (shouldUseSystemQrScanner()) {
+    const locOk = await ensureLocationPermission();
+    if (!locOk) {
+      showToast(t.locationDenied, "error");
+    } else {
+      void getRepPosition({ timeoutMs: 10_000 }).catch(() => {});
+    }
+
+    if (isSystemQrScannerAvailable()) {
       modernBarcodeSubRef.current?.remove();
       modernBarcodeSubRef.current = null;
 
+      let scanned = false;
+      const cleanupSub = () => {
+        if (modernBarcodeSubRef.current) {
+          modernBarcodeSubRef.current.remove();
+          modernBarcodeSubRef.current = null;
+        }
+      };
+
       const sub = CameraView.onModernBarcodeScanned((ev) => {
-        if (qrResolveInFlightRef.current) return;
-        sub.remove();
-        if (modernBarcodeSubRef.current === sub) modernBarcodeSubRef.current = null;
-        if (CameraView.isModernBarcodeScannerAvailable) {
+        if (qrResolveInFlightRef.current || scanned) return;
+        const data = typeof ev?.data === "string" ? ev.data.trim() : "";
+        if (!data) return;
+        scanned = true;
+        cleanupSub();
+        if (Platform.OS === "ios") {
           void CameraView.dismissScanner().catch(() => {});
         }
-        void resolveQr(ev.data);
+        void resolveQr(data);
       });
       modernBarcodeSubRef.current = sub;
 
-      void CameraView.launchScanner({ barcodeTypes: [...QR_BARCODE_TYPES] }).catch((e) => {
-        if (modernBarcodeSubRef.current === sub) modernBarcodeSubRef.current = null;
-        sub.remove();
-        showToast(e instanceof Error ? e.message : String(e), "error");
-      });
+      try {
+        await CameraView.launchScanner({ barcodeTypes: [...SYSTEM_QR_BARCODE_TYPES] });
+      } catch (e) {
+        if (!scanned) {
+          const msg = e instanceof Error ? e.message : String(e);
+          if (msg && !/cancel/i.test(msg)) showToast(msg, "error");
+        }
+      } finally {
+        if (!scanned) cleanupSub();
+      }
       return;
     }
 
@@ -1326,7 +1362,7 @@ export default function App() {
                       facing="back"
                       {...(Platform.OS === "ios" ? { active: true } : {})}
                       {...(Platform.OS === "android" ? { ratio: "16:9" as const } : {})}
-                      barcodeScannerSettings={{ barcodeTypes: [...QR_BARCODE_TYPES] }}
+                      barcodeScannerSettings={{ barcodeTypes: [...IN_APP_QR_BARCODE_TYPES] }}
                       onCameraReady={() => setCameraPreviewReady(true)}
                       onMountError={(e) => {
                         showToast(`${t.cameraMountError} ${toArabicUserMessage(e.message, t.genericError)}`, "error");

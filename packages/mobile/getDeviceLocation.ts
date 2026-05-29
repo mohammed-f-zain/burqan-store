@@ -16,6 +16,14 @@ export class LocationTimeoutError extends Error {
 
 const DEFAULT_TIMEOUT_MS = 12_000;
 
+/** Ask for location before QR resolve so iOS permission sheet is not hidden behind a loading overlay. */
+export async function ensureLocationPermission(): Promise<boolean> {
+  const current = await Location.getForegroundPermissionsAsync();
+  if (current.status === "granted") return true;
+  const next = await Location.requestForegroundPermissionsAsync();
+  return next.status === "granted";
+}
+
 /** Current device GPS for store registration and proximity checks. */
 export async function getRepPosition(opts?: { timeoutMs?: number }): Promise<{ lat: number; lng: number }> {
   const timeoutMs = opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
