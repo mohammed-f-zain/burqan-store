@@ -23,6 +23,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { formatMarketDateTime } from "./formatMarketDateTime";
 import { parseQrPublicToken } from "./parseQrToken";
+import { QR_BARCODE_TYPES, shouldUseSystemQrScanner } from "./qrScanner";
 import { fetchJson } from "./fetchJson";
 import { getRepPosition, LocationDeniedError, LocationTimeoutError } from "./getDeviceLocation";
 import ProductCatalogGrid from "./ProductCatalogGrid";
@@ -310,6 +311,7 @@ export default function App() {
   /** System QR scanner listener — must not be removed when `launchScanner` promise resolves (that can happen as soon as the UI opens). */
   const modernBarcodeSubRef = useRef<{ remove: () => void } | null>(null);
   const qrResolveInFlightRef = useRef(false);
+  const lastBarcodeAtRef = useRef(0);
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
 
   const canUseCamera = Boolean(permission?.granted || scanPermissionOverride);
@@ -656,7 +658,7 @@ export default function App() {
     }
   }
 
-  /** Uses Apple/Google system QR UI when available (reliable on iPhone); otherwise opens in-app camera modal. */
+  /** Android: system Code Scanner when available. iOS: in-app camera (system scanner callback is unreliable). */
   async function openQrScanner() {
     hideToast();
     if (!permission?.granted) {
@@ -670,7 +672,7 @@ export default function App() {
       setScanPermissionOverride(true);
     }
 
-    if (CameraView.isModernBarcodeScannerAvailable) {
+    if (shouldUseSystemQrScanner()) {
       modernBarcodeSubRef.current?.remove();
       modernBarcodeSubRef.current = null;
 
@@ -685,7 +687,7 @@ export default function App() {
       });
       modernBarcodeSubRef.current = sub;
 
-      void CameraView.launchScanner({ barcodeTypes: ["qr"] }).catch((e) => {
+      void CameraView.launchScanner({ barcodeTypes: [...QR_BARCODE_TYPES] }).catch((e) => {
         if (modernBarcodeSubRef.current === sub) modernBarcodeSubRef.current = null;
         sub.remove();
         showToast(e instanceof Error ? e.message : String(e), "error");
@@ -1309,29 +1311,40 @@ export default function App() {
             ) : (
               <View style={styles.scanner}>
                 {!cameraSessionActive ? (
-                  <View style={styles.cameraWarmup}>
+                  <View style={styles.cameraWarmup} pointerEvents="none">
                     <ActivityIndicator size="large" color="#fff" />
                     <Text style={styles.cameraWarmupText}>{t.cameraPreviewWait}</Text>
                   </View>
                 ) : (
                   <>
                     <CameraView
-                      style={{ width: winW, height: embeddedCameraHeight }}
+                      style={
+                        Platform.OS === "ios"
+                          ? StyleSheet.absoluteFillObject
+                          : { width: winW, height: embeddedCameraHeight }
+                      }
                       facing="back"
                       {...(Platform.OS === "ios" ? { active: true } : {})}
                       {...(Platform.OS === "android" ? { ratio: "16:9" as const } : {})}
-                      barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+                      barcodeScannerSettings={{ barcodeTypes: [...QR_BARCODE_TYPES] }}
                       onCameraReady={() => setCameraPreviewReady(true)}
                       onMountError={(e) => {
                         showToast(`${t.cameraMountError} ${toArabicUserMessage(e.message, t.genericError)}`, "error");
                       }}
-                      onBarcodeScanned={({ data }) => {
-                        if (qrResolveInFlightRef.current) return;
-                        void resolveQr(data);
-                      }}
+                      onBarcodeScanned={
+                        cameraPreviewReady
+                          ? ({ data }) => {
+                              if (qrResolveInFlightRef.current) return;
+                              const now = Date.now();
+                              if (now - lastBarcodeAtRef.current < 1200) return;
+                              lastBarcodeAtRef.current = now;
+                              void resolveQr(data);
+                            }
+                          : undefined
+                      }
                     />
                     {!cameraPreviewReady && (
-                      <View style={styles.cameraWarmup}>
+                      <View style={styles.cameraWarmup} pointerEvents="none">
                         <ActivityIndicator size="large" color="#fff" />
                       </View>
                     )}
