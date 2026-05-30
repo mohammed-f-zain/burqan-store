@@ -10,9 +10,9 @@ import {
   TextInput,
   View,
 } from "react-native";
-import MapView, { Circle, Marker, type Region } from "react-native-maps";
-
 import { fetchJson } from "./fetchJson";
+import type { MapRegion } from "./registerMapConfig";
+import { RegisterMapPanel } from "./registerMapPanel";
 import { getRepPosition, LocationDeniedError, LocationTimeoutError } from "./getDeviceLocation";
 import { productImageUrl } from "./productImage";
 import { theme } from "./theme";
@@ -53,9 +53,12 @@ const labels = {
   registerFailed: "فشل التسجيل",
   storeCreated: (id: number) => `تم إنشاء المتجر #${id}.`,
   mapLoadFailed: "تعذّر تحميل خريطة المناطق",
+  mapFallback: "معاينة الخريطة غير متاحة على هذا الجهاز — الموقع يُحدَّد من GPS.",
+  openInMaps: "فتح في خرائط Google",
+  storeLocation: "موقع المتجر",
 };
 
-const JORDAN_REGION: Region = {
+const JORDAN_REGION: MapRegion = {
   latitude: 31.25,
   longitude: 36.5,
   latitudeDelta: 4.8,
@@ -116,7 +119,7 @@ export default function RegisterStoreForm(props: Props) {
     });
   }, [jordanAreas, lat, lng]);
 
-  const mapRegion = useMemo((): Region => {
+  const mapRegion = useMemo((): MapRegion => {
     if (lat != null && lng != null) {
       return {
         latitude: lat,
@@ -293,27 +296,18 @@ export default function RegisterStoreForm(props: Props) {
       ) : null}
 
       <View style={styles.mapWrap}>
-        <MapView
-          key={lat != null && lng != null ? `${lat.toFixed(5)}-${lng.toFixed(5)}` : "jordan"}
-          style={styles.map}
-          initialRegion={mapRegion}
-          showsUserLocation
-          showsMyLocationButton
-        >
-          {mapAreas.map((a) => (
-            <Circle
-              key={a.id}
-              center={{ latitude: a.centerLat, longitude: a.centerLng }}
-              radius={a.radiusKm * 1000}
-              fillColor={a.id === areaId ? "rgba(37, 99, 235, 0.2)" : "rgba(34, 211, 238, 0.08)"}
-              strokeColor={a.id === areaId ? theme.accent : "rgba(34, 211, 238, 0.45)"}
-              strokeWidth={a.id === areaId ? 2 : 1}
-            />
-          ))}
-          {lat != null && lng != null ? (
-            <Marker coordinate={{ latitude: lat, longitude: lng }} pinColor={theme.accent} title="موقع المتجر" />
-          ) : null}
-        </MapView>
+        <RegisterMapPanel
+          mapRegion={mapRegion}
+          lat={lat}
+          lng={lng}
+          mapAreas={mapAreas}
+          areaId={areaId}
+          labels={{
+            mapFallback: labels.mapFallback,
+            openInMaps: labels.openInMaps,
+            storeLocation: labels.storeLocation,
+          }}
+        />
       </View>
 
       <Pressable style={styles.secondary} onPress={() => void refreshLocation()}>

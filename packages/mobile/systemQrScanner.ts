@@ -23,9 +23,7 @@ export function ensureSystemQrScanListener(): void {
     if (!data) return;
     const cb = activeScanCallback;
     activeScanCallback = null;
-    if (Platform.OS === "ios") {
-      void CameraView.dismissScanner().catch(() => {});
-    }
+    void CameraView.dismissScanner().catch(() => {});
     cb(data);
   });
 }

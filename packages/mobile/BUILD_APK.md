@@ -29,8 +29,15 @@
 From `packages/mobile` (Expo account must be logged in: `npx eas-cli login`):
 
 ```bash
+npx expo install expo-font   # required peer for @expo/vector-icons (SDK 54: ~14.x, not 56+)
 npm run build:apk
 ```
+
+If the app **crashes on launch** with `FontLoaderModule` / `getDirectConverter` in logcat, run `npx expo-doctor` and fix duplicate or wrong `expo-font` versions before rebuilding.
+
+## Crash when scanning a **new** (unassigned) store QR
+
+Usually **Google Maps** on the registration screen (`MapView` without an API key). The app now shows a GPS fallback instead of crashing. To enable the embedded map on Android, set `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` in EAS env (Maps SDK for Android enabled, package `com.burqan.rep` + SHA-1 from `eas credentials`), then rebuild.
 
 Or:
 

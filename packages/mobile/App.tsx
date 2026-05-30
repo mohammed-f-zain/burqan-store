@@ -49,12 +49,14 @@ import { toArabicUserMessage } from "./arabicMessage";
 import ProductDetailModal, { type Product } from "./ProductDetailModal";
 import { productImageUrl } from "./productImage";
 import ProfileScreen, { type RepProfile } from "./ProfileScreen";
-/** Lazy: react-native-maps can break Expo Go if loaded at startup. */
-const RegisterStoreForm = lazy(() => import("./RegisterStoreForm"));
+import RegisterErrorBoundary from "./RegisterErrorBoundary";
 import { clearRepToken, loadStoredRepToken, saveRepToken } from "./repSession";
 import SplashScreen from "./SplashScreen";
 import ToastOverlay, { type ToastKind } from "./ToastOverlay";
 import { theme } from "./theme";
+
+/** Lazy: keeps react-native-maps out of the register screen chunk on Android. */
+const RegisterStoreForm = lazy(() => import("./RegisterStoreForm"));
 
 void ExpoSplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -663,6 +665,9 @@ export default function App() {
     }
 
     qrResolveInFlightRef.current = true;
+    if (shouldUseSystemQrScanner()) {
+      void CameraView.dismissScanner().catch(() => {});
+    }
     setMode("home");
     setScanPermissionOverride(false);
     hideToast();
@@ -1401,35 +1406,42 @@ export default function App() {
       )}
 
       {mode === "register" && lastScanToken && token && bottomTab === "home" && (
-        <Suspense
-          fallback={
-            <View style={styles.center}>
-              <ActivityIndicator color={accent} size="large" />
-            </View>
-          }
+        <RegisterErrorBoundary
+          onBack={() => {
+            setMode("home");
+            setLastScanToken(null);
+          }}
         >
-          <RegisterStoreForm
-            qrPublicToken={lastScanToken}
-            headers={headers}
-            apiBase={API_BASE}
-            authToken={token}
-            onNotice={(msg) => showToast(msg, "info")}
-            onDone={async (msg, store) => {
-              showToast(msg, store ? "success" : msg === t.cancelled ? "info" : "error");
-              if (store) {
-                setActiveStore(store);
-                setMode("store");
-                setBottomTab("home");
-                setStoreTab("sell");
-                await Promise.all([refreshStoreData(store.id), loadDailyStores()]);
-              } else {
-                setMode("home");
-                setBottomTab("home");
-                setLastScanToken(null);
-              }
-            }}
-          />
-        </Suspense>
+          <Suspense
+            fallback={
+              <View style={styles.center}>
+                <ActivityIndicator color={accent} size="large" />
+              </View>
+            }
+          >
+            <RegisterStoreForm
+              qrPublicToken={lastScanToken}
+              headers={headers}
+              apiBase={API_BASE}
+              authToken={token}
+              onNotice={(msg) => showToast(msg, "info")}
+              onDone={async (msg, store) => {
+                showToast(msg, store ? "success" : msg === t.cancelled ? "info" : "error");
+                if (store) {
+                  setActiveStore(store);
+                  setMode("store");
+                  setBottomTab("home");
+                  setStoreTab("sell");
+                  await Promise.all([refreshStoreData(store.id), loadDailyStores()]);
+                } else {
+                  setMode("home");
+                  setBottomTab("home");
+                  setLastScanToken(null);
+                }
+              }}
+            />
+          </Suspense>
+        </RegisterErrorBoundary>
       )}
 
       {bottomTab === "profile" && (
