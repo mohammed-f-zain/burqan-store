@@ -8,6 +8,7 @@ import { GOVERNORATE_AREA_SUFFIX } from "./matchAreaFromGoogle.js";
 export type VoronoiSite = {
   areaId: number;
   name: string;
+  mapLabel: string;
   governorate: string | null;
   lng: number;
   lat: number;
@@ -44,15 +45,21 @@ function isMicroRegion(name: string): boolean {
   return name.includes(JORDAN_MICRO_REGION_SUFFIX);
 }
 
-function labelShort(name: string): string {
-  if (name.endsWith(GOVERNORATE_AREA_SUFFIX)) {
-    return name.replace(GOVERNORATE_AREA_SUFFIX, "").trim() || name;
+function labelShort(displayName: string): string {
+  if (!displayName) return "";
+  if (displayName.endsWith(GOVERNORATE_AREA_SUFFIX)) {
+    return displayName.replace(GOVERNORATE_AREA_SUFFIX, "").trim() || displayName;
   }
-  if (isMicroRegion(name)) {
-    const idx = name.indexOf(JORDAN_MICRO_REGION_SUFFIX);
-    return name.slice(idx + JORDAN_MICRO_REGION_SUFFIX.length).trim() || name;
+  if (isMicroRegion(displayName)) {
+    const idx = displayName.indexOf(JORDAN_MICRO_REGION_SUFFIX);
+    return displayName.slice(idx + JORDAN_MICRO_REGION_SUFFIX.length).trim() || displayName;
   }
-  return name;
+  return displayName;
+}
+
+function displayNameForArea(row: AreaGeo): string {
+  const ml = row.map_label?.trim();
+  return ml || row.name;
 }
 
 export function areaRowsToVoronoiSites(rows: AreaGeo[]): VoronoiSite[] {
@@ -61,6 +68,7 @@ export function areaRowsToVoronoiSites(rows: AreaGeo[]): VoronoiSite[] {
     .map((a) => ({
       areaId: a.id,
       name: a.name,
+      mapLabel: displayNameForArea(a),
       governorate: a.governorate,
       lng: a.center_lng!,
       lat: a.center_lat!,
@@ -90,15 +98,16 @@ export function buildVoronoiGeoJson(sites: VoronoiSite[]): VoronoiGeoJson {
       ring.push([ring[0]![0], ring[0]![1]]);
     }
     const site = sites[i]!;
+    const display = site.mapLabel;
     features.push({
       type: "Feature",
       properties: {
         areaId: site.areaId,
-        name: site.name,
+        name: display,
         governorate: site.governorate,
         centerLat: site.lat,
         centerLng: site.lng,
-        labelShort: labelShort(site.name),
+        labelShort: labelShort(display),
         isGovernorateCoverage: isGovCoverage(site.name),
         isMicroRegion: isMicroRegion(site.name),
       },
@@ -143,7 +152,7 @@ export function pickFromVoronoi(
   const s = sites[vi]!;
   return {
     areaId: s.areaId,
-    areaName: s.name,
+    areaName: s.mapLabel,
     governorate: s.governorate,
     insideMainNeighborhood: !isGovCoverage(s.name),
   };

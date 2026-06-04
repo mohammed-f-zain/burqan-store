@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { JORDAN_BBOX } from "../data/jordanBounds.js";
-import { buildVoronoiGeoJson, pickFromVoronoi, pickVoronoiSiteIndex } from "./jordanVoronoi.js";
+import {
+  areaRowsToVoronoiSites,
+  buildVoronoiGeoJson,
+  pickFromVoronoi,
+  pickVoronoiSiteIndex,
+} from "./jordanVoronoi.js";
 import type { AreaGeo } from "./geoResolve.js";
 
 describe("jordanVoronoi", () => {
@@ -34,14 +39,7 @@ describe("jordanVoronoi", () => {
   ];
 
   it("builds a polygon per site inside Jordan bbox", () => {
-    const sites = sampleRows.map((r) => ({
-      areaId: r.id,
-      name: r.name,
-      governorate: r.governorate,
-      lng: r.center_lng!,
-      lat: r.center_lat!,
-    }));
-    const fc = buildVoronoiGeoJson(sites);
+    const fc = buildVoronoiGeoJson(areaRowsToVoronoiSites(sampleRows));
     assert.equal(fc.features.length, 3);
     for (const f of fc.features) {
       assert.equal(f.geometry.type, "Polygon");
@@ -59,13 +57,7 @@ describe("jordanVoronoi", () => {
   it("covers point in Jordan bbox with some area", () => {
     const midLat = (JORDAN_BBOX.minLat + JORDAN_BBOX.maxLat) / 2;
     const midLng = (JORDAN_BBOX.minLng + JORDAN_BBOX.maxLng) / 2;
-    const idx = pickVoronoiSiteIndex(midLat, midLng, sampleRows.map((r) => ({
-      areaId: r.id,
-      name: r.name,
-      governorate: r.governorate,
-      lng: r.center_lng!,
-      lat: r.center_lat!,
-    })));
+    const idx = pickVoronoiSiteIndex(midLat, midLng, areaRowsToVoronoiSites(sampleRows));
     assert.ok(idx !== null);
   });
 });

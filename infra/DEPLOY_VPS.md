@@ -122,6 +122,15 @@ bash /var/www/burqan-store/infra/bootstrap-burqan-vps.sh
 
 The script installs Node 20, nginx, PostgreSQL, pm2, UFW; creates DB/user `burqan`; clones the repo (default `https://github.com/mohammed-f-zain/burqan-store.git`); writes `packages/api/.env` once; migrates, seeds, builds API + dashboard; configures nginx; starts pm2.
 
+**Area map labels (OpenStreetMap names):** after deploy, refresh neighborhoods from OSM seeds:
+
+```bash
+npm run migrate:all -w @burqan/api
+npm run seed:jordan-areas -w @burqan/api
+```
+
+To re-download OSM names from the network (dev machine): `npm run fetch:osm-jordan-areas -w @burqan/api`. Optional: `npm run refresh:area-map-labels -w @burqan/api` fixes legacy rows via Nominatim (~1 req/s).
+
 **After pulling new API code**, if `/admin/areas` returns **500**, the production DB may be missing geo columns. On the VPS run once:
 
 ```bash

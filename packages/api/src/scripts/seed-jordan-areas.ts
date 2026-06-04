@@ -120,13 +120,14 @@ async function main() {
   const detailed = allJordanAreaSeeds();
   for (const a of detailed) {
     await query(
-      `INSERT INTO areas (name, center_lat, center_lng, radius_km, governorate)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO areas (name, center_lat, center_lng, radius_km, governorate, map_label)
+       VALUES ($1, $2, $3, $4, $5, $1)
        ON CONFLICT (name) DO UPDATE SET
          center_lat = EXCLUDED.center_lat,
          center_lng = EXCLUDED.center_lng,
          radius_km = EXCLUDED.radius_km,
-         governorate = EXCLUDED.governorate`,
+         governorate = EXCLUDED.governorate,
+         map_label = EXCLUDED.map_label`,
       [a.name, a.centerLat, a.centerLng, a.radiusKm, a.governorate]
     );
   }

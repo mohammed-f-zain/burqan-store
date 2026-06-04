@@ -11,6 +11,7 @@ const GOOGLE_MATCH_MAX_CANDIDATES = 120;
 export type AreaGeo = {
   id: number;
   name: string;
+  map_label?: string | null;
   governorate: string | null;
   center_lat: number | null;
   center_lng: number | null;

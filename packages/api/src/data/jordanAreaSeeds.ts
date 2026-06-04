@@ -1,37 +1,37 @@
-import { JORDAN_AMMAN_DENSE } from "./jordanAmmanDense.js";
-import { JORDAN_DETAILED_AREAS } from "./jordanDetailedAreas.js";
 import { JORDAN_MAIN_AREAS } from "./jordanMainAreas.js";
-import { JORDAN_EXTENDED_NEIGHBORHOODS } from "./jordanNeighborhoodsExtended.js";
-import { JORDAN_REAL_NEIGHBORHOODS } from "./jordanRealNeighborhoods.js";
-import { buildUrbanMicroGridSeeds } from "./jordanUrbanMicroGrid.js";
+import { JORDAN_OSM_NEIGHBORHOODS } from "./jordanOsmNeighborhoods.js";
 import type { JordanAreaSeed } from "./jordanDetailedAreas.js";
 
-function mergeNamedLayers(layers: JordanAreaSeed[][]): JordanAreaSeed[] {
+/**
+ * OSM names match the dashboard map (OpenStreetMap tiles).
+ * MAIN list only adjusts coordinates for known GPS-tuned spots when the OSM name matches.
+ */
+export function mergeJordanAreaSeeds(): JordanAreaSeed[] {
   const byName = new Map<string, JordanAreaSeed>();
-  for (const layer of layers) {
-    for (const a of layer) {
-      if (!byName.has(a.name)) byName.set(a.name, a);
+
+  for (const a of JORDAN_OSM_NEIGHBORHOODS) {
+    byName.set(a.name, { ...a });
+  }
+
+  for (const a of JORDAN_MAIN_AREAS) {
+    const existing = byName.get(a.name);
+    if (existing) {
+      byName.set(a.name, {
+        ...existing,
+        centerLat: a.centerLat,
+        centerLng: a.centerLng,
+        radiusKm: a.radiusKm,
+        governorate: a.governorate,
+      });
+    } else {
+      byName.set(a.name, { ...a });
     }
   }
+
   return [...byName.values()];
 }
 
-/**
- * Merge all named neighborhood layers (main wins on duplicate names), then urban micro-grid fill.
- */
-export function mergeJordanAreaSeeds(): JordanAreaSeed[] {
-  const named = mergeNamedLayers([
-    JORDAN_MAIN_AREAS,
-    JORDAN_DETAILED_AREAS,
-    JORDAN_REAL_NEIGHBORHOODS,
-    JORDAN_EXTENDED_NEIGHBORHOODS,
-    JORDAN_AMMAN_DENSE,
-  ]);
-  const micro = buildUrbanMicroGridSeeds(named);
-  return [...named, ...micro];
-}
-
-/** Full Jordan Voronoi seed list (neighborhoods + micro fill + governorate rows in DB). */
+/** Full Jordan Voronoi seed list (OSM + tuned main + governorate rows in DB). */
 export function allJordanAreaSeeds(): JordanAreaSeed[] {
   return mergeJordanAreaSeeds();
 }

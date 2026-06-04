@@ -227,7 +227,7 @@ export const en: Messages = {
     mapVoronoiLegend: "Main neighborhoods",
     mapVoronoiGovLegend: "Governorate coverage",
     mapVoronoiHint:
-      "Fine coverage: named neighborhoods plus micro “region” cells in gaps. Zoom 10+ for neighborhoods, 13+ for micro cells, 8+ for governorate coverage.",
+      "Neighborhood names from OpenStreetMap (same as the map tiles). Zoom 10+ for labels, 8+ for governorate coverage.",
     voronoiLoading: "Computing Voronoi map…",
     voronoiLoadFailed: "Could not load Voronoi map.",
   },
