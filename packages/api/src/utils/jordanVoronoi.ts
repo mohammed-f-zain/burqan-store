@@ -18,6 +18,10 @@ export type VoronoiGeoJsonFeature = {
     areaId: number;
     name: string;
     governorate: string | null;
+    centerLat: number;
+    centerLng: number;
+    labelShort: string;
+    isGovernorateCoverage: boolean;
   };
   geometry: {
     type: "Polygon";
@@ -32,6 +36,10 @@ export type VoronoiGeoJson = {
 
 function isGovCoverage(name: string): boolean {
   return name.endsWith(GOVERNORATE_AREA_SUFFIX);
+}
+
+function labelShort(name: string): string {
+  return name.replace(GOVERNORATE_AREA_SUFFIX, "").trim() || name;
 }
 
 export function areaRowsToVoronoiSites(rows: AreaGeo[]): VoronoiSite[] {
@@ -75,6 +83,10 @@ export function buildVoronoiGeoJson(sites: VoronoiSite[]): VoronoiGeoJson {
         areaId: site.areaId,
         name: site.name,
         governorate: site.governorate,
+        centerLat: site.lat,
+        centerLng: site.lng,
+        labelShort: labelShort(site.name),
+        isGovernorateCoverage: isGovCoverage(site.name),
       },
       geometry: {
         type: "Polygon",
@@ -98,10 +110,7 @@ export function pickVoronoiSiteIndex(lat: number, lng: number, sites: VoronoiSit
   return idx >= 0 && idx < sites.length ? idx : null;
 }
 
-/**
- * Assign area by Voronoi (full coverage inside Jordan bbox).
- * Prefer a neighborhood whose circle contains the point; otherwise use Voronoi cell owner.
- */
+/** Assign area by Voronoi — every point in Jordan maps to exactly one named cell. */
 export function pickFromVoronoi(
   lat: number,
   lng: number,
@@ -115,29 +124,6 @@ export function pickFromVoronoi(
   const sites = areaRowsToVoronoiSites(rows);
   if (!sites.length) return null;
 
-  const byId = new Map(rows.map((r) => [r.id, r]));
-
-  const insideNeighborhood = sites
-    .filter((s) => !isGovCoverage(s.name))
-    .map((s) => {
-      const row = byId.get(s.areaId)!;
-      const distM = haversineMeters(lat, lng, s.lat, s.lng);
-      const radiusM = parseFloat(String(row.radius_km)) * 1000;
-      return { site: s, distM, inside: distM <= radiusM };
-    })
-    .filter((x) => x.inside)
-    .sort((a, b) => a.distM - b.distM);
-
-  if (insideNeighborhood.length) {
-    const s = insideNeighborhood[0]!.site;
-    return {
-      areaId: s.areaId,
-      areaName: s.name,
-      governorate: s.governorate,
-      insideMainNeighborhood: true,
-    };
-  }
-
   const vi = pickVoronoiSiteIndex(lat, lng, sites);
   if (vi == null || vi < 0 || vi >= sites.length) return null;
   const s = sites[vi]!;
@@ -145,19 +131,8 @@ export function pickFromVoronoi(
     areaId: s.areaId,
     areaName: s.name,
     governorate: s.governorate,
-    insideMainNeighborhood: false,
+    insideMainNeighborhood: !isGovCoverage(s.name),
   };
-}
-
-function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371000;
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const x =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(x));
 }
 
 export function pickFromVoronoiOrNullOutsideJordan(

@@ -8,13 +8,7 @@ export type MapRegion = {
   longitudeDelta: number;
 };
 
-export type JordanAreaMap = {
-  id: number;
-  name: string;
-  centerLat: number;
-  centerLng: number;
-  radiusKm: number;
-};
+export type { VoronoiMapCell as JordanAreaMap } from "./voronoiMapGeo";
 
 export function androidGoogleMapsConfigured(): boolean {
   const fromExpo = Constants.expoConfig?.android?.config?.googleMaps?.apiKey;

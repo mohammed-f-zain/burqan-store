@@ -14,6 +14,7 @@ import { fetchJson } from "./fetchJson";
 import RegisterMapFallback from "./RegisterMapFallback";
 import type { MapRegion } from "./registerMapConfig";
 import { shouldLoadNativeMapsModule } from "./registerMapConfig";
+import { voronoiGeoJsonToCells, type VoronoiMapCell } from "./voronoiMapGeo";
 
 const RegisterMapPanelLazy = lazy(() =>
   import("./registerMapPanel").then((m) => ({ default: m.RegisterMapPanel }))
@@ -22,14 +23,6 @@ import { getRepPosition, LocationDeniedError, LocationTimeoutError } from "./get
 import { productImageUrl } from "./productImage";
 import { theme } from "./theme";
 import type { StoreBrief } from "./storeTypes";
-
-type JordanArea = {
-  id: number;
-  name: string;
-  centerLat: number;
-  centerLng: number;
-  radiusKm: number;
-};
 
 const labels = {
   title: "تسجيل متجر جديد",
@@ -103,26 +96,13 @@ export default function RegisterStoreForm(props: Props) {
   const [areaName, setAreaName] = useState("");
   const [areaAssignedToRep, setAreaAssignedToRep] = useState(true);
   const [areaResolved, setAreaResolved] = useState(false);
-  const [jordanAreas, setJordanAreas] = useState<JordanArea[]>([]);
+  const [jordanAreas, setJordanAreas] = useState<VoronoiMapCell[]>([]);
   const [locating, setLocating] = useState(true);
   const [busy, setBusy] = useState(false);
   const [uploadBusy, setUploadBusy] = useState(false);
   const [imagePath, setImagePath] = useState<string | null>(null);
 
-  const mapAreas = useMemo(() => {
-    if (lat == null || lng == null) return jordanAreas;
-    const maxM = 18_000;
-    return jordanAreas.filter((a) => {
-      const R = 6371000;
-      const toRad = (d: number) => (d * Math.PI) / 180;
-      const dLat = toRad(a.centerLat - lat);
-      const dLng = toRad(a.centerLng - lng);
-      const x =
-        Math.sin(dLat / 2) ** 2 +
-        Math.cos(toRad(lat)) * Math.cos(toRad(a.centerLat)) * Math.sin(dLng / 2) ** 2;
-      return 2 * R * Math.asin(Math.sqrt(x)) <= maxM;
-    });
-  }, [jordanAreas, lat, lng]);
+  const mapAreas = jordanAreas;
 
   const mapRegion = useMemo((): MapRegion => {
     if (lat != null && lng != null) {
@@ -139,12 +119,12 @@ export default function RegisterStoreForm(props: Props) {
   const loadJordanAreas = useCallback(
     async (nearLat: number, nearLng: number) => {
       const url = `${props.apiBase}/api/v1/rep/areas/jordan?lat=${nearLat}&lng=${nearLng}&radiusKm=22`;
-      const { res, data } = await fetchJson<{ areas?: JordanArea[]; error?: string }>(url, {
+      const { res, data } = await fetchJson<{ geojson?: { features?: unknown[] }; error?: string }>(url, {
         headers: props.headers,
         timeoutMs: 20_000,
       });
       if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : labels.mapLoadFailed);
-      setJordanAreas(data.areas ?? []);
+      setJordanAreas(voronoiGeoJsonToCells(data.geojson));
     },
     [props.apiBase, props.headers]
   );

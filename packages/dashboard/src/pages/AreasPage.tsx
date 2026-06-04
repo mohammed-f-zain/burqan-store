@@ -6,7 +6,6 @@ import AreaGovernorateGroups from "../components/AreaGovernorateGroups";
 import { useAuth } from "../auth/AuthContext";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
-import { parseAreaCircle, type MapAreaCircle } from "../lib/areaMapGeo";
 import type { VoronoiFeatureCollection } from "../lib/voronoiGeo";
 import { confirmDanger } from "../lib/swalConfirm";
 import { toastError, toastSuccess } from "../lib/toast";
@@ -46,8 +45,7 @@ export default function AreasPage() {
   const [coverageBusy, setCoverageBusy] = useState<string | null>(null);
   const [showMap, setShowMap] = useState(false);
   const [mapGovFilter, setMapGovFilter] = useState("عمان");
-  const [showGovCirclesOnMap, setShowGovCirclesOnMap] = useState(true);
-  const [mapDisplayMode, setMapDisplayMode] = useState<"voronoi" | "circles" | "both">("voronoi");
+  const [showGovCoverageOnMap, setShowGovCoverageOnMap] = useState(true);
   const [voronoiGeo, setVoronoiGeo] = useState<VoronoiFeatureCollection | null>(null);
   const [voronoiLoading, setVoronoiLoading] = useState(false);
   const [highlightAreaId, setHighlightAreaId] = useState<number | null>(null);
@@ -71,31 +69,20 @@ export default function AreasPage() {
     [areas]
   );
 
-  const mapCircles = useMemo((): MapAreaCircle[] => {
-    const out: MapAreaCircle[] = [];
-    for (const a of neighborhoodAreas) {
-      if (mapGovFilter !== MAP_FILTER_ALL && a.governorate !== mapGovFilter) continue;
-      const c = parseAreaCircle({ ...a, isGovernorateCoverage: false });
-      if (c) out.push(c);
-    }
-    if (showGovCirclesOnMap) {
-      for (const g of govCoverage) {
-        if (!g.enabled) continue;
-        if (mapGovFilter !== MAP_FILTER_ALL && g.governorate !== mapGovFilter) continue;
-        if (g.areaId == null) continue;
-        out.push({
-          id: g.areaId,
-          name: g.areaName,
-          governorate: g.governorate,
-          centerLat: g.centerLat,
-          centerLng: g.centerLng,
-          radiusKm: g.radiusKm,
-          isGovernorateCoverage: true,
-        });
-      }
-    }
-    return out;
-  }, [neighborhoodAreas, govCoverage, mapGovFilter, showGovCirclesOnMap]);
+  const mapVoronoi = useMemo((): VoronoiFeatureCollection | null => {
+    if (!voronoiGeo?.features?.length) return voronoiGeo;
+    const features = voronoiGeo.features.filter((f) => {
+      const p = f.properties;
+      if (!showGovCoverageOnMap && p.isGovernorateCoverage) return false;
+      if (mapGovFilter === MAP_FILTER_ALL) return true;
+      return p.governorate === mapGovFilter;
+    });
+    return { type: "FeatureCollection", features };
+  }, [voronoiGeo, mapGovFilter, showGovCoverageOnMap]);
+
+  const invalidateVoronoi = useCallback(() => {
+    setVoronoiGeo(null);
+  }, []);
 
   const onMapSelectArea = useCallback((id: number) => {
     setHighlightAreaId(id);
@@ -115,10 +102,10 @@ export default function AreasPage() {
   }, [t.areas.voronoiLoadFailed]);
 
   useEffect(() => {
-    if (showMap && (mapDisplayMode === "voronoi" || mapDisplayMode === "both") && !voronoiGeo && !voronoiLoading) {
+    if (showMap && !voronoiGeo && !voronoiLoading) {
       void loadVoronoiMap();
     }
-  }, [showMap, mapDisplayMode, voronoiGeo, voronoiLoading, loadVoronoiMap]);
+  }, [showMap, voronoiGeo, voronoiLoading, loadVoronoiMap]);
 
   function focusAreaOnMap(area: Area) {
     const gov = area.governorate?.trim();
@@ -159,6 +146,7 @@ export default function AreasPage() {
       setName("");
       setGovernorate("");
       await load();
+      invalidateVoronoi();
       toastSuccess(t.areas.added);
     } catch (err) {
       toastError(pickAxiosErrorMessage(err, t.areas.addFailed));
@@ -176,6 +164,7 @@ export default function AreasPage() {
       setGovCoverage((prev) =>
         prev.map((g) => (g.governorate === item.governorate ? { ...g, enabled } : g))
       );
+      invalidateVoronoi();
       toastSuccess(t.areas.governorateCoverageSaved);
     } catch (err) {
       toastError(pickAxiosErrorMessage(err, t.areas.governorateCoverageFailed));
@@ -201,6 +190,7 @@ export default function AreasPage() {
       setEditingId(null);
       setEditName("");
       await load();
+      invalidateVoronoi();
       toastSuccess(t.areas.updated);
     } catch (err) {
       toastError(pickAxiosErrorMessage(err, t.areas.saveFailed));
@@ -220,6 +210,7 @@ export default function AreasPage() {
       if (editingId === id) cancelEdit();
       if (highlightAreaId === id) setHighlightAreaId(null);
       await load();
+      invalidateVoronoi();
       toastSuccess(t.areas.deleted);
     } catch (err) {
       toastError(pickAxiosErrorMessage(err, t.areas.deleteFailed));
@@ -290,56 +281,31 @@ export default function AreasPage() {
               <label>
                 <input
                   type="checkbox"
-                  checked={showGovCirclesOnMap}
-                  onChange={(e) => setShowGovCirclesOnMap(e.target.checked)}
+                  checked={showGovCoverageOnMap}
+                  onChange={(e) => setShowGovCoverageOnMap(e.target.checked)}
                 />
-                {t.areas.mapShowGovCircles}
-              </label>
-              <label>
-                {t.areas.mapDisplayMode}
-                <select
-                  value={mapDisplayMode}
-                  onChange={(e) => setMapDisplayMode(e.target.value as "voronoi" | "circles" | "both")}
-                >
-                  <option value="voronoi">{t.areas.mapModeVoronoi}</option>
-                  <option value="circles">{t.areas.mapModeCircles}</option>
-                  <option value="both">{t.areas.mapModeBoth}</option>
-                </select>
+                {t.areas.mapShowGovCoverage}
               </label>
               {voronoiLoading ? <span className="muted small">{t.areas.voronoiLoading}</span> : null}
               <div className="area-map-legend">
                 <span className="area-map-legend-item">
-                  <span className="area-map-legend-swatch" aria-hidden />
-                  {t.areas.mapNeighborhoodLegend}
+                  <span className="area-map-legend-swatch area-map-legend-swatch--voronoi" aria-hidden />
+                  {t.areas.mapVoronoiLegend}
                 </span>
                 <span className="area-map-legend-item">
-                  <span className="area-map-legend-swatch area-map-legend-swatch--gov" aria-hidden />
-                  {t.areas.mapGovernorateLegend}
+                  <span
+                    className="area-map-legend-swatch area-map-legend-swatch--voronoi-gov"
+                    aria-hidden
+                  />
+                  {t.areas.mapVoronoiGovLegend}
                 </span>
-                {(mapDisplayMode === "voronoi" || mapDisplayMode === "both") && (
-                  <>
-                    <span className="area-map-legend-item">
-                      <span className="area-map-legend-swatch area-map-legend-swatch--voronoi" aria-hidden />
-                      {t.areas.mapVoronoiLegend}
-                    </span>
-                    <span className="area-map-legend-item">
-                      <span
-                        className="area-map-legend-swatch area-map-legend-swatch--voronoi-gov"
-                        aria-hidden
-                      />
-                      {t.areas.mapVoronoiGovLegend}
-                    </span>
-                  </>
-                )}
               </div>
             </div>
             <p className="muted small" style={{ marginBottom: 10 }}>
-              {mapDisplayMode === "voronoi" ? t.areas.mapVoronoiHint : t.areas.mapFocusHint}
+              {t.areas.mapVoronoiHint}
             </p>
             <AreaCoverageMap
-              areas={mapCircles}
-              voronoi={voronoiGeo}
-              mapMode={mapDisplayMode}
+              voronoi={mapVoronoi}
               highlightId={highlightAreaId}
               onSelectArea={onMapSelectArea}
               emptyLabel={t.areas.mapNoGeo}
@@ -400,16 +366,11 @@ export default function AreasPage() {
                   ) : (
                     <>
                       <strong>{a.name}</strong> <span className="muted small">#{a.id}</span>
-                      {a.radius_km != null ? (
-                        <div className="muted small">
-                          {t.areas.radiusKm}: {String(a.radius_km)} km
-                        </div>
-                      ) : null}
                     </>
                   )}
                 </div>
                 <div className="row spread" style={{ gap: 8, flexWrap: "wrap" }}>
-                  {parseAreaCircle(a) ? (
+                  {a.center_lat != null && a.center_lng != null ? (
                     <button type="button" className="ghost" onClick={() => focusAreaOnMap(a)}>
                       {t.areas.mapViewOnMap}
                     </button>

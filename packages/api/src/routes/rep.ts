@@ -19,7 +19,7 @@ import {
   resolveAreaIdFromAllAreas,
 } from "../utils/geo.js";
 import { parseQrPublicToken } from "../utils/qrToken.js";
-import { areaBboxParams, EXCLUDE_GRID_AREA_SQL, GOVERNORATE_COVERAGE_ACTIVE_SQL } from "../utils/areaQuery.js";
+import { buildJordanVoronoiPayload } from "../utils/buildJordanVoronoiPayload.js";
 
 const router = Router();
 
@@ -148,44 +148,30 @@ const jordanAreasQuerySchema = z.object({
   radiusKm: z.coerce.number().min(5).max(80).optional(),
 });
 
-/** Jordan areas with geo boundaries (for registration map). Optional lat/lng narrows payload. */
+/** Jordan Voronoi map (registration + rep tools). Optional lat/lng narrows visible cells. */
 router.get("/areas/jordan", repAuthMiddleware, async (req, res, next) => {
   try {
     const q = jordanAreasQuerySchema.parse(req.query);
-    const params: (number | string)[] = [];
-    let bboxSql = "";
-    if (q.lat != null && q.lng != null) {
-      const radiusKm = q.radiusKm ?? 28;
-      const box = areaBboxParams(q.lat, q.lng, radiusKm);
-      bboxSql = ` AND center_lat BETWEEN $1 AND $2 AND center_lng BETWEEN $3 AND $4`;
-      params.push(box.minLat, box.maxLat, box.minLng, box.maxLng);
-    }
-    const { rows } = await query<{
-      id: number;
-      name: string;
-      governorate: string | null;
-      center_lat: number;
-      center_lng: number;
-      radius_km: string;
-    }>(
-      `SELECT id, name, governorate, center_lat, center_lng, radius_km
-       FROM areas
-       WHERE center_lat IS NOT NULL AND center_lng IS NOT NULL
-         AND ${EXCLUDE_GRID_AREA_SQL}
-         AND ${GOVERNORATE_COVERAGE_ACTIVE_SQL}${bboxSql}
-       ORDER BY governorate NULLS LAST, name ASC`,
-      params
+    const payload = await buildJordanVoronoiPayload(
+      q.lat != null && q.lng != null
+        ? { lat: q.lat, lng: q.lng, radiusKm: q.radiusKm ?? 28 }
+        : undefined
     );
-    res.json({
-      areas: rows.map((r) => ({
-        id: r.id,
-        name: r.name,
-        governorate: r.governorate,
-        centerLat: r.center_lat,
-        centerLng: r.center_lng,
-        radiusKm: parseFloat(r.radius_km),
-      })),
-    });
+    res.json(payload);
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get("/areas/voronoi", repAuthMiddleware, async (req, res, next) => {
+  try {
+    const q = jordanAreasQuerySchema.parse(req.query);
+    const payload = await buildJordanVoronoiPayload(
+      q.lat != null && q.lng != null
+        ? { lat: q.lat, lng: q.lng, radiusKm: q.radiusKm ?? 22 }
+        : undefined
+    );
+    res.json(payload);
   } catch (e) {
     next(e);
   }

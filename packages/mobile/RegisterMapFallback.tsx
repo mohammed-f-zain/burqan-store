@@ -35,7 +35,7 @@ export default function RegisterMapFallback(props: RegisterMapPanelProps) {
         <Text style={styles.fallbackAreas}>
           {mapAreas
             .slice(0, 4)
-            .map((a) => a.name)
+            .map((a) => a.labelShort || a.name)
             .join(" · ")}
           {mapAreas.length > 4 ? " …" : ""}
         </Text>

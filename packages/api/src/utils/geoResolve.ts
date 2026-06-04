@@ -1,7 +1,7 @@
 import { query } from "../db/pool.js";
 import { areaBboxParams, EXCLUDE_GRID_AREA_SQL, GOVERNORATE_COVERAGE_ACTIVE_SQL } from "./areaQuery.js";
 import { HttpError } from "./errors.js";
-import { pickFromCircles } from "./geoPick.js";
+import { pickAreaFromGps } from "./geoPick.js";
 import { isGoogleGeocodeEnabled, reverseGeocode } from "./googleGeocode.js";
 import { GOVERNORATE_AREA_SUFFIX, matchAreaFromGoogle } from "./matchAreaFromGoogle.js";
 
@@ -30,7 +30,7 @@ async function resolveWithGoogleThenCircles(
   lng: number,
   rows: AreaGeo[]
 ): Promise<ResolvedArea> {
-  const gpsPick = pickFromCircles(lat, lng, rows);
+  const gpsPick = pickAreaFromGps(lat, lng, rows);
 
   // GPS inside a main neighborhood wins — avoids Google mis-labeling (e.g. Hashimi vs Tabarbour).
   if (gpsPick.insideMainNeighborhood) {
