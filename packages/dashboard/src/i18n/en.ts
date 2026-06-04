@@ -227,7 +227,7 @@ export const en: Messages = {
     mapVoronoiLegend: "Main neighborhoods",
     mapVoronoiGovLegend: "Governorate coverage",
     mapVoronoiHint:
-      "Voronoi cells from area centers — every point in Jordan maps to the nearest labeled neighborhood or enabled governorate coverage.",
+      "Fine coverage: named neighborhoods plus micro “region” cells in gaps. Zoom 10+ for neighborhoods, 13+ for micro cells, 8+ for governorate coverage.",
     voronoiLoading: "Computing Voronoi map…",
     voronoiLoadFailed: "Could not load Voronoi map.",
   },

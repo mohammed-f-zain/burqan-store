@@ -6,6 +6,7 @@ export type VoronoiFeatureProperties = {
   centerLng: number;
   labelShort: string;
   isGovernorateCoverage: boolean;
+  isMicroRegion?: boolean;
 };
 
 export type VoronoiFeatureCollection = {

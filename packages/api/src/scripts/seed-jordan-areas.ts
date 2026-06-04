@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { allJordanAreaSeeds } from "../data/jordanAreaSeeds.js";
-import { JORDAN_MAIN_AREA_NAMES } from "../data/jordanMainAreas.js";
+import { JORDAN_SEED_AREA_NAMES } from "../data/jordanAreaSeeds.js";
 import { JORDAN_GOVERNORATES } from "../data/jordanGovernorates.js";
 import { SPLIT_AREA_TO_PARENT } from "../data/jordanSplitAreaMerges.js";
 import { GOVERNORATE_AREA_SUFFIX } from "../utils/matchAreaFromGoogle.js";
@@ -97,7 +97,7 @@ async function mergeSplitAreasIntoParents() {
 
 /** Remove legacy micro-areas not in the main list (only when unused). */
 async function pruneNonMainAreas() {
-  const names = [...JORDAN_MAIN_AREA_NAMES];
+  const names = [...JORDAN_SEED_AREA_NAMES];
   const removed = await query(
     `DELETE FROM areas a
      WHERE a.name NOT LIKE '%' || $1
@@ -163,7 +163,7 @@ async function main() {
   const { rows } = await query<{ c: string }>(`SELECT COUNT(*)::text AS c FROM areas`);
   // eslint-disable-next-line no-console
   console.log(
-    `Jordan areas upserted: ${detailed.length} main neighborhoods + ${JORDAN_GOVERNORATES.length} governorate coverage.`,
+    `Jordan areas upserted: ${detailed.length} neighborhood seeds + ${JORDAN_GOVERNORATES.length} governorate coverage.`,
     `Total areas in DB:`,
     rows[0]?.c ?? "0"
   );

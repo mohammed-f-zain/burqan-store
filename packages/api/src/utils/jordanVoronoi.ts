@@ -1,6 +1,7 @@
 import { Delaunay } from "d3-delaunay";
 
 import { isInsideJordanBbox, jordanGhostSites, jordanVoronoiExtent } from "../data/jordanBounds.js";
+import { JORDAN_MICRO_REGION_SUFFIX } from "../data/jordanUrbanMicroGrid.js";
 import type { AreaGeo } from "./geoResolve.js";
 import { GOVERNORATE_AREA_SUFFIX } from "./matchAreaFromGoogle.js";
 
@@ -22,6 +23,7 @@ export type VoronoiGeoJsonFeature = {
     centerLng: number;
     labelShort: string;
     isGovernorateCoverage: boolean;
+    isMicroRegion: boolean;
   };
   geometry: {
     type: "Polygon";
@@ -38,8 +40,19 @@ function isGovCoverage(name: string): boolean {
   return name.endsWith(GOVERNORATE_AREA_SUFFIX);
 }
 
+function isMicroRegion(name: string): boolean {
+  return name.includes(JORDAN_MICRO_REGION_SUFFIX);
+}
+
 function labelShort(name: string): string {
-  return name.replace(GOVERNORATE_AREA_SUFFIX, "").trim() || name;
+  if (name.endsWith(GOVERNORATE_AREA_SUFFIX)) {
+    return name.replace(GOVERNORATE_AREA_SUFFIX, "").trim() || name;
+  }
+  if (isMicroRegion(name)) {
+    const idx = name.indexOf(JORDAN_MICRO_REGION_SUFFIX);
+    return name.slice(idx + JORDAN_MICRO_REGION_SUFFIX.length).trim() || name;
+  }
+  return name;
 }
 
 export function areaRowsToVoronoiSites(rows: AreaGeo[]): VoronoiSite[] {
@@ -87,6 +100,7 @@ export function buildVoronoiGeoJson(sites: VoronoiSite[]): VoronoiGeoJson {
         centerLng: site.lng,
         labelShort: labelShort(site.name),
         isGovernorateCoverage: isGovCoverage(site.name),
+        isMicroRegion: isMicroRegion(site.name),
       },
       geometry: {
         type: "Polygon",

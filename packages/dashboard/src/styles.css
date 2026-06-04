@@ -1413,14 +1413,14 @@ html[dir="rtl"] .swal-toast-burqan .swal2-icon {
 
 .area-voronoi-label span {
   display: inline-block;
-  max-width: 120px;
+  max-width: 110px;
   padding: 2px 5px;
-  font-size: 0.68rem;
+  font-size: 0.62rem;
   font-weight: 700;
   line-height: 1.2;
   text-align: center;
   color: #0f172a;
-  background: rgba(255, 255, 255, 0.88);
+  background: rgba(255, 255, 255, 0.9);
   border: 1px solid rgba(15, 23, 42, 0.12);
   border-radius: 4px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
@@ -1428,6 +1428,19 @@ html[dir="rtl"] .swal-toast-burqan .swal2-icon {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.area-voronoi-label--dense span {
+  max-width: 140px;
+  font-size: 0.72rem;
+  padding: 3px 6px;
+}
+
+.area-voronoi-label--micro span {
+  max-width: 72px;
+  font-size: 0.58rem;
+  padding: 1px 4px;
+  background: rgba(255, 255, 255, 0.82);
 }
 
 .area-gov-row--highlight {
