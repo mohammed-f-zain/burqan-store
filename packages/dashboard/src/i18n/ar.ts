@@ -225,6 +225,16 @@ export const ar = {
     mapNoGeo: "لا توجد مناطق بإحداثيات لهذه المحافظة.",
     mapFocusHint: "انقر على منطقة في القائمة أو على الدائرة في الخريطة للتمييز.",
     mapViewOnMap: "عرض على الخريطة",
+    mapDisplayMode: "عرض الخريطة",
+    mapModeVoronoi: "فورونوي (تغطية كاملة)",
+    mapModeCircles: "دوائر فقط",
+    mapModeBoth: "فورونوي + دوائر",
+    mapVoronoiLegend: "فورونوي · أحياء",
+    mapVoronoiGovLegend: "فورونوي · محافظة",
+    mapVoronoiHint:
+      "خلايا فورونوي من مراكز المناطق — كل نقطة داخل الأردن تنتمي لأقرب حي أو تغطية محافظة. الدوائر تبقى للمقارنة.",
+    voronoiLoading: "جاري حساب خريطة فورونوي…",
+    voronoiLoadFailed: "تعذّر تحميل خريطة فورونوي.",
   },
 
   products: {

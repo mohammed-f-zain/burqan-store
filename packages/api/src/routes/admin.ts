@@ -21,6 +21,9 @@ import { countUnassignedQrCodes, insertQrCodes } from "../lib/generateQrCodes.js
 import { optionalStoredImagePathNullableSchema, optionalStoredImagePathSchema } from "../utils/storedImagePath.js";
 import { JORDAN_GOVERNORATES } from "../data/jordanGovernorates.js";
 import { NO_BUY_REASONS } from "../data/noBuyReasons.js";
+import { JORDAN_BBOX } from "../data/jordanBounds.js";
+import { EXCLUDE_GRID_AREA_SQL, GOVERNORATE_COVERAGE_ACTIVE_SQL } from "../utils/areaQuery.js";
+import { areaRowsToVoronoiSites, buildVoronoiGeoJson } from "../utils/jordanVoronoi.js";
 import { GOVERNORATE_AREA_SUFFIX } from "../utils/matchAreaFromGoogle.js";
 
 const router = Router();
@@ -832,6 +835,41 @@ router.get(
         `SELECT id, name, governorate, center_lat, center_lng, radius_km, created_at FROM areas ORDER BY governorate NULLS LAST, name ASC`
       );
       res.json({ areas: rows });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+router.get(
+  "/areas/voronoi",
+  adminAuthMiddleware,
+  requireAdminPermission("areas.read"),
+  async (_req, res, next) => {
+    try {
+      const { rows } = await query<{
+        id: number;
+        name: string;
+        governorate: string | null;
+        center_lat: number;
+        center_lng: number;
+        radius_km: string;
+      }>(
+        `SELECT id, name, governorate, center_lat, center_lng, radius_km
+         FROM areas
+         WHERE center_lat IS NOT NULL AND center_lng IS NOT NULL
+           AND ${EXCLUDE_GRID_AREA_SQL}
+           AND ${GOVERNORATE_COVERAGE_ACTIVE_SQL}
+         ORDER BY governorate NULLS LAST, name ASC`
+      );
+      const sites = areaRowsToVoronoiSites(rows);
+      const geojson = buildVoronoiGeoJson(sites);
+      res.json({
+        geojson,
+        siteCount: sites.length,
+        algorithm: "delaunay-voronoi",
+        bbox: JORDAN_BBOX,
+      });
     } catch (e) {
       next(e);
     }

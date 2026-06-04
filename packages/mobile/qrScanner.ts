@@ -13,8 +13,12 @@ export function shouldUseInAppQrScannerOnIos(): boolean {
   return Platform.OS === "ios" && Constants.appOwnership === "expo";
 }
 
-/** Native full-screen scanner when supported (not Expo Go on iOS). */
+/**
+ * Native full-screen scanner (iOS). On Android use in-app CameraView — system scanner +
+ * dismissScanner crashes on some tablets (e.g. MediaTek) when opening new-store registration.
+ */
 export function shouldUseSystemQrScanner(): boolean {
+  if (Platform.OS === "android") return false;
   if (shouldUseInAppQrScannerOnIos()) return false;
   return isSystemQrScannerAvailable();
 }

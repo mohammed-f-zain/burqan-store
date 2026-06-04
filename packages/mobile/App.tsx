@@ -6,6 +6,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type
 import {
   ActivityIndicator,
   Image,
+  InteractionManager,
   KeyboardAvoidingView,
   Linking,
   Modal,
@@ -689,8 +690,16 @@ export default function App() {
       setLastScanToken(publicToken);
       if (data.status === "unassigned") {
         setActiveStore(null);
-        setMode("register");
         setBottomTab("home");
+        cancelSystemQrScanSession();
+        setScanPermissionOverride(false);
+        await new Promise<void>((resolve) => {
+          InteractionManager.runAfterInteractions(() => resolve());
+        });
+        if (Platform.OS === "android") {
+          await new Promise((r) => setTimeout(r, 350));
+        }
+        setMode("register");
       } else if (data.store) {
         setActiveStore(data.store);
         setStorePointsBalance(data.store.loyaltyPointsBalance ?? 0);

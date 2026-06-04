@@ -1369,6 +1369,17 @@ html[dir="rtl"] .swal-toast-burqan .swal2-icon {
   border-style: dashed;
 }
 
+.area-map-legend-swatch--voronoi {
+  border-color: #0d9488;
+  background: rgba(20, 184, 166, 0.25);
+}
+
+.area-map-legend-swatch--voronoi-gov {
+  border-color: #7c3aed;
+  background: rgba(167, 139, 250, 0.22);
+  border-style: dashed;
+}
+
 .area-coverage-map-wrap {
   position: relative;
 }

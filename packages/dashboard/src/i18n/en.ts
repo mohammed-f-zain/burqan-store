@@ -226,6 +226,16 @@ export const en: Messages = {
     mapNoGeo: "No areas with coordinates for this governorate.",
     mapFocusHint: "Click an area in the list or a circle on the map to highlight it.",
     mapViewOnMap: "View on map",
+    mapDisplayMode: "Map display",
+    mapModeVoronoi: "Voronoi (full coverage)",
+    mapModeCircles: "Circles only",
+    mapModeBoth: "Voronoi + circles",
+    mapVoronoiLegend: "Voronoi · neighborhoods",
+    mapVoronoiGovLegend: "Voronoi · governorate",
+    mapVoronoiHint:
+      "Voronoi cells from area centers — every point in Jordan maps to the nearest neighborhood or governorate coverage. Circles remain for comparison.",
+    voronoiLoading: "Computing Voronoi map…",
+    voronoiLoadFailed: "Could not load Voronoi map.",
   },
 
   products: {

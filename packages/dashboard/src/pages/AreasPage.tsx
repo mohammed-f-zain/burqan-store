@@ -7,6 +7,7 @@ import { useAuth } from "../auth/AuthContext";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
 import { parseAreaCircle, type MapAreaCircle } from "../lib/areaMapGeo";
+import type { VoronoiFeatureCollection } from "../lib/voronoiGeo";
 import { confirmDanger } from "../lib/swalConfirm";
 import { toastError, toastSuccess } from "../lib/toast";
 
@@ -46,6 +47,9 @@ export default function AreasPage() {
   const [showMap, setShowMap] = useState(false);
   const [mapGovFilter, setMapGovFilter] = useState("عمان");
   const [showGovCirclesOnMap, setShowGovCirclesOnMap] = useState(true);
+  const [mapDisplayMode, setMapDisplayMode] = useState<"voronoi" | "circles" | "both">("voronoi");
+  const [voronoiGeo, setVoronoiGeo] = useState<VoronoiFeatureCollection | null>(null);
+  const [voronoiLoading, setVoronoiLoading] = useState(false);
   const [highlightAreaId, setHighlightAreaId] = useState<number | null>(null);
 
   const governorateOptions = useMemo(() => {
@@ -96,6 +100,25 @@ export default function AreasPage() {
   const onMapSelectArea = useCallback((id: number) => {
     setHighlightAreaId(id);
   }, []);
+
+  const loadVoronoiMap = useCallback(async () => {
+    setVoronoiLoading(true);
+    try {
+      const { data } = await api.get<{ geojson: VoronoiFeatureCollection }>("/areas/voronoi");
+      setVoronoiGeo(data.geojson ?? null);
+    } catch (err) {
+      setVoronoiGeo(null);
+      toastError(pickAxiosErrorMessage(err, t.areas.voronoiLoadFailed));
+    } finally {
+      setVoronoiLoading(false);
+    }
+  }, [t.areas.voronoiLoadFailed]);
+
+  useEffect(() => {
+    if (showMap && (mapDisplayMode === "voronoi" || mapDisplayMode === "both") && !voronoiGeo && !voronoiLoading) {
+      void loadVoronoiMap();
+    }
+  }, [showMap, mapDisplayMode, voronoiGeo, voronoiLoading, loadVoronoiMap]);
 
   function focusAreaOnMap(area: Area) {
     const gov = area.governorate?.trim();
@@ -272,6 +295,18 @@ export default function AreasPage() {
                 />
                 {t.areas.mapShowGovCircles}
               </label>
+              <label>
+                {t.areas.mapDisplayMode}
+                <select
+                  value={mapDisplayMode}
+                  onChange={(e) => setMapDisplayMode(e.target.value as "voronoi" | "circles" | "both")}
+                >
+                  <option value="voronoi">{t.areas.mapModeVoronoi}</option>
+                  <option value="circles">{t.areas.mapModeCircles}</option>
+                  <option value="both">{t.areas.mapModeBoth}</option>
+                </select>
+              </label>
+              {voronoiLoading ? <span className="muted small">{t.areas.voronoiLoading}</span> : null}
               <div className="area-map-legend">
                 <span className="area-map-legend-item">
                   <span className="area-map-legend-swatch" aria-hidden />
@@ -281,13 +316,30 @@ export default function AreasPage() {
                   <span className="area-map-legend-swatch area-map-legend-swatch--gov" aria-hidden />
                   {t.areas.mapGovernorateLegend}
                 </span>
+                {(mapDisplayMode === "voronoi" || mapDisplayMode === "both") && (
+                  <>
+                    <span className="area-map-legend-item">
+                      <span className="area-map-legend-swatch area-map-legend-swatch--voronoi" aria-hidden />
+                      {t.areas.mapVoronoiLegend}
+                    </span>
+                    <span className="area-map-legend-item">
+                      <span
+                        className="area-map-legend-swatch area-map-legend-swatch--voronoi-gov"
+                        aria-hidden
+                      />
+                      {t.areas.mapVoronoiGovLegend}
+                    </span>
+                  </>
+                )}
               </div>
             </div>
             <p className="muted small" style={{ marginBottom: 10 }}>
-              {t.areas.mapFocusHint}
+              {mapDisplayMode === "voronoi" ? t.areas.mapVoronoiHint : t.areas.mapFocusHint}
             </p>
             <AreaCoverageMap
               areas={mapCircles}
+              voronoi={voronoiGeo}
+              mapMode={mapDisplayMode}
               highlightId={highlightAreaId}
               onSelectArea={onMapSelectArea}
               emptyLabel={t.areas.mapNoGeo}

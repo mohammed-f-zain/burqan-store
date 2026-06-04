@@ -1,5 +1,5 @@
 import * as ImagePicker from "expo-image-picker";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -11,8 +11,13 @@ import {
   View,
 } from "react-native";
 import { fetchJson } from "./fetchJson";
+import RegisterMapFallback from "./RegisterMapFallback";
 import type { MapRegion } from "./registerMapConfig";
-import { RegisterMapPanel } from "./registerMapPanel";
+import { shouldLoadNativeMapsModule } from "./registerMapConfig";
+
+const RegisterMapPanelLazy = lazy(() =>
+  import("./registerMapPanel").then((m) => ({ default: m.RegisterMapPanel }))
+);
 import { getRepPosition, LocationDeniedError, LocationTimeoutError } from "./getDeviceLocation";
 import { productImageUrl } from "./productImage";
 import { theme } from "./theme";
@@ -296,18 +301,41 @@ export default function RegisterStoreForm(props: Props) {
       ) : null}
 
       <View style={styles.mapWrap}>
-        <RegisterMapPanel
-          mapRegion={mapRegion}
-          lat={lat}
-          lng={lng}
-          mapAreas={mapAreas}
-          areaId={areaId}
-          labels={{
-            mapFallback: labels.mapFallback,
-            openInMaps: labels.openInMaps,
-            storeLocation: labels.storeLocation,
-          }}
-        />
+        {shouldLoadNativeMapsModule() ? (
+          <Suspense
+            fallback={
+              <View style={styles.mapLoading}>
+                <ActivityIndicator color={theme.accent} />
+              </View>
+            }
+          >
+            <RegisterMapPanelLazy
+              mapRegion={mapRegion}
+              lat={lat}
+              lng={lng}
+              mapAreas={mapAreas}
+              areaId={areaId}
+              labels={{
+                mapFallback: labels.mapFallback,
+                openInMaps: labels.openInMaps,
+                storeLocation: labels.storeLocation,
+              }}
+            />
+          </Suspense>
+        ) : (
+          <RegisterMapFallback
+            mapRegion={mapRegion}
+            lat={lat}
+            lng={lng}
+            mapAreas={mapAreas}
+            areaId={areaId}
+            labels={{
+              mapFallback: labels.mapFallback,
+              openInMaps: labels.openInMaps,
+              storeLocation: labels.storeLocation,
+            }}
+          />
+        )}
       </View>
 
       <Pressable style={styles.secondary} onPress={() => void refreshLocation()}>
@@ -439,6 +467,12 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     borderWidth: 1,
     borderColor: theme.line,
+  },
+  mapLoading: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    minHeight: 220,
   },
   map: { width: "100%", height: "100%" },
   coordsBox: {

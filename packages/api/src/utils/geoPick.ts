@@ -1,5 +1,6 @@
 import { haversineMeters } from "./geoDistance.js";
 import type { AreaGeo } from "./geoResolve.js";
+import { pickFromVoronoi } from "./jordanVoronoi.js";
 import { GOVERNORATE_AREA_SUFFIX } from "./matchAreaFromGoogle.js";
 
 export type CirclePick = {
@@ -70,6 +71,17 @@ export function pickFromCircles(lat: number, lng: number, rows: AreaGeo[]): Circ
       governorate: a.governorate,
       source: "gps",
       insideMainNeighborhood: false,
+    };
+  }
+
+  const voronoiPick = pickFromVoronoi(lat, lng, rows);
+  if (voronoiPick) {
+    return {
+      areaId: voronoiPick.areaId,
+      areaName: voronoiPick.areaName,
+      governorate: voronoiPick.governorate,
+      source: "gps",
+      insideMainNeighborhood: voronoiPick.insideMainNeighborhood,
     };
   }
 

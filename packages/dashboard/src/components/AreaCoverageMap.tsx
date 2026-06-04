@@ -3,6 +3,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
 import type { MapAreaCircle } from "../lib/areaMapGeo";
+import type { VoronoiFeatureCollection } from "../lib/voronoiGeo";
 
 const JORDAN_CENTER: L.LatLngExpression = [31.9539, 35.9106];
 const JORDAN_ZOOM = 8;
@@ -22,22 +23,49 @@ const GOVERNORATE_STYLE = {
   dashArray: "6 4",
 };
 
+const VORONOI_NEIGHBORHOOD_STYLE = {
+  color: "#0d9488",
+  fillColor: "#14b8a6",
+  fillOpacity: 0.2,
+  weight: 1.5,
+};
+
+const VORONOI_GOV_STYLE = {
+  color: "#7c3aed",
+  fillColor: "#a78bfa",
+  fillOpacity: 0.12,
+  weight: 1.5,
+  dashArray: "4 3",
+};
+
 const HIGHLIGHT_STYLE = {
   weight: 3,
-  fillOpacity: 0.22,
+  fillOpacity: 0.28,
 };
+
+const GOVERNORATE_COVERAGE_SUFFIX = " — تغطية المحافظة";
 
 type Props = {
   areas: MapAreaCircle[];
+  voronoi?: VoronoiFeatureCollection | null;
+  mapMode: "circles" | "voronoi" | "both";
   highlightId?: number | null;
   onSelectArea?: (id: number) => void;
   emptyLabel: string;
 };
 
-export default function AreaCoverageMap({ areas, highlightId, onSelectArea, emptyLabel }: Props) {
+export default function AreaCoverageMap({
+  areas,
+  voronoi,
+  mapMode,
+  highlightId,
+  onSelectArea,
+  emptyLabel,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const layerByIdRef = useRef<Map<number, L.Circle>>(new Map());
+  const circleByIdRef = useRef<Map<number, L.Circle>>(new Map());
+  const voronoiLayerRef = useRef<L.GeoJSON | null>(null);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -55,7 +83,8 @@ export default function AreaCoverageMap({ areas, highlightId, onSelectArea, empt
     return () => {
       map.remove();
       mapRef.current = null;
-      layerByIdRef.current.clear();
+      circleByIdRef.current.clear();
+      voronoiLayerRef.current = null;
     };
   }, []);
 
@@ -63,30 +92,69 @@ export default function AreaCoverageMap({ areas, highlightId, onSelectArea, empt
     const map = mapRef.current;
     if (!map) return;
 
-    for (const layer of layerByIdRef.current.values()) {
+    for (const layer of circleByIdRef.current.values()) {
       layer.remove();
     }
-    layerByIdRef.current.clear();
+    circleByIdRef.current.clear();
+
+    if (voronoiLayerRef.current) {
+      voronoiLayerRef.current.remove();
+      voronoiLayerRef.current = null;
+    }
 
     const bounds: L.LatLngExpression[] = [];
+    const showCircles = mapMode === "circles" || mapMode === "both";
+    const showVoronoi = (mapMode === "voronoi" || mapMode === "both") && voronoi?.features?.length;
 
-    for (const a of areas) {
-      const baseStyle = a.isGovernorateCoverage ? GOVERNORATE_STYLE : NEIGHBORHOOD_STYLE;
-      const isHi = highlightId === a.id;
-      const circle = L.circle([a.centerLat, a.centerLng], {
-        radius: a.radiusKm * 1000,
-        ...baseStyle,
-        ...(isHi ? HIGHLIGHT_STYLE : {}),
+    if (showCircles) {
+      for (const a of areas) {
+        const baseStyle = a.isGovernorateCoverage ? GOVERNORATE_STYLE : NEIGHBORHOOD_STYLE;
+        const isHi = highlightId === a.id;
+        const circle = L.circle([a.centerLat, a.centerLng], {
+          radius: a.radiusKm * 1000,
+          ...baseStyle,
+          ...(isHi ? HIGHLIGHT_STYLE : {}),
+        });
+        const govLine = a.governorate ? ` · ${escapeHtml(a.governorate)}` : "";
+        const kind = a.isGovernorateCoverage ? "تغطية محافظة" : "حي";
+        circle.bindPopup(
+          `<strong>${escapeHtml(a.name)}</strong><br/>${kind}${govLine}<br/>نصف القطر: ${a.radiusKm} km`
+        );
+        circle.on("click", () => onSelectArea?.(a.id));
+        circle.addTo(map);
+        circleByIdRef.current.set(a.id, circle);
+        bounds.push([a.centerLat, a.centerLng]);
+      }
+    }
+
+    if (showVoronoi && voronoi) {
+      const layer = L.geoJSON(voronoi as GeoJSON.FeatureCollection, {
+        style: (feature) => {
+          const name = String(feature?.properties?.name ?? "");
+          const areaId = Number(feature?.properties?.areaId);
+          const isGov = name.endsWith(GOVERNORATE_COVERAGE_SUFFIX);
+          const isHi = highlightId === areaId;
+          const base = isGov ? VORONOI_GOV_STYLE : VORONOI_NEIGHBORHOOD_STYLE;
+          return { ...base, ...(isHi ? HIGHLIGHT_STYLE : {}) };
+        },
+        onEachFeature: (feature, l) => {
+          const p = feature.properties as { areaId?: number; name?: string; governorate?: string | null };
+          const areaId = Number(p.areaId);
+          const name = String(p.name ?? "");
+          const gov = p.governorate ? ` · ${escapeHtml(String(p.governorate))}` : "";
+          const kind = name.endsWith(GOVERNORATE_COVERAGE_SUFFIX) ? "فورونوي · محافظة" : "فورونوي · حي";
+          l.bindPopup(`<strong>${escapeHtml(name)}</strong><br/>${kind}${gov}`);
+          l.on("click", () => {
+            if (Number.isFinite(areaId)) onSelectArea?.(areaId);
+          });
+        },
       });
-      const govLine = a.governorate ? ` · ${escapeHtml(a.governorate)}` : "";
-      const kind = a.isGovernorateCoverage ? "تغطية محافظة" : "حي";
-      circle.bindPopup(
-        `<strong>${escapeHtml(a.name)}</strong><br/>${kind}${govLine}<br/>نصف القطر: ${a.radiusKm} km`
-      );
-      circle.on("click", () => onSelectArea?.(a.id));
-      circle.addTo(map);
-      layerByIdRef.current.set(a.id, circle);
-      bounds.push([a.centerLat, a.centerLng]);
+      layer.addTo(map);
+      voronoiLayerRef.current = layer;
+      for (const f of voronoi.features) {
+        const ring = f.geometry.coordinates[0];
+        if (ring?.[0]) bounds.push([ring[0][1], ring[0][0]]);
+      }
     }
 
     if (bounds.length === 1) {
@@ -96,11 +164,16 @@ export default function AreaCoverageMap({ areas, highlightId, onSelectArea, empt
     } else {
       map.setView(JORDAN_CENTER, JORDAN_ZOOM);
     }
-  }, [areas, highlightId, onSelectArea]);
+  }, [areas, voronoi, mapMode, highlightId, onSelectArea]);
+
+  const isEmpty =
+    (mapMode === "voronoi" && !voronoi?.features?.length) ||
+    (mapMode === "circles" && areas.length === 0) ||
+    (mapMode === "both" && areas.length === 0 && !voronoi?.features?.length);
 
   return (
     <div className="area-coverage-map-wrap">
-      {areas.length === 0 ? <p className="muted small area-coverage-map-empty">{emptyLabel}</p> : null}
+      {isEmpty ? <p className="muted small area-coverage-map-empty">{emptyLabel}</p> : null}
       <div ref={containerRef} className="area-coverage-map" role="application" aria-label="Area coverage map" />
     </div>
   );
