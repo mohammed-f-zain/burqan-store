@@ -26,6 +26,48 @@ Add **repository secrets**: repo → **Settings** → **Secrets and variables** 
 
 If `DASHBOARD_VITE_API_URL` is unset, the workflow keeps the server’s existing `packages/dashboard/.env.production` (e.g. from bootstrap). If that file is missing or has no `VITE_API_URL=`, the dashboard build step fails with a clear Actions log message.
 
+### If Actions fails: `dial tcp ***:22: i/o timeout`
+
+The workflow **never reached SSH** — the GitHub runner could not open TCP port 22 to your server. This is **not** a wrong-key problem (that would be `unable to authenticate`).
+
+**Check from your laptop** (replace with your IP and user):
+
+```bash
+nc -z -w 5 YOUR_VPS_IP 22 && echo "SSH port open"
+ssh -o ConnectTimeout=10 YOUR_USER@YOUR_VPS_IP 'echo ok'
+curl -sS https://api.burqan.store/health
+```
+
+If that works but Actions still times out, the server (or **hosting panel firewall**) is probably blocking **GitHub’s datacenter IPs**, while your home IP is allowed.
+
+**Fix on the VPS** (SSH in via console or laptop):
+
+```bash
+# 1) UFW — allow SSH for everyone (bootstrap already does OpenSSH; re-apply if needed)
+sudo ufw allow OpenSSH
+sudo ufw status
+
+# 2) Whitelist GitHub Actions IP ranges in UFW (after git pull)
+sudo bash /var/www/burqan-store/infra/sync-github-actions-ufw.sh
+
+# 3) fail2ban may have banned a runner — unban if you use it
+sudo fail2ban-client status sshd 2>/dev/null || true
+```
+
+**Provider firewall (Hetzner, DigitalOcean, etc.):** In the control panel, allow **inbound TCP 22** from `0.0.0.0/0` (or at least [GitHub’s meta API](https://api.github.com/meta) `actions` CIDRs). A panel rule that only allows *your* IP will break `appleboy/ssh-action`.
+
+**GitHub secrets:** Confirm `VPS_HOST` is the current server IP (if the VPS IP changed, update the secret).
+
+**Until SSH deploy works:** Deploy manually on the server:
+
+```bash
+cd /var/www/burqan-store && git pull && npm ci && npm run build -w @burqan/api && npm run build -w @burqan/dashboard
+npm run migrate:all -w @burqan/api && npm run seed:jordan-areas -w @burqan/api
+pm2 reload ecosystem.config.cjs --only burqan-api --update-env
+```
+
+Then re-run the failed workflow from **Actions → Deploy → Re-run jobs**.
+
 ### If Actions fails: `unable to authenticate … no supported methods remain`
 
 That message means the runner reached your host over SSH, but **no public key you offered was accepted**. The Action only uses **`VPS_SSH_KEY`** (no password). Fix it on the server side:

@@ -45,6 +45,8 @@ jobs:
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.2.0
+        # If this step fails with "dial tcp *:22: i/o timeout", GitHub runners cannot
+        # reach port 22 — see infra/DEPLOY_VPS.md (provider firewall / ufw / fail2ban).
         env:
           ADMIN_RESET_EMAIL: ${{ secrets.ADMIN_RESET_EMAIL }}
           ADMIN_RESET_PASSWORD: ${{ secrets.ADMIN_RESET_PASSWORD }}
@@ -55,6 +57,8 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          timeout: 120s
+          command_timeout: 25m
           envs: ADMIN_RESET_EMAIL,ADMIN_RESET_PASSWORD,SUPER_ADMIN_EMAIL,SUPER_ADMIN_PASSWORD,SUPER_ADMIN_NAME
           script_stop: true
           script: |
