@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -12,10 +12,17 @@ import {
 import { theme } from "./theme";
 import type { DailyStoreCard } from "./storeTypes";
 
-const { card, text, muted, line, accent, radius, shadow } = theme;
+const { card, text, muted, line, radius, shadow } = theme;
+
+export type GooglePlaceAreaSummary = {
+  areaId: number;
+  areaName: string;
+  count: number;
+};
 
 export type GooglePlacesLabels = {
   hint: string;
+  lazyHint: string;
   empty: string;
   notReady: string;
   truncated: (shown: number, total: number) => string;
@@ -27,9 +34,8 @@ export type GooglePlacesLabels = {
   noSearchResults: string;
   googlePill: string;
   openMaps: string;
+  loadingArea: string;
 };
-
-type AreaGroup = { areaName: string; stores: DailyStoreCard[] };
 
 const GOVERNORATES = new Set([
   "عمان",
@@ -59,125 +65,149 @@ function parseAreaName(raw: string, unknownLabel: string): { title: string; subt
   return { title: t };
 }
 
-function groupStoresByArea(stores: DailyStoreCard[], repAreaNames: string[]): AreaGroup[] {
-  const byArea = new Map<string, DailyStoreCard[]>();
-  for (const s of stores) {
-    const key = s.areaName?.trim() || "";
-    if (!byArea.has(key)) byArea.set(key, []);
-    byArea.get(key)!.push(s);
-  }
-
-  const keys = [...byArea.keys()];
-  keys.sort((a, b) => {
-    const ia = repAreaNames.indexOf(a);
-    const ib = repAreaNames.indexOf(b);
+function sortAreas(areas: GooglePlaceAreaSummary[], repAreaNames: string[]): GooglePlaceAreaSummary[] {
+  return [...areas].sort((a, b) => {
+    const ia = repAreaNames.indexOf(a.areaName);
+    const ib = repAreaNames.indexOf(b.areaName);
     if (ia >= 0 && ib >= 0) return ia - ib;
     if (ia >= 0) return -1;
     if (ib >= 0) return 1;
-    if (!a) return 1;
-    if (!b) return -1;
-    return a.localeCompare(b, "ar");
+    return a.areaName.localeCompare(b.areaName, "ar");
   });
-
-  return keys.map((areaName) => ({
-    areaName,
-    stores: [...byArea.get(areaName)!].sort((x, y) => x.name.localeCompare(y.name, "ar")),
-  }));
-}
-
-function defaultExpanded(groups: AreaGroup[]): Record<string, boolean> {
-  const next: Record<string, boolean> = {};
-  for (const g of groups) {
-    next[g.areaName || "__unknown__"] = true;
-  }
-  if (groups[0] && Object.keys(next).length === 0) {
-    next[groups[0].areaName || "__unknown__"] = true;
-  }
-  return next;
-}
-
-function matchesSearch(store: DailyStoreCard, q: string): boolean {
-  const needle = q.trim().toLowerCase();
-  if (!needle) return true;
-  return (
-    store.name.toLowerCase().includes(needle) ||
-    (store.areaName?.toLowerCase().includes(needle) ?? false) ||
-    (store.addressText?.toLowerCase().includes(needle) ?? false)
-  );
 }
 
 type Props = {
-  places: DailyStoreCard[];
+  areaSummaries: GooglePlaceAreaSummary[];
+  placesByAreaId: Record<number, DailyStoreCard[]>;
+  loadingAreaIds: Record<number, boolean>;
+  searchResults: DailyStoreCard[] | null;
+  searchLoading: boolean;
   repAreaNames: string[];
   loading: boolean;
   notReady?: boolean;
-  truncated?: boolean;
-  totalCount?: number;
+  totalCount: number;
   labels: GooglePlacesLabels;
   title: string;
   onSelectPlace: (place: DailyStoreCard) => void;
+  onExpandArea: (areaId: number) => void;
+  onSearch: (query: string) => void;
 };
 
+function PlaceRow({
+  place,
+  isLast,
+  labels,
+  onPress,
+}: {
+  place: DailyStoreCard;
+  isLast: boolean;
+  labels: GooglePlacesLabels;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      style={({ pressed }) => [
+        styles.placeCard,
+        isLast && styles.placeCardLast,
+        pressed && styles.pressed,
+      ]}
+      onPress={onPress}
+    >
+      <View style={styles.placeDot} />
+      <View style={styles.placeBody}>
+        <Text style={styles.placeName} numberOfLines={1}>
+          {place.name}
+        </Text>
+        <Text style={styles.placeMeta} numberOfLines={2}>
+          {place.addressText || labels.openMaps}
+        </Text>
+      </View>
+      <View style={styles.googlePill}>
+        <Ionicons name="logo-google" size={14} color="#ea580c" />
+        <Text style={styles.googlePillText}>{labels.googlePill}</Text>
+      </View>
+    </Pressable>
+  );
+}
+
 export default function GooglePlacesByArea({
-  places,
+  areaSummaries,
+  placesByAreaId,
+  loadingAreaIds,
+  searchResults,
+  searchLoading,
   repAreaNames,
   loading,
   notReady = false,
-  truncated = false,
-  totalCount = 0,
+  totalCount,
   labels,
   title,
   onSelectPlace,
+  onExpandArea,
+  onSearch,
 }: Props) {
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [expanded, setExpanded] = useState<Record<number, boolean>>({});
   const [search, setSearch] = useState("");
+  const autoExpandedRef = useRef(false);
 
-  const filteredPlaces = useMemo(
-    () => places.filter((p) => matchesSearch(p, search)),
-    [places, search]
+  const sortedAreas = useMemo(
+    () => sortAreas(areaSummaries, repAreaNames),
+    [areaSummaries, repAreaNames]
   );
 
-  const groups = useMemo(
-    () => groupStoresByArea(filteredPlaces, repAreaNames),
-    [filteredPlaces, repAreaNames]
-  );
+  const isSearching = search.trim().length >= 2;
 
   useEffect(() => {
-    if (!places.length) {
+    const t = setTimeout(() => onSearch(search), 350);
+    return () => clearTimeout(t);
+  }, [search, onSearch]);
+
+  useEffect(() => {
+    if (!areaSummaries.length) {
       setExpanded({});
+      autoExpandedRef.current = false;
       return;
     }
-    setExpanded(defaultExpanded(groupStoresByArea(places, repAreaNames)));
-  }, [places, repAreaNames]);
-
-  const areaKey = (name: string) => name || "__unknown__";
+    if (autoExpandedRef.current) return;
+    autoExpandedRef.current = true;
+    const first = sortAreas(areaSummaries, repAreaNames)[0];
+    if (!first) return;
+    setExpanded((prev) => ({ ...prev, [first.areaId]: true }));
+    if (!placesByAreaId[first.areaId]) onExpandArea(first.areaId);
+  }, [areaSummaries, repAreaNames, onExpandArea]);
 
   const setAllExpanded = (open: boolean) => {
-    const next: Record<string, boolean> = {};
-    for (const g of groups) next[areaKey(g.areaName)] = open;
+    const next: Record<number, boolean> = {};
+    for (const a of sortedAreas) next[a.areaId] = open;
     setExpanded(next);
+    if (open) {
+      for (const a of sortedAreas) {
+        if (!placesByAreaId[a.areaId]) onExpandArea(a.areaId);
+      }
+    }
+  };
+
+  const toggleArea = (areaId: number) => {
+    const willOpen = !expanded[areaId];
+    setExpanded((prev) => ({ ...prev, [areaId]: willOpen }));
+    if (willOpen && !placesByAreaId[areaId]) onExpandArea(areaId);
   };
 
   return (
     <View style={styles.section}>
       <View style={styles.headerRow}>
         <Text style={styles.title}>{title}</Text>
-        {!loading && places.length > 0 ? (
+        {!loading && totalCount > 0 ? (
           <View style={styles.headerBadge}>
             <Ionicons name="logo-google" size={14} color="#ea580c" />
-            <Text style={styles.headerBadgeText}>{labels.storeCount(places.length)}</Text>
+            <Text style={styles.headerBadgeText}>{labels.storeCount(totalCount)}</Text>
           </View>
         ) : null}
       </View>
 
-      <Text style={styles.hint}>{labels.hint}</Text>
-      {!loading && truncated && totalCount > places.length ? (
-        <Text style={styles.truncatedHint}>
-          {labels.truncated(places.length, totalCount)}
-        </Text>
-      ) : null}
+      <Text style={styles.hint}>{isSearching ? labels.hint : labels.lazyHint}</Text>
 
-      {!loading && places.length > 0 ? (
+      {!loading && totalCount > 0 ? (
         <>
           <View style={styles.searchWrap}>
             <Ionicons name="search" size={18} color={muted} style={styles.searchIcon} />
@@ -192,16 +222,16 @@ export default function GooglePlacesByArea({
             />
           </View>
 
-          {groups.length > 1 ? (
+          {!isSearching && sortedAreas.length > 1 ? (
             <Pressable
               style={styles.expandToggle}
               onPress={() => {
-                const anyClosed = groups.some((g) => !expanded[areaKey(g.areaName)]);
+                const anyClosed = sortedAreas.some((a) => !expanded[a.areaId]);
                 setAllExpanded(anyClosed);
               }}
             >
               <Text style={styles.expandToggleText}>
-                {groups.every((g) => expanded[areaKey(g.areaName)]) ? labels.collapseAll : labels.expandAll}
+                {sortedAreas.every((a) => expanded[a.areaId]) ? labels.collapseAll : labels.expandAll}
               </Text>
             </Pressable>
           ) : null}
@@ -215,31 +245,46 @@ export default function GooglePlacesByArea({
           <Ionicons name="cloud-offline-outline" size={40} color={muted} />
           <Text style={styles.empty}>{labels.notReady}</Text>
         </View>
-      ) : places.length === 0 ? (
+      ) : totalCount === 0 ? (
         <View style={styles.emptyBox}>
           <Ionicons name="map-outline" size={40} color={muted} />
           <Text style={styles.empty}>{labels.empty}</Text>
         </View>
-      ) : filteredPlaces.length === 0 ? (
-        <View style={styles.emptyBox}>
-          <Ionicons name="search-outline" size={40} color={muted} />
-          <Text style={styles.empty}>{labels.noSearchResults}</Text>
-        </View>
+      ) : isSearching ? (
+        searchLoading ? (
+          <ActivityIndicator color="#ea580c" style={{ marginTop: 20 }} />
+        ) : !searchResults?.length ? (
+          <View style={styles.emptyBox}>
+            <Ionicons name="search-outline" size={40} color={muted} />
+            <Text style={styles.empty}>{labels.noSearchResults}</Text>
+          </View>
+        ) : (
+          searchResults.map((p, idx) => (
+            <PlaceRow
+              key={`search-${p.id}`}
+              place={p}
+              isLast={idx === searchResults.length - 1}
+              labels={labels}
+              onPress={() => onSelectPlace(p)}
+            />
+          ))
+        )
       ) : (
-        groups.map((group) => {
-          const key = areaKey(group.areaName);
-          const isOpen = expanded[key] ?? false;
-          const areaDisplay = parseAreaName(group.areaName, labels.unknownArea);
+        sortedAreas.map((area) => {
+          const isOpen = expanded[area.areaId] ?? false;
+          const places = placesByAreaId[area.areaId];
+          const areaLoading = loadingAreaIds[area.areaId];
+          const areaDisplay = parseAreaName(area.areaName, labels.unknownArea);
 
           return (
-            <View key={key} style={styles.areaBlock}>
+            <View key={area.areaId} style={styles.areaBlock}>
               <Pressable
                 style={({ pressed }) => [
                   styles.areaHeader,
                   isOpen && styles.areaHeaderOpen,
                   pressed && styles.pressed,
                 ]}
-                onPress={() => setExpanded((prev) => ({ ...prev, [key]: !isOpen }))}
+                onPress={() => toggleArea(area.areaId)}
               >
                 <View style={styles.areaIconWrap}>
                   <Ionicons name="location" size={20} color="#ea580c" />
@@ -253,38 +298,33 @@ export default function GooglePlacesByArea({
                       {areaDisplay.subtitle}
                     </Text>
                   ) : null}
-                  <Text style={styles.areaMeta}>{labels.storeCount(group.stores.length)}</Text>
+                  <Text style={styles.areaMeta}>{labels.storeCount(area.count)}</Text>
                 </View>
                 <Ionicons name={isOpen ? "chevron-up" : "chevron-down"} size={22} color="#ea580c" />
               </Pressable>
 
-              {isOpen
-                ? group.stores.map((s, idx) => (
-                    <Pressable
-                      key={`google-${s.id}`}
-                      style={({ pressed }) => [
-                        styles.placeCard,
-                        idx === group.stores.length - 1 && styles.placeCardLast,
-                        pressed && styles.pressed,
-                      ]}
-                      onPress={() => onSelectPlace(s)}
-                    >
-                      <View style={styles.placeDot} />
-                      <View style={styles.placeBody}>
-                        <Text style={styles.placeName} numberOfLines={1}>
-                          {s.name}
-                        </Text>
-                        <Text style={styles.placeMeta} numberOfLines={2}>
-                          {s.addressText || labels.openMaps}
-                        </Text>
-                      </View>
-                      <View style={styles.googlePill}>
-                        <Ionicons name="logo-google" size={14} color="#ea580c" />
-                        <Text style={styles.googlePillText}>{labels.googlePill}</Text>
-                      </View>
-                    </Pressable>
+              {isOpen ? (
+                areaLoading && !places ? (
+                  <View style={styles.areaLoading}>
+                    <ActivityIndicator color="#ea580c" size="small" />
+                    <Text style={styles.areaLoadingText}>{labels.loadingArea}</Text>
+                  </View>
+                ) : places?.length ? (
+                  places.map((p, idx) => (
+                    <PlaceRow
+                      key={`google-${p.id}`}
+                      place={p}
+                      isLast={idx === places.length - 1}
+                      labels={labels}
+                      onPress={() => onSelectPlace(p)}
+                    />
                   ))
-                : null}
+                ) : (
+                  <View style={styles.areaLoading}>
+                    <Text style={styles.areaLoadingText}>{labels.empty}</Text>
+                  </View>
+                )
+              ) : null}
             </View>
           );
         })
@@ -319,13 +359,6 @@ const styles = StyleSheet.create({
   },
   headerBadgeText: { color: "#ea580c", fontSize: 12, fontWeight: "800" },
   hint: { color: muted, fontSize: 13, marginTop: 8, textAlign: "right", lineHeight: 20 },
-  truncatedHint: {
-    color: "#b45309",
-    fontSize: 12,
-    marginTop: 6,
-    textAlign: "right",
-    fontWeight: "700",
-  },
   searchWrap: {
     flexDirection: "row-reverse",
     alignItems: "center",
@@ -377,6 +410,20 @@ const styles = StyleSheet.create({
   areaName: { color: text, fontSize: 16, fontWeight: "800", textAlign: "right" },
   areaSubtitle: { color: muted, fontSize: 12, marginTop: 2, textAlign: "right" },
   areaMeta: { color: muted, fontSize: 11, marginTop: 6, textAlign: "right", fontWeight: "600" },
+  areaLoading: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 16,
+    backgroundColor: "#fff7ed",
+    borderWidth: 1,
+    borderColor: "rgba(234, 88, 12, 0.12)",
+    borderTopWidth: 0,
+    borderBottomLeftRadius: radius.lg,
+    borderBottomRightRadius: radius.lg,
+  },
+  areaLoadingText: { color: muted, fontSize: 13 },
   placeCard: {
     flexDirection: "row-reverse",
     alignItems: "center",

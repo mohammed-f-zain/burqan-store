@@ -206,7 +206,9 @@ const t = {
   dailyStoresVisitQr: "زيارة",
   navGoogle: "خرائط Google",
   googleTabTitle: "سوبرماركت ومتاجر المنطقة",
-  googleTabHint: "متاجر من Google Maps في مناطق عملك — غير مسجّلة في برقان بعد",
+  googleTabHint: "نتائج البحث من Google Maps في مناطق عملك",
+  googleTabLazyHint: "اضغط على منطقة لتحميل متاجرها — أو ابحث بالاسم",
+  googleTabLoadingArea: "جاري التحميل…",
   googleTabEmpty: "لا متاجر من Google في مناطقك بعد.",
   googleTabNotReady:
     "لم يُفعَّل استيراد Google على الخادم. اطلب من المشرف: migrate ثم استيراد من لوحة المتاجر.",
@@ -280,7 +282,11 @@ function mapProductRow(r: {
 
 type Area = { id: number; name: string };
 import DailyStoresByArea from "./DailyStoresByArea";
-import GooglePlacesByArea from "./GooglePlacesByArea";
+import GooglePlacesByArea, { type GooglePlaceAreaSummary } from "./GooglePlacesByArea";
+import {
+  groupRawGooglePlacesByArea,
+  type RawGooglePlace,
+} from "./groupGooglePlacesByArea";
 import EndVisitModal from "./EndVisitModal";
 import OrderInvoiceModal from "./OrderInvoiceModal";
 import StoreCartPanel from "./StoreCartPanel";
@@ -414,12 +420,17 @@ export default function App() {
   const [homeRefreshing, setHomeRefreshing] = useState(false);
   const [googleRefreshing, setGoogleRefreshing] = useState(false);
   const [dailyStores, setDailyStores] = useState<DailyStoreCard[]>([]);
-  const [googlePlaces, setGooglePlaces] = useState<DailyStoreCard[]>([]);
   const [googlePlacesReady, setGooglePlacesReady] = useState(true);
   const [dailyStoresLoading, setDailyStoresLoading] = useState(false);
   const [googlePlacesLoading, setGooglePlacesLoading] = useState(false);
   const [googlePlacesTotal, setGooglePlacesTotal] = useState(0);
-  const [googlePlacesTruncated, setGooglePlacesTruncated] = useState(false);
+  const [googleAreaSummaries, setGoogleAreaSummaries] = useState<GooglePlaceAreaSummary[]>([]);
+  const [googlePlacesByArea, setGooglePlacesByArea] = useState<Record<number, DailyStoreCard[]>>({});
+  const [googleAreaLoading, setGoogleAreaLoading] = useState<Record<number, boolean>>({});
+  const [googleSearchResults, setGoogleSearchResults] = useState<DailyStoreCard[] | null>(null);
+  const [googleSearchLoading, setGoogleSearchLoading] = useState(false);
+  const [googleLazyApi, setGoogleLazyApi] = useState(true);
+  const googleRawByAreaRef = useRef<Record<number, RawGooglePlace[]>>({});
   const [peekStore, setPeekStore] = useState<DailyStoreCard | null>(null);
   const [endVisitOpen, setEndVisitOpen] = useState(false);
   const [endVisitBusy, setEndVisitBusy] = useState(false);
@@ -446,10 +457,9 @@ export default function App() {
   }, [token]);
 
   const apiGet = useCallback(
-    async (path: string) => {
-      const res = await fetch(`${API_BASE}${path}`, { headers });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? res.statusText);
+    async (path: string, timeoutMs = 25_000) => {
+      const { res, data } = await fetchJson(`${API_BASE}${path}`, { headers, timeoutMs });
+      if (!res.ok) throw new Error((data as { error?: string }).error ?? res.statusText);
       return data;
     },
     [headers]
@@ -602,9 +612,6 @@ export default function App() {
       if (typeof data.googlePlacesReady === "boolean") {
         setGooglePlacesReady(data.googlePlacesReady);
       }
-      if (Array.isArray(data.prospects)) {
-        setGooglePlaces(mapGoogleProspects(data.prospects));
-      }
     } catch {
       setDailyStores([]);
     } finally {
@@ -615,52 +622,117 @@ export default function App() {
   const loadGooglePlaces = useCallback(async () => {
     if (!token) return;
     setGooglePlacesLoading(true);
+    setGoogleSearchResults(null);
+    setGooglePlacesByArea({});
+    setGoogleAreaLoading({});
+    googleRawByAreaRef.current = {};
     try {
-      let data: {
-        googlePlacesReady?: boolean;
-        places?: unknown[];
-        prospects?: unknown[];
-      };
-      try {
-        data = await apiGet("/api/v1/rep/google-places");
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "";
-        if (!/404|غير موجود|not found/i.test(msg)) throw e;
-        data = await apiGet("/api/v1/rep/stores/daily");
-      }
+      const data = await apiGet("/api/v1/rep/google-places?summary=1", 45_000);
       setGooglePlacesReady(data.googlePlacesReady !== false);
-      const total =
-        typeof data.total === "number"
-          ? data.total
-          : typeof data.googlePlacesTotal === "number"
-            ? data.googlePlacesTotal
-            : 0;
-      const truncated =
-        data.truncated === true ||
-        data.googlePlacesTruncated === true ||
-        (total > 0 && (data.places ?? data.prospects ?? []).length < total);
-      setGooglePlacesTotal(total);
-      setGooglePlacesTruncated(truncated);
-      const raw = (data.places ?? data.prospects ?? []) as {
-        id: number;
-        name: string;
-        addressText?: string | null;
-        location: { lat: number; lng: number };
-        areaName?: string | null;
-        googleMapsUrl?: string | null;
-        googlePlaceId?: string | null;
-      }[];
-      setGooglePlaces(mapGoogleProspects(raw));
+      setGooglePlacesTotal(typeof data.total === "number" ? data.total : 0);
+
+      const areas = Array.isArray(data.areas) ? (data.areas as GooglePlaceAreaSummary[]) : [];
+      if (areas.length > 0) {
+        setGoogleLazyApi(true);
+        setGoogleAreaSummaries(areas);
+        return;
+      }
+
+      const raw = (data.places ?? []) as RawGooglePlace[];
+      if (raw.length > 0) {
+        const grouped = groupRawGooglePlacesByArea(raw);
+        setGoogleLazyApi(false);
+        setGoogleAreaSummaries(grouped.summaries);
+        googleRawByAreaRef.current = grouped.rawByAreaId;
+        return;
+      }
+
+      setGoogleLazyApi(true);
+      setGoogleAreaSummaries([]);
     } catch (e) {
-      setGooglePlaces([]);
+      setGoogleAreaSummaries([]);
       setGooglePlacesTotal(0);
-      setGooglePlacesTruncated(false);
       setGooglePlacesReady(false);
-      showToast(e instanceof Error ? e.message : t.googleTabLoadFailed, "error");
+      setGoogleLazyApi(true);
+      googleRawByAreaRef.current = {};
+      const msg = e instanceof Error ? e.message : "";
+      showToast(
+        msg === "network_timeout" ? t.networkTimeout : msg || t.googleTabLoadFailed,
+        "error"
+      );
     } finally {
       setGooglePlacesLoading(false);
     }
-  }, [apiGet, mapGoogleProspects, showToast, token]);
+  }, [apiGet, showToast, token]);
+
+  const loadGoogleArea = useCallback(
+    async (areaId: number) => {
+      if (!token) return;
+      setGoogleAreaLoading((prev) => ({ ...prev, [areaId]: true }));
+      try {
+        if (!googleLazyApi) {
+          const raw = googleRawByAreaRef.current[areaId] ?? [];
+          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+          setGooglePlacesByArea((prev) =>
+            prev[areaId]?.length ? prev : { ...prev, [areaId]: mapGoogleProspects(raw) }
+          );
+          return;
+        }
+        const data = await apiGet(`/api/v1/rep/google-places?areaId=${areaId}`, 30_000);
+        const raw = (data.places ?? []) as RawGooglePlace[];
+        setGooglePlacesByArea((prev) =>
+          prev[areaId]?.length ? prev : { ...prev, [areaId]: mapGoogleProspects(raw) }
+        );
+      } catch {
+        setGooglePlacesByArea((prev) => (prev[areaId] ? prev : { ...prev, [areaId]: [] }));
+      } finally {
+        setGoogleAreaLoading((prev) => ({ ...prev, [areaId]: false }));
+      }
+    },
+    [apiGet, googleLazyApi, mapGoogleProspects, token]
+  );
+
+  const searchGooglePlaces = useCallback(
+    async (query: string) => {
+      if (!token) return;
+      const q = query.trim();
+      if (q.length < 2) {
+        setGoogleSearchResults(null);
+        setGoogleSearchLoading(false);
+        return;
+      }
+      setGoogleSearchLoading(true);
+      try {
+        if (!googleLazyApi) {
+          const needle = q.toLowerCase();
+          const allRaw = Object.values(googleRawByAreaRef.current).flat();
+          const hits = allRaw.filter(
+            (p) =>
+              p.name.toLowerCase().includes(needle) ||
+              (p.addressText ?? "").toLowerCase().includes(needle)
+          );
+          setGoogleSearchResults(mapGoogleProspects(hits.slice(0, 200)));
+          return;
+        }
+        const data = await apiGet(`/api/v1/rep/google-places?q=${encodeURIComponent(q)}`, 20_000);
+        const raw = (data.places ?? []) as {
+          id: number;
+          name: string;
+          addressText?: string | null;
+          location: { lat: number; lng: number };
+          areaName?: string | null;
+          googleMapsUrl?: string | null;
+          googlePlaceId?: string | null;
+        }[];
+        setGoogleSearchResults(mapGoogleProspects(raw));
+      } catch {
+        setGoogleSearchResults([]);
+      } finally {
+        setGoogleSearchLoading(false);
+      }
+    },
+    [apiGet, googleLazyApi, mapGoogleProspects, token]
+  );
 
   const clearSession = useCallback(() => {
     cancelSystemQrScanSession();
@@ -671,7 +743,13 @@ export default function App() {
     setProfileLoading(false);
     setActiveStore(null);
     setDailyStores([]);
-    setGooglePlaces([]);
+    setGoogleAreaSummaries([]);
+    setGooglePlacesByArea({});
+    setGoogleAreaLoading({});
+    setGoogleSearchResults(null);
+    setGooglePlacesTotal(0);
+    setGoogleLazyApi(true);
+    googleRawByAreaRef.current = {};
     setGooglePlacesReady(true);
     setPeekStore(null);
     setMode("home");
@@ -1237,7 +1315,7 @@ export default function App() {
               ) : bottomTab === "google" ? (
                 <View style={styles.headerText}>
                   <Text style={styles.headerGreeting}>{t.navGoogle}</Text>
-                  <Text style={styles.headerSub}>{t.googleTabHint}</Text>
+                  <Text style={styles.headerSub}>{t.googleTabLazyHint}</Text>
                 </View>
               ) : null}
             </View>
@@ -1373,18 +1451,22 @@ export default function App() {
 
       {bottomTab === "google" && mode !== "store" && mode !== "register" && (
         <GooglePlacesByArea
-          places={googlePlaces}
+          areaSummaries={googleAreaSummaries}
+          placesByAreaId={googlePlacesByArea}
+          loadingAreaIds={googleAreaLoading}
+          searchResults={googleSearchResults}
+          searchLoading={googleSearchLoading}
           repAreaNames={repAreaNames}
           loading={googlePlacesLoading}
           notReady={!googlePlacesReady}
-          truncated={googlePlacesTruncated}
           totalCount={googlePlacesTotal}
           title={t.googleTabTitle}
           labels={{
             hint: t.googleTabHint,
-            truncated: t.googleTabTruncated,
+            lazyHint: t.googleTabLazyHint,
             empty: t.googleTabEmpty,
             notReady: t.googleTabNotReady,
+            truncated: t.googleTabTruncated,
             unknownArea: t.dailyStoresUnknownArea,
             storeCount: t.dailyStoresAreaCount,
             searchPlaceholder: t.googleTabSearchPlaceholder,
@@ -1393,8 +1475,11 @@ export default function App() {
             noSearchResults: t.dailyStoresNoSearchResults,
             googlePill: t.googleTabPill,
             openMaps: t.googleTabOpenMaps,
+            loadingArea: t.googleTabLoadingArea,
           }}
           onSelectPlace={setPeekStore}
+          onExpandArea={loadGoogleArea}
+          onSearch={searchGooglePlaces}
         />
       )}
 
