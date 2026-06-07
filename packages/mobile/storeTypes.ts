@@ -1,5 +1,7 @@
 export type DailyStoreCard = {
   id: number;
+  /** burqan = registered with QR; google = prospect from Google Maps */
+  source?: "burqan" | "google";
   name: string;
   phone: string;
   ownerName: string;
@@ -9,6 +11,7 @@ export type DailyStoreCard = {
   deferredPaymentEnabled: boolean;
   visitedToday?: boolean;
   visitNote?: string | null;
+  googleMapsUrl?: string | null;
 };
 
 export type StoreBrief = {

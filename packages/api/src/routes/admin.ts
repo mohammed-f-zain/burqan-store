@@ -22,6 +22,8 @@ import { optionalStoredImagePathNullableSchema, optionalStoredImagePathSchema } 
 import { JORDAN_GOVERNORATES } from "../data/jordanGovernorates.js";
 import { NO_BUY_REASONS } from "../data/noBuyReasons.js";
 import { buildJordanVoronoiPayload } from "../utils/buildJordanVoronoiPayload.js";
+import { importGooglePlaces } from "../utils/importGooglePlaces.js";
+import { isGooglePlacesEnabled } from "../utils/googlePlaces.js";
 import { GOVERNORATE_AREA_SUFFIX } from "../utils/matchAreaFromGoogle.js";
 
 const router = Router();
@@ -1577,6 +1579,73 @@ router.put(
         [id]
       );
       res.json({ inventory: rows });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+const googlePlacesImportSchema = z.object({
+  governorate: z.string().min(1).optional(),
+  lat: z.coerce.number().min(-90).max(90).optional(),
+  lng: z.coerce.number().min(-180).max(180).optional(),
+  radiusM: z.coerce.number().min(200).max(50000).optional(),
+  gridStepKm: z.coerce.number().min(0.8).max(12).optional(),
+});
+
+router.get(
+  "/google-places",
+  adminAuthMiddleware,
+  requireAdminPermission("stores.read"),
+  async (req, res, next) => {
+    try {
+      const governorate = typeof req.query.governorate === "string" ? req.query.governorate : undefined;
+      const unmatchedOnly = req.query.unmatched === "1" || req.query.unmatched === "true";
+      const params: (string | boolean)[] = [];
+      let where = "WHERE 1=1";
+      if (governorate) {
+        params.push(governorate);
+        where += ` AND a.governorate = $${params.length}`;
+      }
+      if (unmatchedOnly) {
+        where += " AND g.matched_store_id IS NULL";
+      }
+      const { rows } = await query(
+        `SELECT g.id, g.place_id, g.name, g.phone, g.address_text,
+                g.location_lat, g.location_lng, g.google_maps_url, g.business_status,
+                g.imported_at, g.matched_store_id,
+                a.name AS area_name, a.governorate,
+                s.name AS matched_store_name
+         FROM google_map_places g
+         LEFT JOIN areas a ON a.id = g.area_id
+         LEFT JOIN stores s ON s.id = g.matched_store_id
+         ${where}
+         ORDER BY g.name ASC
+         LIMIT 2000`,
+        params
+      );
+      res.json({ places: rows, googlePlacesEnabled: isGooglePlacesEnabled() });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+router.post(
+  "/google-places/import",
+  adminAuthMiddleware,
+  requireAdminPermission("stores.write"),
+  async (req, res, next) => {
+    try {
+      if (!isGooglePlacesEnabled()) {
+        throw new HttpError(
+          503,
+          "Google Places غير مفعّل — أضف GOOGLE_MAPS_API_KEY مع تفعيل Places API في Google Cloud"
+        );
+      }
+      const body = googlePlacesImportSchema.parse(req.body ?? {});
+      const result = await importGooglePlaces(body);
+      res.json(result);
     } catch (e) {
       next(e);
     }

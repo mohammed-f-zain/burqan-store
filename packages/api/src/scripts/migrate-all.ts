@@ -18,6 +18,7 @@ const FILES = [
   "006_prize_redeem.sql",
   "007_area_2km_governorate_coverage.sql",
   "008_area_map_label.sql",
+  "009_google_map_places.sql",
 ] as const;
 
 async function main() {

@@ -122,6 +122,8 @@ bash /var/www/burqan-store/infra/bootstrap-burqan-vps.sh
 
 The script installs Node 20, nginx, PostgreSQL, pm2, UFW; creates DB/user `burqan`; clones the repo (default `https://github.com/mohammed-f-zain/burqan-store.git`); writes `packages/api/.env` once; migrates, seeds, builds API + dashboard; configures nginx; starts pm2.
 
+**Google Maps stores for reps:** enable Places API on `GOOGLE_MAPS_API_KEY`, run `npm run migrate:all`, then in the dashboard **Stores → Import from Google** per governorate. Reps see supermarkets on the app home screen grouped by area.
+
 **Area map labels (OpenStreetMap names):** after deploy, refresh neighborhoods from OSM seeds:
 
 ```bash

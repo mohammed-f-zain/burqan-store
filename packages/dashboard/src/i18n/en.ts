@@ -364,6 +364,24 @@ export const en: Messages = {
     cancel: "Cancel",
     submitPay: "Submit",
     payDone: "Payment recorded.",
+    googleTitle: "Google Maps stores (grocery / supermarket)",
+    googleHint:
+      "Import names and locations from Google Places for shops not yet registered in Burqan (reps still assign QR). Requires GOOGLE_MAPS_API_KEY with Places API enabled.",
+    googleDisabled: "Google Places is not configured on the server.",
+    googleGov: "Governorate",
+    googleImportBtn: "Import from Google",
+    googleImporting: "Importing…",
+    googleLoading: "Loading…",
+    googleEmpty: "No results yet — click Import from Google.",
+    googleUnmatchedOnly: "Not in Burqan only",
+    googleOpenMaps: "Open in Google Maps",
+    googleBurqanMatch: "Burqan store",
+    googleProspect: "Prospect — not registered",
+    googleTruncated: (n: number) => `Showing 80 of ${n} — narrow governorate or filter unmatched.`,
+    googleImportDone: (fetched: number, matched: number, points: number) =>
+      `Fetched ${fetched} places from Google (${points} search points). ${matched} match existing Burqan stores.`,
+    googleImportFailed: "Could not import from Google Places.",
+    googleLoadFailed: "Could not load Google places list.",
   },
 
   storeDetail: {

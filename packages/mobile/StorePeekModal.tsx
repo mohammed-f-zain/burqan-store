@@ -28,7 +28,10 @@ export default function StorePeekModal(props: Props) {
   const { store, visible, labels } = props;
   if (!store) return null;
 
-  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${store.location.lat},${store.location.lng}`;
+  const isGoogle = store.source === "google";
+  const mapsUrl =
+    store.googleMapsUrl ??
+    `https://www.google.com/maps/search/?api=1&query=${store.location.lat},${store.location.lng}`;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={props.onClose}>
@@ -41,11 +44,17 @@ export default function StorePeekModal(props: Props) {
         <View style={styles.body}>
           <Text style={styles.title}>{store.name}</Text>
           <View style={styles.badgeRow}>
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>
-                {store.deferredPaymentEnabled ? labels.deferredOn : labels.deferredOff}
-              </Text>
-            </View>
+            {isGoogle ? (
+              <View style={[styles.badge, styles.badgeGoogle]}>
+                <Text style={styles.badgeGoogleText}>Google Maps</Text>
+              </View>
+            ) : (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>
+                  {store.deferredPaymentEnabled ? labels.deferredOn : labels.deferredOff}
+                </Text>
+              </View>
+            )}
             {store.areaName ? (
               <View style={[styles.badge, styles.badgeMuted]}>
                 <Text style={styles.badgeTextMuted}>{store.areaName}</Text>
@@ -58,14 +67,16 @@ export default function StorePeekModal(props: Props) {
             <Text style={styles.value}>{store.ownerName}</Text>
           </View>
 
-          <View style={styles.row}>
-            <Text style={styles.label}>{labels.phone}</Text>
-            <Pressable style={styles.ltrWrap} onPress={() => void Linking.openURL(`tel:${store.phone}`)}>
-              <Text style={[styles.value, styles.link]} numberOfLines={1}>
-                {store.phone}
-              </Text>
-            </Pressable>
-          </View>
+          {!isGoogle && store.phone ? (
+            <View style={styles.row}>
+              <Text style={styles.label}>{labels.phone}</Text>
+              <Pressable style={styles.ltrWrap} onPress={() => void Linking.openURL(`tel:${store.phone}`)}>
+                <Text style={[styles.value, styles.link]} numberOfLines={1}>
+                  {store.phone}
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
 
           <View style={styles.row}>
             <Text style={styles.label}>{labels.location}</Text>
@@ -76,9 +87,11 @@ export default function StorePeekModal(props: Props) {
             <Text style={styles.mapsBtnText}>{labels.openInMaps}</Text>
           </Pressable>
 
-          <Pressable style={styles.callBtn} onPress={() => void Linking.openURL(`tel:${store.phone}`)}>
-            <Text style={styles.callBtnText}>{labels.callStore}</Text>
-          </Pressable>
+          {!isGoogle && store.phone ? (
+            <Pressable style={styles.callBtn} onPress={() => void Linking.openURL(`tel:${store.phone}`)}>
+              <Text style={styles.callBtnText}>{labels.callStore}</Text>
+            </Pressable>
+          ) : null}
         </View>
       </SafeAreaView>
     </Modal>
@@ -113,6 +126,8 @@ const styles = StyleSheet.create({
     backgroundColor: theme.accentSoft,
   },
   badgeMuted: { backgroundColor: "#f1f5f9" },
+  badgeGoogle: { backgroundColor: "#ffedd5" },
+  badgeGoogleText: { color: "#ea580c", fontSize: 12, fontWeight: "700" },
   badgeText: { color: theme.accentDark, fontSize: 12, fontWeight: "700" },
   badgeTextMuted: { color: muted, fontSize: 12, fontWeight: "600" },
   row: {

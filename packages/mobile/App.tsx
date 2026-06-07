@@ -203,6 +203,17 @@ const t = {
   dailyStoresExpandAll: "فتح الكل",
   dailyStoresCollapseAll: "إغلاق الكل",
   dailyStoresNoSearchResults: "لا نتائج — جرّب بحثاً آخر",
+  dailyStoresVisitQr: "زيارة",
+  navGoogle: "خرائط Google",
+  googleTabTitle: "سوبرماركت ومتاجر المنطقة",
+  googleTabHint: "متاجر من Google Maps في مناطق عملك — غير مسجّلة في برقان بعد",
+  googleTabEmpty: "لا متاجر من Google في مناطقك بعد.",
+  googleTabNotReady:
+    "لم يُفعَّل استيراد Google على الخادم. اطلب من المشرف: migrate ثم استيراد من لوحة المتاجر.",
+  googleTabLoadFailed: "تعذّر تحميل متاجر Google — اسحب للتحديث",
+  googleTabSearchPlaceholder: "بحث عن متجر أو عنوان…",
+  googleTabPill: "Google",
+  googleTabOpenMaps: "فتح على الخريطة",
   storeOwner: "صاحب المتجر",
   callStore: "اتصال بالمتجر",
   productsBadge: (n: number) => String(n),
@@ -267,6 +278,7 @@ function mapProductRow(r: {
 
 type Area = { id: number; name: string };
 import DailyStoresByArea from "./DailyStoresByArea";
+import GooglePlacesByArea from "./GooglePlacesByArea";
 import EndVisitModal from "./EndVisitModal";
 import OrderInvoiceModal from "./OrderInvoiceModal";
 import StoreCartPanel from "./StoreCartPanel";
@@ -275,7 +287,7 @@ import type { ReceiptData } from "./receiptFormat";
 import type { DailyStoreCard, PrizeProduct, StoreBrief } from "./storeTypes";
 export type { StoreBrief } from "./storeTypes";
 
-type BottomTab = "home" | "inventory" | "store" | "profile";
+type BottomTab = "home" | "google" | "inventory" | "store" | "profile";
 function formatStoreLocation(
   store: Pick<StoreBrief, "addressText" | "areaName">,
   unknownLabel: string
@@ -398,8 +410,12 @@ export default function App() {
   const [cart, setCart] = useState<Record<number, number>>({});
   const [paymentType, setPaymentType] = useState<"cash" | "deferred">("cash");
   const [homeRefreshing, setHomeRefreshing] = useState(false);
+  const [googleRefreshing, setGoogleRefreshing] = useState(false);
   const [dailyStores, setDailyStores] = useState<DailyStoreCard[]>([]);
+  const [googlePlaces, setGooglePlaces] = useState<DailyStoreCard[]>([]);
+  const [googlePlacesReady, setGooglePlacesReady] = useState(true);
   const [dailyStoresLoading, setDailyStoresLoading] = useState(false);
+  const [googlePlacesLoading, setGooglePlacesLoading] = useState(false);
   const [peekStore, setPeekStore] = useState<DailyStoreCard | null>(null);
   const [endVisitOpen, setEndVisitOpen] = useState(false);
   const [endVisitBusy, setEndVisitBusy] = useState(false);
@@ -543,18 +559,87 @@ export default function App() {
     [repProfile?.areas]
   );
 
+  const mapGoogleProspects = useCallback(
+    (
+      prospects: {
+        id: number;
+        name: string;
+        addressText?: string | null;
+        location: { lat: number; lng: number };
+        areaName?: string | null;
+        googleMapsUrl?: string | null;
+      }[]
+    ): DailyStoreCard[] =>
+      prospects.map((p) => ({
+        id: p.id,
+        source: "google",
+        name: p.name,
+        phone: "",
+        ownerName: t.googleTabPill,
+        location: p.location,
+        addressText: p.addressText ?? null,
+        areaName: p.areaName ?? null,
+        deferredPaymentEnabled: false,
+        visitedToday: false,
+        googleMapsUrl: p.googleMapsUrl ?? null,
+      })),
+    []
+  );
+
   const loadDailyStores = useCallback(async () => {
     if (!token) return;
     setDailyStoresLoading(true);
     try {
       const data = await apiGet("/api/v1/rep/stores/daily");
-      setDailyStores((data.stores ?? []) as DailyStoreCard[]);
+      const burqan = (data.stores ?? []) as DailyStoreCard[];
+      setDailyStores(burqan);
+      if (typeof data.googlePlacesReady === "boolean") {
+        setGooglePlacesReady(data.googlePlacesReady);
+      }
+      if (Array.isArray(data.prospects)) {
+        setGooglePlaces(mapGoogleProspects(data.prospects));
+      }
     } catch {
       setDailyStores([]);
     } finally {
       setDailyStoresLoading(false);
     }
-  }, [apiGet, token]);
+  }, [apiGet, mapGoogleProspects, token]);
+
+  const loadGooglePlaces = useCallback(async () => {
+    if (!token) return;
+    setGooglePlacesLoading(true);
+    try {
+      let data: {
+        googlePlacesReady?: boolean;
+        places?: unknown[];
+        prospects?: unknown[];
+      };
+      try {
+        data = await apiGet("/api/v1/rep/google-places");
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "";
+        if (!/404|غير موجود|not found/i.test(msg)) throw e;
+        data = await apiGet("/api/v1/rep/stores/daily");
+      }
+      setGooglePlacesReady(data.googlePlacesReady !== false);
+      const raw = (data.places ?? data.prospects ?? []) as {
+        id: number;
+        name: string;
+        addressText?: string | null;
+        location: { lat: number; lng: number };
+        areaName?: string | null;
+        googleMapsUrl?: string | null;
+      }[];
+      setGooglePlaces(mapGoogleProspects(raw));
+    } catch (e) {
+      setGooglePlaces([]);
+      setGooglePlacesReady(false);
+      showToast(e instanceof Error ? e.message : t.googleTabLoadFailed, "error");
+    } finally {
+      setGooglePlacesLoading(false);
+    }
+  }, [apiGet, mapGoogleProspects, showToast, token]);
 
   const clearSession = useCallback(() => {
     cancelSystemQrScanSession();
@@ -565,6 +650,8 @@ export default function App() {
     setProfileLoading(false);
     setActiveStore(null);
     setDailyStores([]);
+    setGooglePlaces([]);
+    setGooglePlacesReady(true);
     setPeekStore(null);
     setMode("home");
     setBottomTab("home");
@@ -799,6 +886,22 @@ export default function App() {
       void loadDailyStores();
     }
   }, [token, bottomTab, mode, loadDailyStores]);
+
+  useEffect(() => {
+    if (token && bottomTab === "google" && mode !== "store" && mode !== "register") {
+      void loadGooglePlaces();
+    }
+  }, [token, bottomTab, mode, loadGooglePlaces]);
+
+  const onGoogleRefresh = useCallback(async () => {
+    if (!token) return;
+    setGoogleRefreshing(true);
+    try {
+      await loadGooglePlaces();
+    } finally {
+      setGoogleRefreshing(false);
+    }
+  }, [token, loadGooglePlaces]);
 
   useEffect(() => {
     if (token) void loadInventory();
@@ -1110,6 +1213,11 @@ export default function App() {
                   </Text>
                   <Text style={styles.headerSub}>{t.homeSubtitle}</Text>
                 </View>
+              ) : bottomTab === "google" ? (
+                <View style={styles.headerText}>
+                  <Text style={styles.headerGreeting}>{t.navGoogle}</Text>
+                  <Text style={styles.headerSub}>{t.googleTabHint}</Text>
+                </View>
               ) : null}
             </View>
             <Pressable
@@ -1173,8 +1281,10 @@ export default function App() {
           contentContainerStyle={[styles.page, pageFrameStyle, { paddingBottom: insets.bottom + 88 }]}
           keyboardShouldPersistTaps="handled"
           refreshControl={
-            mode === "home" ? (
+            bottomTab === "home" && mode === "home" ? (
               <RefreshControl refreshing={homeRefreshing} onRefresh={onHomeRefresh} tintColor={accent} colors={[accent]} />
+            ) : bottomTab === "google" ? (
+              <RefreshControl refreshing={googleRefreshing} onRefresh={onGoogleRefresh} tintColor="#ea580c" colors={["#ea580c"]} />
             ) : mode === "store" && activeStore ? (
               <RefreshControl
                 refreshing={storeRefreshing}
@@ -1233,10 +1343,35 @@ export default function App() {
               expandAll: t.dailyStoresExpandAll,
               collapseAll: t.dailyStoresCollapseAll,
               noSearchResults: t.dailyStoresNoSearchResults,
+              visitQr: t.dailyStoresVisitQr,
             }}
             onSelectStore={setPeekStore}
           />
         </>
+      )}
+
+      {bottomTab === "google" && mode !== "store" && mode !== "register" && (
+        <GooglePlacesByArea
+          places={googlePlaces}
+          repAreaNames={repAreaNames}
+          loading={googlePlacesLoading}
+          notReady={!googlePlacesReady}
+          title={t.googleTabTitle}
+          labels={{
+            hint: t.googleTabHint,
+            empty: t.googleTabEmpty,
+            notReady: t.googleTabNotReady,
+            unknownArea: t.dailyStoresUnknownArea,
+            storeCount: t.dailyStoresAreaCount,
+            searchPlaceholder: t.googleTabSearchPlaceholder,
+            expandAll: t.dailyStoresExpandAll,
+            collapseAll: t.dailyStoresCollapseAll,
+            noSearchResults: t.dailyStoresNoSearchResults,
+            googlePill: t.googleTabPill,
+            openMaps: t.googleTabOpenMaps,
+          }}
+          onSelectPlace={setPeekStore}
+        />
       )}
 
       {bottomTab === "home" && activeStore && mode !== "store" && mode !== "register" && (
@@ -1603,6 +1738,19 @@ export default function App() {
             }}
           />
           <BottomNavItem
+            active={bottomTab === "google"}
+            label={t.navGoogle}
+            icon="map-outline"
+            iconActive="map"
+            activeColor="#ea580c"
+            activeBg="#ffedd5"
+            onPress={() => {
+              setBottomTab("google");
+              if (mode === "store") setMode("home");
+              void loadGooglePlaces();
+            }}
+          />
+          <BottomNavItem
             active={bottomTab === "inventory"}
             label={t.navInventory}
             icon="car-outline"
@@ -1723,19 +1871,28 @@ function BottomNavItem(props: {
   label: string;
   icon: ComponentProps<typeof Ionicons>["name"];
   iconActive: ComponentProps<typeof Ionicons>["name"];
+  activeColor?: string;
+  activeBg?: string;
   onPress: () => void;
 }) {
-  const color = props.active ? accent : muted;
+  const onColor = props.activeColor ?? accent;
+  const color = props.active ? onColor : muted;
   return (
     <Pressable
-      style={[styles.bottomTab, props.active && styles.bottomTabOn]}
+      style={[
+        styles.bottomTab,
+        props.active && (props.activeBg ? { backgroundColor: props.activeBg } : styles.bottomTabOn),
+      ]}
       onPress={props.onPress}
       accessibilityRole="button"
       accessibilityState={{ selected: props.active }}
       accessibilityLabel={props.label}
     >
-      <Ionicons name={props.active ? props.iconActive : props.icon} size={22} color={color} />
-      <Text style={[styles.bottomTabText, props.active && styles.bottomTabTextOn]} numberOfLines={1}>
+      <Ionicons name={props.active ? props.iconActive : props.icon} size={20} color={color} />
+      <Text
+        style={[styles.bottomTabText, props.active && { ...styles.bottomTabTextOn, color: onColor }]}
+        numberOfLines={1}
+      >
         {props.label}
       </Text>
     </Pressable>
@@ -2217,14 +2374,15 @@ const styles = StyleSheet.create({
   },
   bottomTab: {
     flex: 1,
-    paddingVertical: 8,
+    minWidth: 0,
+    paddingVertical: 6,
     paddingHorizontal: 2,
     borderRadius: theme.radius.lg,
     alignItems: "center",
     justifyContent: "center",
-    gap: 3,
+    gap: 2,
   },
   bottomTabOn: { backgroundColor: theme.accentSoft },
-  bottomTabText: { color: muted, fontWeight: "600", fontSize: 10 },
-  bottomTabTextOn: { color: accent, fontWeight: "800", fontSize: 10 },
+  bottomTabText: { color: muted, fontWeight: "600", fontSize: 9, textAlign: "center" },
+  bottomTabTextOn: { color: accent, fontWeight: "800", fontSize: 9, textAlign: "center" },
 });

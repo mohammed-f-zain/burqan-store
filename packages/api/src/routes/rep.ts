@@ -20,6 +20,7 @@ import {
 } from "../utils/geo.js";
 import { parseQrPublicToken } from "../utils/qrToken.js";
 import { buildJordanVoronoiPayload } from "../utils/buildJordanVoronoiPayload.js";
+import { expandRepAreaIds } from "../utils/expandRepAreaIds.js";
 
 const router = Router();
 
@@ -389,13 +390,14 @@ router.post("/stores/register", repAuthMiddleware, async (req, res, next) => {
   }
 });
 
-/** All stores in rep areas; includes visit status for today (Asia/Amman calendar day). */
+/** All stores in rep areas + Google Maps prospects (supermarkets not yet on Burqan). */
 router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
   try {
     const rep = req.rep!;
     if (!rep.areaIds.length) {
-      return res.json({ stores: [] });
+      return res.json({ stores: [], prospects: [], googlePlacesReady: false });
     }
+    const areaFilterIds = await expandRepAreaIds(rep.areaIds);
     const { rows } = await query<{
       id: number;
       name: string;
@@ -431,11 +433,70 @@ router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
        JOIN areas a ON a.id = s.area_id
        WHERE s.area_id = ANY($1::int[])
        ORDER BY visited_today ASC, a.name ASC, s.name ASC`,
-      [rep.areaIds, rep.id]
+      [areaFilterIds, rep.id]
     );
+    let prospects: {
+      id: number;
+      name: string;
+      address_text: string | null;
+      location_lat: number;
+      location_lng: number;
+      area_name: string;
+      google_maps_url: string | null;
+    }[] = [];
+    let googlePlacesReady = false;
+    try {
+      const pr = await query<{
+        id: number;
+        name: string;
+        address_text: string | null;
+        location_lat: number;
+        location_lng: number;
+        area_name: string;
+        google_maps_url: string | null;
+      }>(
+        `SELECT g.id, g.name, g.address_text, g.location_lat, g.location_lng,
+                g.google_maps_url, COALESCE(a.name, 'منطقة غير محددة') AS area_name
+         FROM google_map_places g
+         LEFT JOIN areas a ON a.id = g.area_id
+         WHERE g.matched_store_id IS NULL
+           AND (
+             g.area_id = ANY($1::int[])
+             OR (
+               g.area_id IS NULL
+               AND EXISTS (
+                 SELECT 1 FROM areas rep_a
+                 WHERE rep_a.id = ANY($1::int[])
+                   AND rep_a.governorate IS NOT NULL
+                   AND rep_a.center_lat IS NOT NULL
+                   AND rep_a.center_lng IS NOT NULL
+                   AND (
+                     6371000 * acos(
+                       LEAST(1, GREATEST(-1,
+                         cos(radians(g.location_lat)) * cos(radians(rep_a.center_lat)) *
+                         cos(radians(rep_a.center_lng) - radians(g.location_lng)) +
+                         sin(radians(g.location_lat)) * sin(radians(rep_a.center_lat))
+                       ))
+                     )
+                   ) <= (COALESCE(rep_a.radius_km, 2.5) * 1000 * 8)
+               )
+             )
+           )
+         ORDER BY area_name ASC, g.name ASC
+         LIMIT 3000`,
+        [areaFilterIds]
+      );
+      prospects = pr.rows;
+      googlePlacesReady = true;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!msg.includes("google_map_places")) throw e;
+    }
+
     res.json({
       stores: rows.map((s) => ({
         id: s.id,
+        source: "burqan" as const,
         name: s.name,
         phone: s.phone,
         ownerName: s.owner_name,
@@ -445,6 +506,98 @@ router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
         deferredPaymentEnabled: s.deferred_payment_enabled,
         visitedToday: s.visited_today,
         visitNote: s.visit_note,
+      })),
+      prospects: prospects.map((p) => ({
+        id: p.id,
+        source: "google" as const,
+        name: p.name,
+        addressText: p.address_text,
+        location: { lat: p.location_lat, lng: p.location_lng },
+        areaName: p.area_name,
+        googleMapsUrl: p.google_maps_url,
+      })),
+      googlePlacesReady,
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** Google Maps supermarkets / stores in rep areas (for mobile Google tab). */
+router.get("/google-places", repAuthMiddleware, async (req, res, next) => {
+  try {
+    const rep = req.rep!;
+    if (!rep.areaIds.length) {
+      return res.json({ places: [], googlePlacesReady: false });
+    }
+    const areaFilterIds = await expandRepAreaIds(rep.areaIds);
+    let places: {
+      id: number;
+      name: string;
+      address_text: string | null;
+      location_lat: number;
+      location_lng: number;
+      area_name: string;
+      google_maps_url: string | null;
+    }[] = [];
+    let googlePlacesReady = false;
+    try {
+      const pr = await query<{
+        id: number;
+        name: string;
+        address_text: string | null;
+        location_lat: number;
+        location_lng: number;
+        area_name: string;
+        google_maps_url: string | null;
+      }>(
+        `SELECT g.id, g.name, g.address_text, g.location_lat, g.location_lng,
+                g.google_maps_url, COALESCE(a.name, 'منطقة غير محددة') AS area_name
+         FROM google_map_places g
+         LEFT JOIN areas a ON a.id = g.area_id
+         WHERE g.matched_store_id IS NULL
+           AND (
+             g.area_id = ANY($1::int[])
+             OR (
+               g.area_id IS NULL
+               AND EXISTS (
+                 SELECT 1 FROM areas rep_a
+                 WHERE rep_a.id = ANY($1::int[])
+                   AND rep_a.governorate IS NOT NULL
+                   AND rep_a.center_lat IS NOT NULL
+                   AND rep_a.center_lng IS NOT NULL
+                   AND (
+                     6371000 * acos(
+                       LEAST(1, GREATEST(-1,
+                         cos(radians(g.location_lat)) * cos(radians(rep_a.center_lat)) *
+                         cos(radians(rep_a.center_lng) - radians(g.location_lng)) +
+                         sin(radians(g.location_lat)) * sin(radians(rep_a.center_lat))
+                       ))
+                     )
+                   ) <= (COALESCE(rep_a.radius_km, 2.5) * 1000 * 8)
+               )
+             )
+           )
+         ORDER BY area_name ASC, g.name ASC
+         LIMIT 3000`,
+        [areaFilterIds]
+      );
+      places = pr.rows;
+      googlePlacesReady = true;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!msg.includes("google_map_places")) throw e;
+    }
+    res.json({
+      googlePlacesReady,
+      places: places.map((p) => ({
+        id: p.id,
+        source: "google" as const,
+        name: p.name,
+        addressText: p.address_text,
+        location: { lat: p.location_lat, lng: p.location_lng },
+        areaName: p.area_name,
+        googleMapsUrl: p.google_maps_url,
       })),
     });
   } catch (e) {

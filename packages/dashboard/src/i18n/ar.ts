@@ -363,6 +363,24 @@ export const ar = {
     cancel: "إلغاء",
     submitPay: "تسجيل",
     payDone: "تم تسجيل الدفعة.",
+    googleTitle: "متاجر Google Maps (بقالات / سوبرماركت)",
+    googleHint:
+      "استيراد أسماء ومواقع من Google Places — للمتاجر غير المسجّلة بعد في برقان (تحتاج QR من المندوب). يتطلب GOOGLE_MAPS_API_KEY مع Places API.",
+    googleDisabled: "Google Places غير مفعّل على الخادم.",
+    googleGov: "المحافظة",
+    googleImportBtn: "استيراد من Google",
+    googleImporting: "جاري الاستيراد…",
+    googleLoading: "جاري التحميل…",
+    googleEmpty: "لا توجد نتائج — اضغط استيراد من Google.",
+    googleUnmatchedOnly: "غير المسجّلة في برقان فقط",
+    googleOpenMaps: "فتح في Google Maps",
+    googleBurqanMatch: "متجر برقان",
+    googleProspect: "محتمل — غير مسجّل",
+    googleTruncated: (n: number) => `عرض 80 من ${n} — ضيّق المحافظة أو رشّح غير المسجّلة.`,
+    googleImportDone: (fetched: number, matched: number, points: number) =>
+      `تم جلب ${fetched} متجراً من Google (${points} نقطة بحث). ${matched} مطابقة لمتاجر برقان.`,
+    googleImportFailed: "تعذّر الاستيراد من Google Places.",
+    googleLoadFailed: "تعذّر تحميل قائمة Google.",
   },
 
   storeDetail: {

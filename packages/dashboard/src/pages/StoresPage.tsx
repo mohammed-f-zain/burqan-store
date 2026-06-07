@@ -4,6 +4,7 @@ import { QRCodeSVG } from "qrcode.react";
 
 import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
+import GooglePlacesPanel from "../components/GooglePlacesPanel";
 import StoreMap from "../components/StoreMap";
 import PaginationBar from "../components/PaginationBar";
 import { useClientPagination } from "../hooks/useClientPagination";
@@ -64,6 +65,7 @@ export default function StoresPage() {
 
   return (
     <div className="grid">
+      {can("stores.write") ? <GooglePlacesPanel /> : null}
       <div className="card">
         <h2>{t.stores.title}</h2>
         <p className="muted">{t.stores.hint}</p>

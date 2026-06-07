@@ -31,6 +31,7 @@ export type DailyStoresLabels = {
   expandAll: string;
   collapseAll: string;
   noSearchResults: string;
+  visitQr: string;
 };
 
 type AreaGroup = { areaName: string; stores: DailyStoreCard[] };
@@ -120,7 +121,8 @@ function matchesSearch(store: DailyStoreCard, q: string): boolean {
   return (
     store.name.toLowerCase().includes(needle) ||
     store.ownerName.toLowerCase().includes(needle) ||
-    (store.areaName?.toLowerCase().includes(needle) ?? false)
+    (store.areaName?.toLowerCase().includes(needle) ?? false) ||
+    (store.addressText?.toLowerCase().includes(needle) ?? false)
   );
 }
 
@@ -272,7 +274,7 @@ export default function DailyStoresByArea({
         </View>
       ) : (
         <>
-          {stores.every((s) => s.visitedToday) ? (
+          {stores.length > 0 && stores.every((s) => s.visitedToday) ? (
             <View style={styles.allDoneBanner}>
               <Ionicons name="checkmark-circle" size={22} color="#16a34a" />
               <Text style={styles.allDone}>{labels.allVisited}</Text>
@@ -286,7 +288,7 @@ export default function DailyStoresByArea({
             const pending = group.stores.length - visited;
             const areaProgress = group.stores.length > 0 ? visited / group.stores.length : 0;
             const areaDisplay = parseAreaName(group.areaName, labels.unknownArea);
-            const allDone = pending === 0;
+            const allDone = group.stores.length > 0 && pending === 0;
 
             return (
               <View key={key} style={styles.areaBlock}>
@@ -339,6 +341,7 @@ export default function DailyStoresByArea({
                         store={s}
                         isLast={idx === group.stores.length - 1}
                         visitedLabel={labels.visited}
+                        visitQrLabel={labels.visitQr}
                         onPress={() => onSelectStore(s)}
                       />
                     ))
@@ -356,11 +359,13 @@ function StoreRow({
   store,
   isLast,
   visitedLabel,
+  visitQrLabel,
   onPress,
 }: {
   store: DailyStoreCard;
   isLast: boolean;
   visitedLabel: string;
+  visitQrLabel: string;
   onPress: () => void;
 }) {
   const done = !!store.visitedToday;
@@ -374,7 +379,12 @@ function StoreRow({
       ]}
       onPress={onPress}
     >
-      <View style={[styles.storeStatusDot, done ? styles.storeStatusDone : styles.storeStatusPending]} />
+      <View
+        style={[
+          styles.storeStatusDot,
+          done ? styles.storeStatusDone : styles.storeStatusPending,
+        ]}
+      />
       <View style={styles.storeBody}>
         <Text style={styles.storeName} numberOfLines={1}>
           {store.name}
@@ -395,7 +405,7 @@ function StoreRow({
         </View>
       ) : (
         <View style={styles.visitPill}>
-          <Text style={styles.visitPillText}>زيارة</Text>
+          <Text style={styles.visitPillText}>{visitQrLabel}</Text>
           <Ionicons name="chevron-back" size={16} color={accent} />
         </View>
       )}
