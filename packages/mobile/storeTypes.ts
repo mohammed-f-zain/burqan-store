@@ -12,6 +12,7 @@ export type DailyStoreCard = {
   visitedToday?: boolean;
   visitNote?: string | null;
   googleMapsUrl?: string | null;
+  googlePlaceId?: string | null;
 };
 
 export type StoreBrief = {

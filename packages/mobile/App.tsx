@@ -568,6 +568,7 @@ export default function App() {
         location: { lat: number; lng: number };
         areaName?: string | null;
         googleMapsUrl?: string | null;
+        googlePlaceId?: string | null;
       }[]
     ): DailyStoreCard[] =>
       prospects.map((p) => ({
@@ -582,6 +583,7 @@ export default function App() {
         deferredPaymentEnabled: false,
         visitedToday: false,
         googleMapsUrl: p.googleMapsUrl ?? null,
+        googlePlaceId: p.googlePlaceId ?? null,
       })),
     []
   );
@@ -630,6 +632,7 @@ export default function App() {
         location: { lat: number; lng: number };
         areaName?: string | null;
         googleMapsUrl?: string | null;
+        googlePlaceId?: string | null;
       }[];
       setGooglePlaces(mapGoogleProspects(raw));
     } catch (e) {

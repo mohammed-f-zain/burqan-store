@@ -21,6 +21,7 @@ import {
 import { parseQrPublicToken } from "../utils/qrToken.js";
 import { buildJordanVoronoiPayload } from "../utils/buildJordanVoronoiPayload.js";
 import { expandRepAreaIds } from "../utils/expandRepAreaIds.js";
+import { AREA_DISPLAY_NAME_SQL } from "../utils/googlePlaceAreaSql.js";
 
 const router = Router();
 
@@ -437,6 +438,7 @@ router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
     );
     let prospects: {
       id: number;
+      place_id: string;
       name: string;
       address_text: string | null;
       location_lat: number;
@@ -448,6 +450,7 @@ router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
     try {
       const pr = await query<{
         id: number;
+        place_id: string;
         name: string;
         address_text: string | null;
         location_lat: number;
@@ -455,33 +458,13 @@ router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
         area_name: string;
         google_maps_url: string | null;
       }>(
-        `SELECT g.id, g.name, g.address_text, g.location_lat, g.location_lng,
-                g.google_maps_url, COALESCE(a.name, 'منطقة غير محددة') AS area_name
+        `SELECT g.id, g.place_id, g.name, g.address_text, g.location_lat, g.location_lng,
+                g.google_maps_url,
+                COALESCE(${AREA_DISPLAY_NAME_SQL}, 'منطقة غير محددة') AS area_name
          FROM google_map_places g
          LEFT JOIN areas a ON a.id = g.area_id
          WHERE g.matched_store_id IS NULL
-           AND (
-             g.area_id = ANY($1::int[])
-             OR (
-               g.area_id IS NULL
-               AND EXISTS (
-                 SELECT 1 FROM areas rep_a
-                 WHERE rep_a.id = ANY($1::int[])
-                   AND rep_a.governorate IS NOT NULL
-                   AND rep_a.center_lat IS NOT NULL
-                   AND rep_a.center_lng IS NOT NULL
-                   AND (
-                     6371000 * acos(
-                       LEAST(1, GREATEST(-1,
-                         cos(radians(g.location_lat)) * cos(radians(rep_a.center_lat)) *
-                         cos(radians(rep_a.center_lng) - radians(g.location_lng)) +
-                         sin(radians(g.location_lat)) * sin(radians(rep_a.center_lat))
-                       ))
-                     )
-                   ) <= (COALESCE(rep_a.radius_km, 2.5) * 1000 * 8)
-               )
-             )
-           )
+           AND g.area_id = ANY($1::int[])
          ORDER BY area_name ASC, g.name ASC
          LIMIT 3000`,
         [areaFilterIds]
@@ -515,6 +498,7 @@ router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
         location: { lat: p.location_lat, lng: p.location_lng },
         areaName: p.area_name,
         googleMapsUrl: p.google_maps_url,
+        googlePlaceId: p.place_id,
       })),
       googlePlacesReady,
     });
@@ -533,6 +517,7 @@ router.get("/google-places", repAuthMiddleware, async (req, res, next) => {
     const areaFilterIds = await expandRepAreaIds(rep.areaIds);
     let places: {
       id: number;
+      place_id: string;
       name: string;
       address_text: string | null;
       location_lat: number;
@@ -544,6 +529,7 @@ router.get("/google-places", repAuthMiddleware, async (req, res, next) => {
     try {
       const pr = await query<{
         id: number;
+        place_id: string;
         name: string;
         address_text: string | null;
         location_lat: number;
@@ -551,33 +537,13 @@ router.get("/google-places", repAuthMiddleware, async (req, res, next) => {
         area_name: string;
         google_maps_url: string | null;
       }>(
-        `SELECT g.id, g.name, g.address_text, g.location_lat, g.location_lng,
-                g.google_maps_url, COALESCE(a.name, 'منطقة غير محددة') AS area_name
+        `SELECT g.id, g.place_id, g.name, g.address_text, g.location_lat, g.location_lng,
+                g.google_maps_url,
+                COALESCE(${AREA_DISPLAY_NAME_SQL}, 'منطقة غير محددة') AS area_name
          FROM google_map_places g
          LEFT JOIN areas a ON a.id = g.area_id
          WHERE g.matched_store_id IS NULL
-           AND (
-             g.area_id = ANY($1::int[])
-             OR (
-               g.area_id IS NULL
-               AND EXISTS (
-                 SELECT 1 FROM areas rep_a
-                 WHERE rep_a.id = ANY($1::int[])
-                   AND rep_a.governorate IS NOT NULL
-                   AND rep_a.center_lat IS NOT NULL
-                   AND rep_a.center_lng IS NOT NULL
-                   AND (
-                     6371000 * acos(
-                       LEAST(1, GREATEST(-1,
-                         cos(radians(g.location_lat)) * cos(radians(rep_a.center_lat)) *
-                         cos(radians(rep_a.center_lng) - radians(g.location_lng)) +
-                         sin(radians(g.location_lat)) * sin(radians(rep_a.center_lat))
-                       ))
-                     )
-                   ) <= (COALESCE(rep_a.radius_km, 2.5) * 1000 * 8)
-               )
-             )
-           )
+           AND g.area_id = ANY($1::int[])
          ORDER BY area_name ASC, g.name ASC
          LIMIT 3000`,
         [areaFilterIds]
@@ -598,6 +564,7 @@ router.get("/google-places", repAuthMiddleware, async (req, res, next) => {
         location: { lat: p.location_lat, lng: p.location_lng },
         areaName: p.area_name,
         googleMapsUrl: p.google_maps_url,
+        googlePlaceId: p.place_id,
       })),
     });
   } catch (e) {

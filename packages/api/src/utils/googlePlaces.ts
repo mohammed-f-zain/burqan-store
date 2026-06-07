@@ -74,7 +74,7 @@ export async function nearbyPlacesSearch(
         addressText: r.vicinity ?? r.formatted_address ?? null,
         types: r.types ?? [],
         businessStatus: r.business_status ?? null,
-        mapsUrl: `https://www.google.com/maps/place/?q=place_id:${r.place_id}`,
+        mapsUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r.name)}&query_place_id=${encodeURIComponent(r.place_id)}`,
       });
     }
 

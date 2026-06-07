@@ -1,6 +1,6 @@
 import { JORDAN_GOVERNORATES } from "../data/jordanGovernorates.js";
 import { query } from "../db/pool.js";
-import { resolveAreaIdFromAllAreas } from "./geo.js";
+import { resolveAreaIdFromVoronoi } from "./resolveAreaIdFromVoronoi.js";
 import { GoogleNearbyPlace, isGooglePlacesEnabled, nearbyPlacesSearch } from "./googlePlaces.js";
 
 const KM_PER_DEG_LAT = 111.32;
@@ -66,7 +66,7 @@ async function findMatchedStoreId(lat: number, lng: number): Promise<number | nu
 }
 
 async function upsertPlace(place: GoogleNearbyPlace): Promise<boolean> {
-  const resolved = await resolveAreaIdFromAllAreas(place.lat, place.lng);
+  const resolved = await resolveAreaIdFromVoronoi(place.lat, place.lng);
   const matchedStoreId = await findMatchedStoreId(place.lat, place.lng);
 
   await query(

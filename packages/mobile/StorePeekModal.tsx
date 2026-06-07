@@ -1,6 +1,7 @@
 import { Linking, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { openInGoogleMaps } from "./openGoogleMaps";
 import type { DailyStoreCard } from "./storeTypes";
 import { theme } from "./theme";
 
@@ -29,9 +30,16 @@ export default function StorePeekModal(props: Props) {
   if (!store) return null;
 
   const isGoogle = store.source === "google";
-  const mapsUrl =
-    store.googleMapsUrl ??
-    `https://www.google.com/maps/search/?api=1&query=${store.location.lat},${store.location.lng}`;
+
+  const onOpenMaps = () => {
+    void openInGoogleMaps({
+      lat: store.location.lat,
+      lng: store.location.lng,
+      name: store.name,
+      googleMapsUrl: store.googleMapsUrl,
+      placeId: store.googlePlaceId,
+    });
+  };
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={props.onClose}>
@@ -83,7 +91,7 @@ export default function StorePeekModal(props: Props) {
             <Text style={styles.value}>{props.formatLocation(store)}</Text>
           </View>
 
-          <Pressable style={styles.mapsBtn} onPress={() => void Linking.openURL(mapsUrl)}>
+          <Pressable style={styles.mapsBtn} onPress={onOpenMaps}>
             <Text style={styles.mapsBtnText}>{labels.openInMaps}</Text>
           </Pressable>
 

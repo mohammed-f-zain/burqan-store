@@ -5,7 +5,6 @@ const googleMapsApiKey = (process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || "").tri
 
 module.exports = () => {
   const expo = { ...appJson.expo };
-  const plugins = [...(expo.plugins || [])];
 
   if (googleMapsApiKey) {
     expo.android = {
@@ -15,13 +14,8 @@ module.exports = () => {
         googleMaps: { apiKey: googleMapsApiKey },
       },
     };
-    plugins.push([
-      "react-native-maps",
-      {
-        androidGoogleMapsApiKey: googleMapsApiKey,
-      },
-    ]);
+    // react-native-maps has no Expo config plugin — android.config.googleMaps is enough for EAS/APK.
   }
 
-  return { expo: { ...expo, plugins } };
+  return { expo };
 };
