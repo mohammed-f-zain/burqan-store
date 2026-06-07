@@ -18,6 +18,7 @@ export type GooglePlacesLabels = {
   hint: string;
   empty: string;
   notReady: string;
+  truncated: (shown: number, total: number) => string;
   unknownArea: string;
   storeCount: (n: number) => string;
   searchPlaceholder: string;
@@ -110,6 +111,8 @@ type Props = {
   repAreaNames: string[];
   loading: boolean;
   notReady?: boolean;
+  truncated?: boolean;
+  totalCount?: number;
   labels: GooglePlacesLabels;
   title: string;
   onSelectPlace: (place: DailyStoreCard) => void;
@@ -120,6 +123,8 @@ export default function GooglePlacesByArea({
   repAreaNames,
   loading,
   notReady = false,
+  truncated = false,
+  totalCount = 0,
   labels,
   title,
   onSelectPlace,
@@ -165,11 +170,12 @@ export default function GooglePlacesByArea({
         ) : null}
       </View>
 
-      {!loading && places.length > 0 ? (
-        <Text style={styles.hint}>{labels.hint}</Text>
-      ) : (
-        <Text style={styles.hint}>{labels.hint}</Text>
-      )}
+      <Text style={styles.hint}>{labels.hint}</Text>
+      {!loading && truncated && totalCount > places.length ? (
+        <Text style={styles.truncatedHint}>
+          {labels.truncated(places.length, totalCount)}
+        </Text>
+      ) : null}
 
       {!loading && places.length > 0 ? (
         <>
@@ -313,6 +319,13 @@ const styles = StyleSheet.create({
   },
   headerBadgeText: { color: "#ea580c", fontSize: 12, fontWeight: "800" },
   hint: { color: muted, fontSize: 13, marginTop: 8, textAlign: "right", lineHeight: 20 },
+  truncatedHint: {
+    color: "#b45309",
+    fontSize: 12,
+    marginTop: 6,
+    textAlign: "right",
+    fontWeight: "700",
+  },
   searchWrap: {
     flexDirection: "row-reverse",
     alignItems: "center",

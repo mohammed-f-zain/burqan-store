@@ -214,6 +214,8 @@ const t = {
   googleTabSearchPlaceholder: "بحث عن متجر أو عنوان…",
   googleTabPill: "Google",
   googleTabOpenMaps: "فتح على الخريطة",
+  googleTabTruncated: (shown: number, total: number) =>
+    `عرض ${shown} من ${total} — استخدم البحث أو افتح منطقة محددة`,
   storeOwner: "صاحب المتجر",
   callStore: "اتصال بالمتجر",
   productsBadge: (n: number) => String(n),
@@ -416,6 +418,8 @@ export default function App() {
   const [googlePlacesReady, setGooglePlacesReady] = useState(true);
   const [dailyStoresLoading, setDailyStoresLoading] = useState(false);
   const [googlePlacesLoading, setGooglePlacesLoading] = useState(false);
+  const [googlePlacesTotal, setGooglePlacesTotal] = useState(0);
+  const [googlePlacesTruncated, setGooglePlacesTruncated] = useState(false);
   const [peekStore, setPeekStore] = useState<DailyStoreCard | null>(null);
   const [endVisitOpen, setEndVisitOpen] = useState(false);
   const [endVisitBusy, setEndVisitBusy] = useState(false);
@@ -625,6 +629,18 @@ export default function App() {
         data = await apiGet("/api/v1/rep/stores/daily");
       }
       setGooglePlacesReady(data.googlePlacesReady !== false);
+      const total =
+        typeof data.total === "number"
+          ? data.total
+          : typeof data.googlePlacesTotal === "number"
+            ? data.googlePlacesTotal
+            : 0;
+      const truncated =
+        data.truncated === true ||
+        data.googlePlacesTruncated === true ||
+        (total > 0 && (data.places ?? data.prospects ?? []).length < total);
+      setGooglePlacesTotal(total);
+      setGooglePlacesTruncated(truncated);
       const raw = (data.places ?? data.prospects ?? []) as {
         id: number;
         name: string;
@@ -637,6 +653,8 @@ export default function App() {
       setGooglePlaces(mapGoogleProspects(raw));
     } catch (e) {
       setGooglePlaces([]);
+      setGooglePlacesTotal(0);
+      setGooglePlacesTruncated(false);
       setGooglePlacesReady(false);
       showToast(e instanceof Error ? e.message : t.googleTabLoadFailed, "error");
     } finally {
@@ -1359,9 +1377,12 @@ export default function App() {
           repAreaNames={repAreaNames}
           loading={googlePlacesLoading}
           notReady={!googlePlacesReady}
+          truncated={googlePlacesTruncated}
+          totalCount={googlePlacesTotal}
           title={t.googleTabTitle}
           labels={{
             hint: t.googleTabHint,
+            truncated: t.googleTabTruncated,
             empty: t.googleTabEmpty,
             notReady: t.googleTabNotReady,
             unknownArea: t.dailyStoresUnknownArea,

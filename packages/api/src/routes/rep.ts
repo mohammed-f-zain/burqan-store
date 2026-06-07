@@ -21,7 +21,7 @@ import {
 import { parseQrPublicToken } from "../utils/qrToken.js";
 import { buildJordanVoronoiPayload } from "../utils/buildJordanVoronoiPayload.js";
 import { expandRepAreaIds } from "../utils/expandRepAreaIds.js";
-import { AREA_DISPLAY_NAME_SQL } from "../utils/googlePlaceAreaSql.js";
+import { AREA_DISPLAY_NAME_SQL, REP_GOOGLE_PLACES_LIMIT } from "../utils/googlePlaceAreaSql.js";
 
 const router = Router();
 
@@ -447,28 +447,38 @@ router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
       google_maps_url: string | null;
     }[] = [];
     let googlePlacesReady = false;
+    let googlePlacesTotal = 0;
     try {
-      const pr = await query<{
-        id: number;
-        place_id: string;
-        name: string;
-        address_text: string | null;
-        location_lat: number;
-        location_lng: number;
-        area_name: string;
-        google_maps_url: string | null;
-      }>(
-        `SELECT g.id, g.place_id, g.name, g.address_text, g.location_lat, g.location_lng,
-                g.google_maps_url,
-                COALESCE(${AREA_DISPLAY_NAME_SQL}, 'منطقة غير محددة') AS area_name
-         FROM google_map_places g
-         LEFT JOIN areas a ON a.id = g.area_id
-         WHERE g.matched_store_id IS NULL
-           AND g.area_id = ANY($1::int[])
-         ORDER BY area_name ASC, g.name ASC
-         LIMIT 3000`,
-        [areaFilterIds]
-      );
+      const [countRes, pr] = await Promise.all([
+        query<{ total: number }>(
+          `SELECT COUNT(*)::int AS total
+           FROM google_map_places g
+           WHERE g.matched_store_id IS NULL AND g.area_id = ANY($1::int[])`,
+          [areaFilterIds]
+        ),
+        query<{
+          id: number;
+          place_id: string;
+          name: string;
+          address_text: string | null;
+          location_lat: number;
+          location_lng: number;
+          area_name: string;
+          google_maps_url: string | null;
+        }>(
+          `SELECT g.id, g.place_id, g.name, g.address_text, g.location_lat, g.location_lng,
+                  g.google_maps_url,
+                  COALESCE(${AREA_DISPLAY_NAME_SQL}, 'منطقة غير محددة') AS area_name
+           FROM google_map_places g
+           LEFT JOIN areas a ON a.id = g.area_id
+           WHERE g.matched_store_id IS NULL
+             AND g.area_id = ANY($1::int[])
+           ORDER BY area_name ASC, g.name ASC
+           LIMIT $2`,
+          [areaFilterIds, REP_GOOGLE_PLACES_LIMIT]
+        ),
+      ]);
+      googlePlacesTotal = countRes.rows[0]?.total ?? 0;
       prospects = pr.rows;
       googlePlacesReady = true;
     } catch (e) {
@@ -501,6 +511,8 @@ router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
         googlePlaceId: p.place_id,
       })),
       googlePlacesReady,
+      googlePlacesTotal,
+      googlePlacesTruncated: prospects.length < googlePlacesTotal,
     });
   } catch (e) {
     next(e);
@@ -526,28 +538,38 @@ router.get("/google-places", repAuthMiddleware, async (req, res, next) => {
       google_maps_url: string | null;
     }[] = [];
     let googlePlacesReady = false;
+    let googlePlacesTotal = 0;
     try {
-      const pr = await query<{
-        id: number;
-        place_id: string;
-        name: string;
-        address_text: string | null;
-        location_lat: number;
-        location_lng: number;
-        area_name: string;
-        google_maps_url: string | null;
-      }>(
-        `SELECT g.id, g.place_id, g.name, g.address_text, g.location_lat, g.location_lng,
-                g.google_maps_url,
-                COALESCE(${AREA_DISPLAY_NAME_SQL}, 'منطقة غير محددة') AS area_name
-         FROM google_map_places g
-         LEFT JOIN areas a ON a.id = g.area_id
-         WHERE g.matched_store_id IS NULL
-           AND g.area_id = ANY($1::int[])
-         ORDER BY area_name ASC, g.name ASC
-         LIMIT 3000`,
-        [areaFilterIds]
-      );
+      const [countRes, pr] = await Promise.all([
+        query<{ total: number }>(
+          `SELECT COUNT(*)::int AS total
+           FROM google_map_places g
+           WHERE g.matched_store_id IS NULL AND g.area_id = ANY($1::int[])`,
+          [areaFilterIds]
+        ),
+        query<{
+          id: number;
+          place_id: string;
+          name: string;
+          address_text: string | null;
+          location_lat: number;
+          location_lng: number;
+          area_name: string;
+          google_maps_url: string | null;
+        }>(
+          `SELECT g.id, g.place_id, g.name, g.address_text, g.location_lat, g.location_lng,
+                  g.google_maps_url,
+                  COALESCE(${AREA_DISPLAY_NAME_SQL}, 'منطقة غير محددة') AS area_name
+           FROM google_map_places g
+           LEFT JOIN areas a ON a.id = g.area_id
+           WHERE g.matched_store_id IS NULL
+             AND g.area_id = ANY($1::int[])
+           ORDER BY area_name ASC, g.name ASC
+           LIMIT $2`,
+          [areaFilterIds, REP_GOOGLE_PLACES_LIMIT]
+        ),
+      ]);
+      googlePlacesTotal = countRes.rows[0]?.total ?? 0;
       places = pr.rows;
       googlePlacesReady = true;
     } catch (e) {
@@ -556,6 +578,8 @@ router.get("/google-places", repAuthMiddleware, async (req, res, next) => {
     }
     res.json({
       googlePlacesReady,
+      total: googlePlacesTotal,
+      truncated: places.length < googlePlacesTotal,
       places: places.map((p) => ({
         id: p.id,
         source: "google" as const,
