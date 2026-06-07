@@ -39,6 +39,7 @@ export default function GooglePlacesPanel() {
   const [enabled, setEnabled] = useState(true);
   const [gov, setGov] = useState("عمان");
   const [unmatchedOnly, setUnmatchedOnly] = useState(true);
+  const [regenerate, setRegenerate] = useState(false);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -68,12 +69,20 @@ export default function GooglePlacesPanel() {
     try {
       const { data } = await api.post<{
         searchedPoints: number;
+        searchQueries?: number;
+        cleared?: number;
         fetched: number;
         upserted: number;
         matchedBurqanStores: number;
-      }>("/google-places/import", { governorate: gov });
+      }>("/google-places/import", { governorate: gov, regenerate });
       toastSuccess(
-        t.stores.googleImportDone(data.fetched, data.matchedBurqanStores, data.searchedPoints)
+        t.stores.googleImportDone(
+          data.fetched,
+          data.matchedBurqanStores,
+          data.searchedPoints,
+          data.cleared ?? 0,
+          data.searchQueries ?? 0
+        )
       );
       await load();
     } catch (err) {
@@ -107,6 +116,14 @@ export default function GooglePlacesPanel() {
             onChange={(e) => setUnmatchedOnly(e.target.checked)}
           />
           {t.stores.googleUnmatchedOnly}
+        </label>
+        <label className="gov-coverage-toggle" title={t.stores.googleRegenerateHint}>
+          <input
+            type="checkbox"
+            checked={regenerate}
+            onChange={(e) => setRegenerate(e.target.checked)}
+          />
+          {t.stores.googleRegenerate}
         </label>
         <button type="submit" className="primary" disabled={busy || !enabled}>
           {busy ? t.stores.googleImporting : t.stores.googleImportBtn}

@@ -363,9 +363,12 @@ export const ar = {
     cancel: "إلغاء",
     submitPay: "تسجيل",
     payDone: "تم تسجيل الدفعة.",
-    googleTitle: "متاجر Google Maps (بقالات / سوبرماركت)",
+    googleTitle: "متاجر Google Maps (بقالات / سوبرماركت / أسواق)",
     googleHint:
-      "استيراد أسماء ومواقع من Google Places — للمتاجر غير المسجّلة بعد في برقان (تحتاج QR من المندوب). يتطلب GOOGLE_MAPS_API_KEY مع Places API.",
+      "استيراد بقالات وسوبرماركت وأسواق من Google Places — للمتاجر غير المسجّلة بعد في برقان. يتطلب GOOGLE_MAPS_API_KEY مع Places API.",
+    googleRegenerate: "إعادة استيراد (يمسح غير المسجّلة في المحافظة)",
+    googleRegenerateHint:
+      "يمسح المتاجر المحتملة غير المسجّلة في المحافظة ثم يستورد من جديد (بقالات، ماركت، سوق…).",
     googleDisabled: "Google Places غير مفعّل على الخادم.",
     googleGov: "المحافظة",
     googleImportBtn: "استيراد من Google",
@@ -377,8 +380,16 @@ export const ar = {
     googleBurqanMatch: "متجر برقان",
     googleProspect: "محتمل — غير مسجّل",
     googleTruncated: (n: number) => `عرض 80 من ${n} — ضيّق المحافظة أو رشّح غير المسجّلة.`,
-    googleImportDone: (fetched: number, matched: number, points: number) =>
-      `تم جلب ${fetched} متجراً من Google (${points} نقطة بحث). ${matched} مطابقة لمتاجر برقان.`,
+    googleImportDone: (
+      fetched: number,
+      matched: number,
+      points: number,
+      cleared: number,
+      queries: number
+    ) =>
+      cleared > 0
+        ? `أُزيل ${cleared} ثم جُلب ${fetched} (بقالة/ماركت/سوق) — ${queries} استعلام، ${points} نقطة شبكة. ${matched} مطابقة لبرقان.`
+        : `تم جلب ${fetched} متجراً (${queries} استعلام، ${points} نقطة شبكة). ${matched} مطابقة لمتاجر برقان.`,
     googleImportFailed: "تعذّر الاستيراد من Google Places.",
     googleLoadFailed: "تعذّر تحميل قائمة Google.",
   },

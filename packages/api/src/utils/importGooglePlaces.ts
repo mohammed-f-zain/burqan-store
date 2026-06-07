@@ -1,11 +1,39 @@
 import { JORDAN_GOVERNORATES } from "../data/jordanGovernorates.js";
 import { query } from "../db/pool.js";
+import {
+  isGroceryOrMarketPlace,
+  STRICT_GROCERY_TYPES,
+} from "./groceryPlaceFilter.js";
 import { resolveAreaIdFromVoronoi } from "./resolveAreaIdFromVoronoi.js";
 import { GoogleNearbyPlace, isGooglePlacesEnabled, nearbyPlacesSearch } from "./googlePlaces.js";
 
 const KM_PER_DEG_LAT = 111.32;
-const SEARCH_TYPES = ["grocery_or_supermarket", "supermarket", "convenience_store"] as const;
+
+/** Place types for Nearby Search — supermarkets + groceries + mini-markets. */
+const SEARCH_TYPES = [
+  "grocery_or_supermarket",
+  "supermarket",
+  "convenience_store",
+  "food",
+  "bakery",
+  "liquor_store",
+] as const;
+
+/** Arabic / English keywords for local markets and groceries. */
+const SEARCH_KEYWORDS = [
+  "بقالة",
+  "سوبرماركت",
+  "ماركت",
+  "سوق",
+  "ميني ماركت",
+  "grocery",
+  "supermarket",
+  "mini market",
+  "market",
+] as const;
+
 const MATCH_STORE_METERS = 85;
+const SEARCH_DELAY_MS = 250;
 
 const GOV_EXTENT_KM: Record<string, number> = {
   عمان: 14,
@@ -101,16 +129,42 @@ async function upsertPlace(place: GoogleNearbyPlace): Promise<boolean> {
   return matchedStoreId != null;
 }
 
+/** Remove unmatched Google prospects so a governorate can be re-imported fresh. */
+export async function clearUnmatchedGooglePlaces(governorate?: string): Promise<number> {
+  if (governorate) {
+    const res = await query(
+      `DELETE FROM google_map_places g
+       USING areas a
+       WHERE g.area_id = a.id
+         AND a.governorate = $1
+         AND g.matched_store_id IS NULL`,
+      [governorate]
+    );
+    return res.rowCount ?? 0;
+  }
+  const res = await query(`DELETE FROM google_map_places WHERE matched_store_id IS NULL`);
+  return res.rowCount ?? 0;
+}
+
+function shouldKeepPlace(place: GoogleNearbyPlace, strictType: boolean): boolean {
+  if (strictType) return true;
+  return isGroceryOrMarketPlace(place);
+}
+
 export type ImportGooglePlacesOptions = {
   governorate?: string;
   lat?: number;
   lng?: number;
   radiusM?: number;
   gridStepKm?: number;
+  /** Delete unmatched rows for the governorate (or all) before re-importing. */
+  regenerate?: boolean;
 };
 
 export type ImportGooglePlacesResult = {
   searchedPoints: number;
+  searchQueries: number;
+  cleared: number;
   fetched: number;
   upserted: number;
   matchedBurqanStores: number;
@@ -121,6 +175,11 @@ export async function importGooglePlaces(
 ): Promise<ImportGooglePlacesResult> {
   if (!isGooglePlacesEnabled()) {
     throw new Error("GOOGLE_MAPS_API_KEY غير مضبوط — فعّل Places API على نفس المفتاح");
+  }
+
+  let cleared = 0;
+  if (opts.regenerate) {
+    cleared = await clearUnmatchedGooglePlaces(opts.governorate);
   }
 
   const radiusM = opts.radiusM ?? 1400;
@@ -138,11 +197,25 @@ export async function importGooglePlaces(
   }
 
   const byPlaceId = new Map<string, GoogleNearbyPlace>();
+  let searchQueries = 0;
+
   for (const c of centers) {
     for (const type of SEARCH_TYPES) {
-      const batch = await nearbyPlacesSearch(c.lat, c.lng, radiusM, type);
-      for (const p of batch) byPlaceId.set(p.placeId, p);
-      await new Promise((r) => setTimeout(r, 250));
+      const strict = STRICT_GROCERY_TYPES.has(type);
+      const batch = await nearbyPlacesSearch({ lat: c.lat, lng: c.lng, radiusM, type });
+      searchQueries++;
+      for (const p of batch) {
+        if (shouldKeepPlace(p, strict)) byPlaceId.set(p.placeId, p);
+      }
+      await new Promise((r) => setTimeout(r, SEARCH_DELAY_MS));
+    }
+    for (const keyword of SEARCH_KEYWORDS) {
+      const batch = await nearbyPlacesSearch({ lat: c.lat, lng: c.lng, radiusM, keyword });
+      searchQueries++;
+      for (const p of batch) {
+        if (isGroceryOrMarketPlace(p)) byPlaceId.set(p.placeId, p);
+      }
+      await new Promise((r) => setTimeout(r, SEARCH_DELAY_MS));
     }
   }
 
@@ -155,6 +228,8 @@ export async function importGooglePlaces(
 
   return {
     searchedPoints: centers.length,
+    searchQueries,
+    cleared,
     fetched: byPlaceId.size,
     upserted,
     matchedBurqanStores,

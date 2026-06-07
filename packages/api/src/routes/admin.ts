@@ -1591,6 +1591,8 @@ const googlePlacesImportSchema = z.object({
   lng: z.coerce.number().min(-180).max(180).optional(),
   radiusM: z.coerce.number().min(200).max(50000).optional(),
   gridStepKm: z.coerce.number().min(0.8).max(12).optional(),
+  /** Clear unmatched prospects for the governorate (or all) before re-importing groceries/markets. */
+  regenerate: z.boolean().optional(),
 });
 
 router.get(

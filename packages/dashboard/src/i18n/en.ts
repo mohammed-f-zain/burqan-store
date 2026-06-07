@@ -364,9 +364,12 @@ export const en: Messages = {
     cancel: "Cancel",
     submitPay: "Submit",
     payDone: "Payment recorded.",
-    googleTitle: "Google Maps stores (grocery / supermarket)",
+    googleTitle: "Google Maps stores (grocery / supermarket / markets)",
     googleHint:
-      "Import names and locations from Google Places for shops not yet registered in Burqan (reps still assign QR). Requires GOOGLE_MAPS_API_KEY with Places API enabled.",
+      "Import groceries, supermarkets, and local markets from Google Places for shops not yet on Burqan. Requires GOOGLE_MAPS_API_KEY with Places API enabled.",
+    googleRegenerate: "Regenerate (clear unmatched in governorate)",
+    googleRegenerateHint:
+      "Deletes unmatched prospects in the selected governorate, then re-imports groceries, mini-markets, and markets.",
     googleDisabled: "Google Places is not configured on the server.",
     googleGov: "Governorate",
     googleImportBtn: "Import from Google",
@@ -378,8 +381,16 @@ export const en: Messages = {
     googleBurqanMatch: "Burqan store",
     googleProspect: "Prospect — not registered",
     googleTruncated: (n: number) => `Showing 80 of ${n} — narrow governorate or filter unmatched.`,
-    googleImportDone: (fetched: number, matched: number, points: number) =>
-      `Fetched ${fetched} places from Google (${points} search points). ${matched} match existing Burqan stores.`,
+    googleImportDone: (
+      fetched: number,
+      matched: number,
+      points: number,
+      cleared: number,
+      queries: number
+    ) =>
+      cleared > 0
+        ? `Cleared ${cleared}, then fetched ${fetched} groceries/markets (${queries} queries, ${points} grid points). ${matched} matched Burqan.`
+        : `Fetched ${fetched} places (${queries} queries, ${points} grid points). ${matched} match Burqan stores.`,
     googleImportFailed: "Could not import from Google Places.",
     googleLoadFailed: "Could not load Google places list.",
   },
