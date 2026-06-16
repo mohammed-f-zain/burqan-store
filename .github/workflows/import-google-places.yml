@@ -1,0 +1,93 @@
+# Start Google Places import on the VPS (runs in background — can take hours).
+#
+# Required secrets (same as deploy): VPS_HOST, VPS_USER, VPS_SSH_KEY, DEPLOY_PATH
+# Server must have GOOGLE_MAPS_API_KEY in packages/api/.env
+#
+# Run: Actions → "Import Google Places (VPS)" → Run workflow
+
+name: Import Google Places (VPS)
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Import mode
+        required: true
+        default: batch
+        type: choice
+        options:
+          - batch
+          - single
+          - amman_regenerate
+      governorate:
+        description: For single mode only (e.g. الزرقاء)
+        required: false
+        default: ""
+      backup_first:
+        description: Backup google_map_places table before import
+        required: true
+        default: true
+        type: boolean
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate secrets
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          ok=0
+          [[ -n "$VPS_HOST" ]] || { echo "::error::Missing VPS_HOST"; ok=1; }
+          [[ -n "$VPS_USER" ]] || { echo "::error::Missing VPS_USER"; ok=1; }
+          [[ -n "$VPS_SSH_KEY" ]] || { echo "::error::Missing VPS_SSH_KEY"; ok=1; }
+          [[ -n "$DEPLOY_PATH" ]] || { echo "::error::Missing DEPLOY_PATH"; ok=1; }
+          exit "$ok"
+
+      - name: Start import on VPS (background)
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          command_timeout: 10m
+          script_stop: true
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.DEPLOY_PATH }}"
+            git fetch origin main
+            git reset --hard origin/main
+            chmod +x scripts/vps-google-places-import.sh scripts/import-google-places-batch.sh
+
+            BACKUP_FLAG=""
+            if [[ "${{ inputs.backup_first }}" != "true" ]]; then
+              BACKUP_FLAG="--no-backup"
+            fi
+
+            case "${{ inputs.mode }}" in
+              batch)
+                bash scripts/vps-google-places-import.sh batch $BACKUP_FLAG
+                ;;
+              single)
+                GOV="${{ inputs.governorate }}"
+                if [[ -z "$GOV" ]]; then
+                  echo "::error::governorate input required for single mode"
+                  exit 1
+                fi
+                bash scripts/vps-google-places-import.sh single --governorate="$GOV" $BACKUP_FLAG
+                ;;
+              amman_regenerate)
+                bash scripts/vps-google-places-import.sh single --governorate=عمان --regenerate $BACKUP_FLAG
+                ;;
+              *)
+                echo "::error::Unknown mode"
+                exit 1
+                ;;
+            esac
+
+            echo ""
+            bash scripts/vps-google-places-import.sh status

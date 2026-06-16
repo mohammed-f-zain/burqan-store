@@ -122,7 +122,33 @@ bash /var/www/burqan-store/infra/bootstrap-burqan-vps.sh
 
 The script installs Node 20, nginx, PostgreSQL, pm2, UFW; creates DB/user `burqan`; clones the repo (default `https://github.com/mohammed-f-zain/burqan-store.git`); writes `packages/api/.env` once; migrates, seeds, builds API + dashboard; configures nginx; starts pm2.
 
-**Google Maps stores for reps:** enable Places API on `GOOGLE_MAPS_API_KEY`, run `npm run migrate:all`, then in the dashboard **Stores → Import from Google** per governorate. Reps see supermarkets on the app home screen grouped by area.
+**Google Maps stores for reps:** enable Places API on `GOOGLE_MAPS_API_KEY`, run `npm run migrate:all`, then import supermarkets/groceries per governorate.
+
+**Import all governorates except Amman (safe — keeps existing Amman data):**
+
+```bash
+cd /var/www/burqan-store
+bash scripts/vps-google-places-import.sh batch
+tail -f logs/google_import_runner.out
+```
+
+**Import one governorate (same structure as Amman):**
+
+```bash
+bash scripts/vps-google-places-import.sh single --governorate=عمان --regenerate
+bash scripts/vps-google-places-import.sh single --governorate=الزرقاء
+```
+
+**Check progress / counts:**
+
+```bash
+bash scripts/vps-google-places-import.sh status
+bash scripts/vps-google-places-import.sh counts
+```
+
+Or use GitHub Actions → **Import Google Places (VPS)** → Run workflow (mode: `batch`).
+
+After import finishes: `pm2 reload ecosystem.config.cjs --only burqan-api --update-env`
 
 **Area map labels (OpenStreetMap names):** after deploy, refresh neighborhoods from OSM seeds:
 
