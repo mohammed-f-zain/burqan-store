@@ -15,6 +15,7 @@
     "fetch:osm-jordan-areas": "tsx src/scripts/fetch-osm-jordan-neighborhoods.ts",
     "refresh:area-map-labels": "tsx src/scripts/refresh-area-map-labels.ts",
     "import:google-places": "tsx src/scripts/import-google-places.ts",
+    "import:google-places:batch": "bash ../../scripts/import-google-places-batch.sh",
     "refresh:google-place-areas": "tsx src/scripts/refresh-google-place-areas.ts",
     "geocode:jordan-areas": "tsx src/scripts/geocode-jordan-areas.ts",
     "reset:commerce": "tsx src/scripts/reset-commerce.ts",
