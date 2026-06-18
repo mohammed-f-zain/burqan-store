@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { api } from "../api";
-import AreaGovernorateGroups from "../components/AreaGovernorateGroups";
+import RepAreaMapPicker from "../components/RepAreaMapPicker";
 import { useAuth } from "../auth/AuthContext";
 import PaginationBar from "../components/PaginationBar";
 import { useClientPagination } from "../hooks/useClientPagination";
@@ -94,14 +94,6 @@ export default function RepresentativesPage() {
     void load().catch(() => toastError(t.reps.loadFailed));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- initial load only
   }, []);
-
-  function toggleArea(id: number) {
-    setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
-  }
-
-  function toggleEArea(id: number) {
-    setEPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
-  }
 
   async function onPickPhoto(file: File | null) {
     if (!file) return;
@@ -262,20 +254,7 @@ export default function RepresentativesPage() {
               {uploading && <p className="muted small">{t.reps.uploading}</p>}
             </div>
             <div className="muted small">{t.reps.areas}</div>
-            <AreaGovernorateGroups
-              areas={areas}
-              unassignedLabel={t.areas.unassignedGroup}
-              expandAllLabel={t.areas.expandAll}
-              collapseAllLabel={t.areas.collapseAll}
-              layout="grid"
-            >
-              {(a) => (
-                <label key={a.id} className="check area-gov-check">
-                  <input type="checkbox" checked={picked.includes(a.id)} onChange={() => toggleArea(a.id)} />
-                  <span>{a.name}</span>
-                </label>
-              )}
-            </AreaGovernorateGroups>
+            <RepAreaMapPicker areas={areas} selectedIds={picked} onChange={setPicked} />
             <button className="primary" type="submit">
               {t.reps.createBtn}
             </button>
@@ -359,7 +338,7 @@ export default function RepresentativesPage() {
 
       {editId != null && (
         <div className="modal-backdrop" onClick={() => closeEdit()} role="presentation">
-          <div className="modal card" onClick={(e) => e.stopPropagation()} role="dialog">
+          <div className="modal wide card" onClick={(e) => e.stopPropagation()} role="dialog">
             <h3>{t.reps.editTitle}</h3>
             <div className="form">
               <label>
@@ -406,20 +385,7 @@ export default function RepresentativesPage() {
                 )}
               </div>
               <div className="muted small">{t.reps.areas}</div>
-              <AreaGovernorateGroups
-                areas={areas}
-                unassignedLabel={t.areas.unassignedGroup}
-                expandAllLabel={t.areas.expandAll}
-                collapseAllLabel={t.areas.collapseAll}
-                layout="grid"
-              >
-                {(a) => (
-                  <label key={a.id} className="check area-gov-check">
-                    <input type="checkbox" checked={ePicked.includes(a.id)} onChange={() => toggleEArea(a.id)} />
-                    <span>{a.name}</span>
-                  </label>
-                )}
-              </AreaGovernorateGroups>
+              <RepAreaMapPicker areas={areas} selectedIds={ePicked} onChange={setEPicked} />
             </div>
             {canFillCar && (
               <p className="muted small" style={{ marginTop: 16 }}>

@@ -1405,6 +1405,30 @@ html[dir="rtl"] .swal-toast-burqan .swal2-icon {
   z-index: 0;
 }
 
+.rep-area-map-picker {
+  margin-top: 8px;
+}
+
+.rep-area-map-picker__hint {
+  margin: 0 0 10px;
+}
+
+.rep-area-map-picker__toolbar {
+  margin-bottom: 8px;
+}
+
+.rep-area-map-picker__count {
+  align-self: center;
+}
+
+.rep-area-map-picker__map .area-coverage-map {
+  height: min(48vh, 400px);
+}
+
+.modal .rep-area-map-picker__map .area-coverage-map {
+  height: min(42vh, 340px);
+}
+
 .area-voronoi-label {
   background: transparent;
   border: none;

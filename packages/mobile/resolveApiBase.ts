@@ -1,7 +1,13 @@
+import Constants from "expo-constants";
 import { NativeModules } from "react-native";
 
 /** Public API (TLS). Set EXPO_PUBLIC_API_URL at build time to override (e.g. staging). */
 export const DEFAULT_PRODUCTION_API = "https://api.burqan.store";
+
+function apiUrlFromExpoExtra(): string | null {
+  const extra = Constants.expoConfig?.extra as { apiUrl?: string } | undefined;
+  return normalizeApiUrl(extra?.apiUrl);
+}
 
 function normalizeApiUrl(raw: string | undefined): string | null {
   const t = raw?.trim();
@@ -70,8 +76,11 @@ export function resolveApiBase(): string {
   const inferredHost = __DEV__ && useLocal ? inferHostFromMetroBundle() : null;
   const inferred = inferredHost ? `http://${inferredHost}:4000` : null;
 
+  const extraUrl = apiUrlFromExpoExtra();
+  const productionFallback = envUrl ?? extraUrl ?? DEFAULT_PRODUCTION_API;
+
   if (!__DEV__) {
-    return envUrl ?? DEFAULT_PRODUCTION_API;
+    return productionFallback;
   }
 
   if (forceEnv && envUrl) return envUrl;
@@ -80,5 +89,5 @@ export function resolveApiBase(): string {
     if (envUrl) return envUrl;
     return "http://127.0.0.1:4000";
   }
-  return envUrl ?? DEFAULT_PRODUCTION_API;
+  return productionFallback;
 }

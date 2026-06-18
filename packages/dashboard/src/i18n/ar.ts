@@ -313,6 +313,11 @@ export const ar = {
     saveInventory: "حفظ المخزون",
     inventorySaved: "تم تحديث المخزون.",
     fillCarLink: "إدارة مخزون السيارة من صفحة تعبئة السيارة ←",
+    areaMapHint: "اضغط على المناطق الملونة في الخريطة لاختيارها أو إلغائها.",
+    areaMapSelected: (n: number) => `${n} منطقة محددة`,
+    areaMapSelectedInView: (n: number) => `${n} في العرض الحالي`,
+    areaMapSelectVisible: "تحديد المعروض",
+    areaMapClearVisible: "إلغاء المعروض",
   },
 
   fillCar: {

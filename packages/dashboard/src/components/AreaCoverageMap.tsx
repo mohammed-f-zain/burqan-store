@@ -32,6 +32,13 @@ const MICRO_STYLE = {
   weight: 0.8,
 };
 
+const SELECTED_STYLE = {
+  color: "#2563eb",
+  fillColor: "#3b82f6",
+  fillOpacity: 0.38,
+  weight: 2.5,
+};
+
 const HIGHLIGHT_STYLE = {
   weight: 3,
   fillOpacity: 0.32,
@@ -46,8 +53,11 @@ type LabelEntry = {
 type Props = {
   voronoi: VoronoiFeatureCollection | null;
   highlightId?: number | null;
+  selectedIds?: number[];
   onSelectArea?: (id: number) => void;
   emptyLabel: string;
+  className?: string;
+  showLabels?: boolean;
 };
 
 function syncLabelVisibility(map: L.Map, labels: LabelEntry[]) {
@@ -69,8 +79,11 @@ function syncLabelVisibility(map: L.Map, labels: LabelEntry[]) {
 export default function AreaCoverageMap({
   voronoi,
   highlightId,
+  selectedIds,
   onSelectArea,
   emptyLabel,
+  className,
+  showLabels = true,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -135,9 +148,17 @@ export default function AreaCoverageMap({
         };
         const isGov = Boolean(p?.isGovernorateCoverage);
         const isMicro = Boolean(p?.isMicroRegion);
-        const isHi = highlightId === Number(p?.areaId);
-        const base = isGov ? GOVERNORATE_STYLE : isMicro ? MICRO_STYLE : NEIGHBORHOOD_STYLE;
-        return { ...base, ...(isHi ? HIGHLIGHT_STYLE : {}) };
+        const areaIdNum = Number(p?.areaId);
+        const isSelected = selectedIds?.includes(areaIdNum) ?? false;
+        const isHi = highlightId === areaIdNum || isSelected;
+        const base = isSelected
+          ? SELECTED_STYLE
+          : isGov
+            ? GOVERNORATE_STYLE
+            : isMicro
+              ? MICRO_STYLE
+              : NEIGHBORHOOD_STYLE;
+        return { ...base, ...(isHi && !isSelected ? HIGHLIGHT_STYLE : {}) };
       },
       onEachFeature: (feature, l) => {
         const p = feature.properties as {
@@ -148,6 +169,7 @@ export default function AreaCoverageMap({
           centerLat?: number;
           centerLng?: number;
           isGovernorateCoverage?: boolean;
+          isMicroRegion?: boolean;
         };
         const areaId = Number(p.areaId);
         const name = String(p.name ?? "");
@@ -163,7 +185,7 @@ export default function AreaCoverageMap({
         const clng = Number(p.centerLng);
         const isGov = Boolean(p.isGovernorateCoverage);
         const isMicro = Boolean(p.isMicroRegion);
-        if (Number.isFinite(clat) && Number.isFinite(clng)) {
+        if (showLabels && Number.isFinite(clat) && Number.isFinite(clng)) {
           const marker = L.marker([clat, clng], {
             icon: L.divIcon({
               className: `area-voronoi-label${isMicro ? " area-voronoi-label--micro" : ""}`,
@@ -199,12 +221,12 @@ export default function AreaCoverageMap({
     }
 
     syncLabelVisibility(map, labelEntriesRef.current);
-  }, [voronoi, highlightId, onSelectArea]);
+  }, [voronoi, highlightId, selectedIds, onSelectArea, showLabels]);
 
   const isEmpty = !voronoi?.features?.length;
 
   return (
-    <div className="area-coverage-map-wrap">
+    <div className={`area-coverage-map-wrap${className ? ` ${className}` : ""}`}>
       {isEmpty ? <p className="muted small area-coverage-map-empty">{emptyLabel}</p> : null}
       <div ref={containerRef} className="area-coverage-map" role="application" aria-label="Area coverage map" />
     </div>

@@ -314,6 +314,11 @@ export const en: Messages = {
     saveInventory: "Save inventory",
     inventorySaved: "Inventory updated.",
     fillCarLink: "Manage van inventory on the Fill car page →",
+    areaMapHint: "Tap colored regions on the map to select or deselect areas.",
+    areaMapSelected: (n: number) => `${n} area${n === 1 ? "" : "s"} selected`,
+    areaMapSelectedInView: (n: number) => `${n} in current view`,
+    areaMapSelectVisible: "Select visible",
+    areaMapClearVisible: "Clear visible",
   },
 
   fillCar: {

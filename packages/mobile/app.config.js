@@ -5,6 +5,12 @@ const googleMapsApiKey = (process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || "").tri
 
 module.exports = () => {
   const expo = { ...appJson.expo };
+  const apiUrl = (process.env.EXPO_PUBLIC_API_URL || "https://api.burqan.store").replace(/\/$/, "");
+
+  expo.extra = {
+    ...(expo.extra ?? {}),
+    apiUrl,
+  };
 
   if (googleMapsApiKey) {
     expo.android = {
