@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 
 import { api } from "../api";
 import AreaCoverageMap from "./AreaCoverageMap";
@@ -12,7 +12,7 @@ const MAP_FILTER_ALL = "__all__";
 type Props = {
   areas: Area[];
   selectedIds: number[];
-  onChange: (ids: number[]) => void;
+  onChange: Dispatch<SetStateAction<number[]>>;
 };
 
 export default function RepAreaMapPicker({ areas, selectedIds, onChange }: Props) {
@@ -59,9 +59,9 @@ export default function RepAreaMapPicker({ areas, selectedIds, onChange }: Props
 
   const toggleArea = useCallback(
     (id: number) => {
-      onChange(selectedIds.includes(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id]);
+      onChange((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
     },
-    [onChange, selectedIds]
+    [onChange]
   );
 
   const visibleAreaIds = useMemo(() => {
@@ -131,7 +131,7 @@ export default function RepAreaMapPicker({ areas, selectedIds, onChange }: Props
         onSelectArea={toggleArea}
         emptyLabel={t.areas.mapNoGeo}
         className="rep-area-map-picker__map"
-        showLabels={false}
+        earlyLabels
       />
     </div>
   );

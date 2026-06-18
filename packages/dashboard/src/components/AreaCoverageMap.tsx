@@ -58,19 +58,51 @@ type Props = {
   emptyLabel: string;
   className?: string;
   showLabels?: boolean;
+  /** Show area names at slightly lower zoom (rep area picker). */
+  earlyLabels?: boolean;
 };
 
-function syncLabelVisibility(map: L.Map, labels: LabelEntry[]) {
+function getFeatureStyle(
+  feature: GeoJSON.Feature | undefined,
+  selectedIds: number[] | undefined,
+  highlightId: number | null | undefined
+): L.PathOptions {
+  const p = feature?.properties as {
+    isGovernorateCoverage?: boolean;
+    isMicroRegion?: boolean;
+    areaId?: number;
+  };
+  const isGov = Boolean(p?.isGovernorateCoverage);
+  const isMicro = Boolean(p?.isMicroRegion);
+  const areaIdNum = Number(p?.areaId);
+  const isSelected = selectedIds?.includes(areaIdNum) ?? false;
+  const isHi = highlightId === areaIdNum || isSelected;
+  const base = isSelected
+    ? SELECTED_STYLE
+    : isGov
+      ? GOVERNORATE_STYLE
+      : isMicro
+        ? MICRO_STYLE
+        : NEIGHBORHOOD_STYLE;
+  return { ...base, ...(isHi && !isSelected ? HIGHLIGHT_STYLE : {}) };
+}
+
+function syncLabelVisibility(
+  map: L.Map,
+  labels: LabelEntry[],
+  labelZoomOffset = 0
+) {
   const z = map.getZoom();
   for (const entry of labels) {
     const { marker, isGovernorateCoverage } = entry;
     const el = marker.getElement();
     if (!el) continue;
-    const minZ = isGovernorateCoverage
-      ? LABEL_ZOOM_GOV
-      : entry.isMicroRegion
-        ? LABEL_ZOOM_MICRO
-        : LABEL_ZOOM_NEIGHBORHOOD;
+    const minZ =
+      (isGovernorateCoverage
+        ? LABEL_ZOOM_GOV
+        : entry.isMicroRegion
+          ? LABEL_ZOOM_MICRO
+          : LABEL_ZOOM_NEIGHBORHOOD) - labelZoomOffset;
     el.style.display = z >= minZ ? "" : "none";
     el.classList.toggle("area-voronoi-label--dense", z >= 12);
   }
@@ -84,12 +116,15 @@ export default function AreaCoverageMap({
   emptyLabel,
   className,
   showLabels = true,
+  earlyLabels = false,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const voronoiLayerRef = useRef<L.GeoJSON | null>(null);
   const labelEntriesRef = useRef<LabelEntry[]>([]);
   const zoomHandlerRef = useRef<(() => void) | null>(null);
+  const voronoiFitKeyRef = useRef("");
+  const labelZoomOffset = earlyLabels ? 2 : 0;
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -103,7 +138,7 @@ export default function AreaCoverageMap({
       maxZoom: 19,
     }).addTo(map);
 
-    const onZoom = () => syncLabelVisibility(map, labelEntriesRef.current);
+    const onZoom = () => syncLabelVisibility(map, labelEntriesRef.current, labelZoomOffset);
     zoomHandlerRef.current = onZoom;
     map.on("zoomend", onZoom);
 
@@ -116,7 +151,7 @@ export default function AreaCoverageMap({
       labelEntriesRef.current = [];
       zoomHandlerRef.current = null;
     };
-  }, []);
+  }, [labelZoomOffset]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -134,32 +169,17 @@ export default function AreaCoverageMap({
     const features = voronoi?.features ?? [];
     if (!features.length) {
       map.setView(JORDAN_CENTER, JORDAN_ZOOM);
+      voronoiFitKeyRef.current = "";
       return;
     }
+
+    const fitKey = features.map((f) => f.properties.areaId).join(",");
+    const shouldFit = fitKey !== voronoiFitKeyRef.current;
 
     const bounds: L.LatLngExpression[] = [];
 
     const layer = L.geoJSON(voronoi as GeoJSON.FeatureCollection, {
-      style: (feature) => {
-        const p = feature?.properties as {
-          isGovernorateCoverage?: boolean;
-          isMicroRegion?: boolean;
-          areaId?: number;
-        };
-        const isGov = Boolean(p?.isGovernorateCoverage);
-        const isMicro = Boolean(p?.isMicroRegion);
-        const areaIdNum = Number(p?.areaId);
-        const isSelected = selectedIds?.includes(areaIdNum) ?? false;
-        const isHi = highlightId === areaIdNum || isSelected;
-        const base = isSelected
-          ? SELECTED_STYLE
-          : isGov
-            ? GOVERNORATE_STYLE
-            : isMicro
-              ? MICRO_STYLE
-              : NEIGHBORHOOD_STYLE;
-        return { ...base, ...(isHi && !isSelected ? HIGHLIGHT_STYLE : {}) };
-      },
+      style: (feature) => getFeatureStyle(feature, selectedIds, highlightId),
       onEachFeature: (feature, l) => {
         const p = feature.properties as {
           areaId?: number;
@@ -214,14 +234,27 @@ export default function AreaCoverageMap({
       if (ring?.[0]) bounds.push([ring[0][1], ring[0][0]]);
     }
 
-    if (bounds.length === 1) {
-      map.setView(bounds[0]!, 14);
-    } else if (bounds.length > 1) {
-      map.fitBounds(L.latLngBounds(bounds), { padding: [28, 28], maxZoom: 16 });
+    if (shouldFit) {
+      voronoiFitKeyRef.current = fitKey;
+      if (bounds.length === 1) {
+        map.setView(bounds[0]!, 14);
+      } else if (bounds.length > 1) {
+        map.fitBounds(L.latLngBounds(bounds), { padding: [28, 28], maxZoom: 16 });
+      }
     }
 
-    syncLabelVisibility(map, labelEntriesRef.current);
-  }, [voronoi, highlightId, selectedIds, onSelectArea, showLabels]);
+    syncLabelVisibility(map, labelEntriesRef.current, labelZoomOffset);
+  }, [voronoi, showLabels, onSelectArea, labelZoomOffset]);
+
+  useEffect(() => {
+    const layer = voronoiLayerRef.current;
+    if (!layer) return;
+    layer.eachLayer((l) => {
+      const path = l as L.Path & { feature?: GeoJSON.Feature };
+      if (!path.feature) return;
+      path.setStyle(getFeatureStyle(path.feature, selectedIds, highlightId));
+    });
+  }, [selectedIds, highlightId]);
 
   const isEmpty = !voronoi?.features?.length;
 
