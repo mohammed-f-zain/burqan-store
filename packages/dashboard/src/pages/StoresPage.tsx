@@ -9,7 +9,9 @@ import StoreMap from "../components/StoreMap";
 import PaginationBar from "../components/PaginationBar";
 import { useClientPagination } from "../hooks/useClientPagination";
 import { useLocale } from "../i18n/LocaleContext";
-import { toastSuccess } from "../lib/toast";
+import { pickAxiosErrorMessage } from "../lib/apiError";
+import { confirmDanger } from "../lib/swalConfirm";
+import { toastError, toastSuccess } from "../lib/toast";
 import { qrPayload } from "../utils/qrPayload";
 
 type Store = {
@@ -34,6 +36,7 @@ export default function StoresPage() {
   const [payNote, setPayNote] = useState("");
 
   const storePgn = useClientPagination(stores);
+  const canWrite = can("stores.write");
 
   async function load() {
     const { data } = await api.get<{ stores: Store[] }>("/stores");
@@ -48,6 +51,24 @@ export default function StoresPage() {
     const next = !s.deferred_payment_enabled;
     await api.patch(`/stores/${s.id}/deferred`, { enabled: next });
     await load();
+  }
+
+  async function removeStore(id: number) {
+    if (!canWrite) return;
+    const ok = await confirmDanger({
+      title: t.stores.deleteTitle,
+      text: t.stores.confirmDelete,
+      confirmText: t.stores.delete,
+      cancelText: t.stores.cancelDelete,
+    });
+    if (!ok) return;
+    try {
+      await api.delete(`/stores/${id}`);
+      toastSuccess(t.stores.deleted);
+      await load();
+    } catch (err) {
+      toastError(pickAxiosErrorMessage(err, t.stores.deleteFailed));
+    }
   }
 
   async function recordPayment(e: FormEvent) {
@@ -95,6 +116,7 @@ export default function StoresPage() {
                 <th>{t.stores.colQr}</th>
                 <th>{t.stores.colDeferred}</th>
                 {can("orders.record_payment") && <th>{t.stores.pay}</th>}
+                {canWrite && <th>{t.stores.colActions}</th>}
               </tr>
             </thead>
             <tbody>
@@ -142,6 +164,13 @@ export default function StoresPage() {
                     <td onClick={(e) => e.stopPropagation()}>
                       <button type="button" className="ghost" onClick={() => setPayStoreId(s.id)}>
                         {t.stores.pay}
+                      </button>
+                    </td>
+                  )}
+                  {canWrite && (
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <button type="button" className="ghost danger" onClick={() => void removeStore(s.id)}>
+                        {t.stores.delete}
                       </button>
                     </td>
                   )}

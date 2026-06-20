@@ -63,6 +63,7 @@ export default function StoreDetailPage() {
   const [payAmount, setPayAmount] = useState("");
   const [payNote, setPayNote] = useState("");
   const canDeleteOrder = can("orders.delete");
+  const canDeleteStore = can("stores.write");
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -93,6 +94,24 @@ export default function StoreDetailPage() {
     const next = !store.deferred_payment_enabled;
     await api.patch(`/stores/${store.id}/deferred`, { enabled: next });
     await load();
+  }
+
+  async function removeStore() {
+    if (!store || !canDeleteStore) return;
+    const ok = await confirmDanger({
+      title: t.stores.deleteTitle,
+      text: t.stores.confirmDelete,
+      confirmText: t.stores.delete,
+      cancelText: t.stores.cancelDelete,
+    });
+    if (!ok) return;
+    try {
+      await api.delete(`/stores/${store.id}`);
+      toastSuccess(t.stores.deleted);
+      navigate("/app/stores");
+    } catch (e) {
+      toastError(pickAxiosErrorMessage(e, t.stores.deleteFailed));
+    }
   }
 
   async function removeOrder(orderId: string) {
@@ -170,6 +189,11 @@ export default function StoreDetailPage() {
             {can("orders.record_payment") && (
               <button type="button" className="primary" onClick={() => setPayOpen(true)}>
                 {t.stores.pay}
+              </button>
+            )}
+            {canDeleteStore && (
+              <button type="button" className="ghost danger" onClick={() => void removeStore()}>
+                {t.stores.delete}
               </button>
             )}
           </div>

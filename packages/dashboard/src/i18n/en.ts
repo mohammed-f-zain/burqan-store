@@ -369,6 +369,14 @@ export const en: Messages = {
     cancel: "Cancel",
     submitPay: "Submit",
     payDone: "Payment recorded.",
+    colActions: "Actions",
+    delete: "Delete",
+    deleteTitle: "Delete this store?",
+    confirmDelete:
+      "The store will be removed permanently and its QR code returns to the pool. This cannot be undone. Stores with orders or prize redemptions cannot be deleted.",
+    cancelDelete: "Cancel",
+    deleted: "Store deleted.",
+    deleteFailed: "Could not delete store.",
     googleTitle: "Google Maps stores (grocery / supermarket / markets)",
     googleHint:
       "Import groceries, supermarkets, and local markets from Google Places for shops not yet on Burqan. Requires GOOGLE_MAPS_API_KEY with Places API enabled.",

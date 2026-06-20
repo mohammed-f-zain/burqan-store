@@ -1701,6 +1701,36 @@ router.get(
   }
 );
 
+router.delete(
+  "/stores/:id",
+  adminAuthMiddleware,
+  requireAdminPermission("stores.write"),
+  async (req, res, next) => {
+    try {
+      const id = z.coerce.number().int().positive().parse(req.params.id);
+      const { rows: ord } = await query<{ n: string }>(
+        `SELECT COUNT(*)::text AS n FROM orders WHERE store_id = $1`,
+        [id]
+      );
+      if (parseInt(ord[0]?.n ?? "0", 10) > 0) {
+        throw new HttpError(409, "لا يمكن حذف متجر مرتبط بطلبات.");
+      }
+      const { rows: redeem } = await query<{ n: string }>(
+        `SELECT COUNT(*)::text AS n FROM prize_redemptions WHERE store_id = $1`,
+        [id]
+      );
+      if (parseInt(redeem[0]?.n ?? "0", 10) > 0) {
+        throw new HttpError(409, "لا يمكن حذف متجر مرتبط باستبدالات جوائز.");
+      }
+      const { rowCount } = await query(`DELETE FROM stores WHERE id = $1`, [id]);
+      if (!rowCount) throw new HttpError(404, "المتجر غير موجود");
+      res.status(204).send();
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
 const visitsListQuerySchema = z.object({
   noBuyOnly: z
     .enum(["1", "0", "true", "false"])

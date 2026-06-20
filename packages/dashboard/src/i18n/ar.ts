@@ -368,6 +368,14 @@ export const ar = {
     cancel: "إلغاء",
     submitPay: "تسجيل",
     payDone: "تم تسجيل الدفعة.",
+    colActions: "إجراءات",
+    delete: "حذف",
+    deleteTitle: "حذف هذا المتجر؟",
+    confirmDelete:
+      "سيُحذف المتجر نهائياً ويُعاد رمز QR إلى المخزن. لا يمكن التراجع. لا يمكن الحذف إذا وُجدت طلبات أو استبدالات جوائز.",
+    cancelDelete: "إلغاء",
+    deleted: "تم حذف المتجر.",
+    deleteFailed: "تعذّر حذف المتجر.",
     googleTitle: "متاجر Google Maps (بقالات / سوبرماركت / أسواق)",
     googleHint:
       "استيراد بقالات وسوبرماركت وأسواق من Google Places — للمتاجر غير المسجّلة بعد في برقان. يتطلب GOOGLE_MAPS_API_KEY مع Places API.",
