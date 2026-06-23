@@ -248,6 +248,15 @@ html[data-theme="light"] body:has(.owner-shell) {
   .owner-dash-hero {
     grid-template-columns: 1.15fr 1fr;
   }
+
+  .owner-dash-hero--single {
+    grid-template-columns: 1fr;
+    max-width: 420px;
+  }
+}
+
+.owner-dash-hero--single {
+  grid-template-columns: 1fr;
 }
 
 .owner-dash-hero-card {

@@ -56,29 +56,10 @@ function DashMetric({
 
 export default function OwnerOverviewTab({ data, strings: o }: Props) {
   const currency = o.currency;
-  const balanceDue = data.totals.balanceDue;
 
   return (
     <div className="owner-dashboard">
-      <div className="owner-dash-hero">
-        <article className="owner-dash-hero-card owner-dash-hero-card--month">
-          <div className="owner-dash-hero-card-top">
-            <span className="owner-dash-hero-kicker">{o.statMonthTotal}</span>
-            <span className="owner-dash-hero-icon" aria-hidden>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                <path
-                  d="M4 7h16M4 12h10M4 17h6"
-                  stroke="currentColor"
-                  strokeWidth="1.75"
-                  strokeLinecap="round"
-                />
-              </svg>
-            </span>
-          </div>
-          <p className="owner-dash-hero-value">{ownerFormatMoney(data.stats.monthOrderTotal, currency)}</p>
-          <p className="owner-dash-hero-meta">{o.monthOrdersMeta(data.stats.monthOrderCount)}</p>
-        </article>
-
+      <div className="owner-dash-hero owner-dash-hero--single">
         <article className="owner-dash-hero-card owner-dash-hero-card--loyalty">
           <div className="owner-dash-hero-card-top">
             <span className="owner-dash-hero-kicker">{o.loyaltyBalance}</span>
@@ -97,35 +78,6 @@ export default function OwnerOverviewTab({ data, strings: o }: Props) {
         <div className="owner-dash-metrics">
           <DashMetric label={o.statOrders} value={data.stats.orderCount} />
           <DashMetric label={o.statVisits} value={data.stats.visitCount} tone="accent" />
-        </div>
-      </section>
-
-      <section className="owner-dash-panel owner-dash-panel--finance" aria-labelledby="owner-dash-finance">
-        <h2 id="owner-dash-finance" className="owner-dash-panel-title">
-          {o.overviewFinance}
-        </h2>
-        <div className="owner-dash-finance-grid">
-          <div className="owner-finance-item">
-            <span className="owner-finance-label">{o.deferredPurchases}</span>
-            <span className="owner-finance-value">{ownerFormatMoney(data.totals.deferredPurchases, currency)}</span>
-          </div>
-          <div className="owner-finance-item">
-            <span className="owner-finance-label">{o.cashPurchases}</span>
-            <span className="owner-finance-value">{ownerFormatMoney(data.totals.cashPurchases, currency)}</span>
-          </div>
-          <div className="owner-finance-item">
-            <span className="owner-finance-label">{o.payments}</span>
-            <span className="owner-finance-value owner-finance-value--positive">
-              {ownerFormatMoney(data.totals.paymentsRecorded, currency)}
-            </span>
-          </div>
-        </div>
-        <div
-          className={`owner-dash-balance${balanceDue > 0 ? " owner-dash-balance--due" : " owner-dash-balance--clear"}`}
-        >
-          <span className="owner-dash-balance-label">{o.balance}</span>
-          <span className="owner-dash-balance-value">{ownerFormatMoney(balanceDue, currency)}</span>
-          {balanceDue <= 0 ? <span className="owner-dash-balance-hint">{o.balanceClearHint}</span> : null}
         </div>
       </section>
 

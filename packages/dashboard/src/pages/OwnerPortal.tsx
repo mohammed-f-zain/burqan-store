@@ -5,12 +5,12 @@ import LoyaltyBadge from "../components/LoyaltyBadge";
 import OwnerOverviewTab from "../components/OwnerOverviewTab";
 import OwnerProductDetailSheet, { type OwnerCatalogProduct } from "../components/OwnerProductDetailSheet";
 import { mediaUrl } from "../lib/mediaUrl";
-import { openOwnerOrder, ownerFormatMoney } from "../owner/ownerFormat";
+import { ownerFormatMoney } from "../owner/ownerFormat";
 import { useOwnerArabic } from "../owner/useOwnerArabic";
 import { formatMarketDateTime } from "../utils/formatMarketDateTime";
 import { publicApi } from "../publicApi";
 
-type Tab = "overview" | "orders" | "products" | "prizes" | "visits";
+type Tab = "overview" | "products" | "prizes" | "visits";
 
 type OwnerPrizeProduct = {
   id: number;
@@ -216,7 +216,7 @@ export default function OwnerPortal() {
       </div>
 
       <nav className="owner-tabs" aria-label={t.owner.tabsAria}>
-        {(["overview", "orders", "products", "prizes", "visits"] as const).map((key) => (
+        {(["overview", "products", "prizes", "visits"] as const).map((key) => (
           <button key={key} type="button" className={`owner-tab${tab === key ? " owner-tab--on" : ""}`} onClick={() => setTab(key)}>
             {t.owner.tabs[key]}
           </button>
@@ -225,68 +225,6 @@ export default function OwnerPortal() {
 
       <main className="owner-main">
         {tab === "overview" && <OwnerOverviewTab data={data} strings={t.owner} />}
-
-        {tab === "orders" && (
-          <section className="owner-section owner-section--flush">
-            <h2 className="owner-section-title">{t.owner.ordersTitle}</h2>
-            {data.orders.length === 0 ? (
-              <p className="owner-empty">{t.owner.emptyOrders}</p>
-            ) : (
-              <ul className="owner-order-list">
-                {data.orders.map((order) => {
-                  const repImg = mediaUrl(order.rep_image_url);
-                  const isCash = order.payment_type === "cash";
-                  return (
-                    <li key={order.id}>
-                      <button
-                        type="button"
-                        className="owner-order-card"
-                        onClick={() => token && openOwnerOrder(order.id, token)}
-                      >
-                        <div className="owner-order-card-top">
-                          <div className="owner-order-card-id">
-                            <span className="owner-order-hash">#{order.id}</span>
-                            <span
-                              className={`owner-pay-pill${isCash ? " owner-pay-pill--cash" : " owner-pay-pill--deferred"}`}
-                            >
-                              {isCash ? t.owner.payCash : t.owner.payDeferred}
-                            </span>
-                          </div>
-                          <p className="owner-order-amount">
-                            {ownerFormatMoney(parseFloat(order.total_amount), t.owner.currency)}
-                          </p>
-                        </div>
-                        <p className="owner-order-date">{formatMarketDateTime(order.created_at, "ar")}</p>
-                        {order.products_preview ? (
-                          <p className="owner-order-preview">{order.products_preview}</p>
-                        ) : null}
-                        <div className="owner-order-meta">
-                          <span>{t.owner.itemsCount(order.line_count)}</span>
-                          <span>·</span>
-                          <span>{t.owner.unitsCount(order.item_qty)}</span>
-                        </div>
-                        <div className="owner-order-rep">
-                          {repImg ? (
-                            <img src={repImg} alt="" className="owner-rep-avatar owner-rep-avatar--sm" />
-                          ) : (
-                            <div className="owner-rep-avatar owner-rep-avatar--sm owner-rep-avatar--empty">
-                              {order.rep_name.slice(0, 1)}
-                            </div>
-                          )}
-                          <div className="owner-order-rep-text">
-                            <span className="owner-order-rep-name">{order.rep_name}</span>
-                            <span className="owner-order-rep-phone">{order.rep_phone}</span>
-                          </div>
-                        </div>
-                        <span className="owner-order-cta">{t.owner.viewOrder} ‹</span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
-        )}
 
         {tab === "products" && (
           <section className="owner-section">
