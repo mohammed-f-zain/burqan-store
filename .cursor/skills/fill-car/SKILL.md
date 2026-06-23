@@ -31,7 +31,7 @@ Permissions: `fill_car.read` / `fill_car.write` (or `reps.read` / `reps.write`).
 
 On each van inventory card show:
 
-- **Red `-N`** — units **sold** that day (from selected rep’s `lines` for that `product_id`).
+- **Red `-N`** — units **sold** not yet refilled: `max(0, soldToday − addedQty)` per product. Hides when edit quantity covers today’s sales for that product.
 - **Green `+N`** — units **added** vs loaded baseline when admin increases quantity in the input.
 
 Track `baselineQty` when inventory loads; compare `row.quantity - baselineQty[product_id]` for the green badge.

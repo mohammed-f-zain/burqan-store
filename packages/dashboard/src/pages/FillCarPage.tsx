@@ -325,7 +325,8 @@ export default function FillCarPage() {
                 const idx = inventory.findIndex((r) => r.product_id === row.product_id);
                 const soldQty = soldByProductId.get(row.product_id) ?? 0;
                 const baseQty = baselineQty[row.product_id] ?? row.quantity;
-                const addedQty = row.quantity - baseQty;
+                const addedQty = Math.max(0, row.quantity - baseQty);
+                const remainingSold = Math.max(0, soldQty - addedQty);
                 return (
                 <div key={row.product_id} className="fill-car-product-card">
                   {mediaUrl(row.image_url) ? (
@@ -336,11 +337,11 @@ export default function FillCarPage() {
                   <div className="fill-car-product-body">
                     <div className="fill-car-product-head">
                       <div className="strong">{row.name}</div>
-                      {(soldQty > 0 || addedQty !== 0) && (
+                      {(remainingSold > 0 || addedQty > 0 || row.quantity < baseQty) && (
                         <div className="fill-car-deltas" aria-label={t.fillCar.deltaLegend}>
-                          {soldQty > 0 && (
+                          {remainingSold > 0 && (
                             <span className="fill-car-delta fill-car-delta--sold" title={t.fillCar.soldDelta}>
-                              −{soldQty}
+                              −{remainingSold}
                             </span>
                           )}
                           {addedQty > 0 && (
@@ -348,9 +349,9 @@ export default function FillCarPage() {
                               +{addedQty}
                             </span>
                           )}
-                          {addedQty < 0 && (
+                          {row.quantity < baseQty && (
                             <span className="fill-car-delta fill-car-delta--sold" title={t.fillCar.addedDelta}>
-                              {addedQty}
+                              {row.quantity - baseQty}
                             </span>
                           )}
                         </div>
