@@ -1346,6 +1346,56 @@ html[dir="rtl"] .swal-toast-burqan .swal2-icon {
   min-width: 0;
 }
 
+.fill-car-product-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.fill-car-delta-legend {
+  margin: 4px 0 0;
+}
+
+.fill-car-deltas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.fill-car-delta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.25rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.fill-car-delta--sold {
+  color: #dc2626;
+  background: rgba(220, 38, 38, 0.12);
+}
+
+.fill-car-delta--added {
+  color: #16a34a;
+  background: rgba(22, 163, 74, 0.12);
+}
+
+html[data-theme="dark"] .fill-car-delta--sold {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.15);
+}
+
+html[data-theme="dark"] .fill-car-delta--added {
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.15);
+}
+
 .area-gov-wrap {
   width: 100%;
 }

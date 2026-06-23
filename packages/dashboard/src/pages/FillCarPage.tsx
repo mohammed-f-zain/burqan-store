@@ -45,6 +45,7 @@ export default function FillCarPage() {
   const [salesLoading, setSalesLoading] = useState(false);
   const [invLoading, setInvLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [baselineQty, setBaselineQty] = useState<Record<number, number>>({});
 
   const loadSales = useCallback(async () => {
     if (!canRead) return;
@@ -80,7 +81,11 @@ export default function FillCarPage() {
     setInvLoading(true);
     void api
       .get<{ inventory: InvRow[] }>(`/representatives/${repId}/inventory`)
-      .then((r) => setInventory(r.data.inventory ?? []))
+      .then((r) => {
+        const inv = r.data.inventory ?? [];
+        setInventory(inv);
+        setBaselineQty(Object.fromEntries(inv.map((row) => [row.product_id, row.quantity])));
+      })
       .catch((e) => toastError(pickAxiosErrorMessage(e, t.fillCar.loadFailed)))
       .finally(() => setInvLoading(false));
   }, [repId, canRead, t.fillCar.loadFailed]);
@@ -137,6 +142,14 @@ export default function FillCarPage() {
     fields: invFilterFields,
   });
 
+  const soldByProductId = useMemo(() => {
+    const m = new Map<number, number>();
+    for (const line of selected?.lines ?? []) {
+      m.set(line.product_id, line.quantity);
+    }
+    return m;
+  }, [selected?.lines]);
+
   async function save() {
     if (!canWrite || !repId) return;
     const ok = await confirmSave({
@@ -154,6 +167,7 @@ export default function FillCarPage() {
           quantity: row.quantity,
         })),
       });
+      setBaselineQty(Object.fromEntries(inventory.map((row) => [row.product_id, row.quantity])));
       toastSuccess(t.fillCar.saved);
     } catch (e) {
       toastError(pickAxiosErrorMessage(e, t.fillCar.saveFailed));
@@ -293,6 +307,7 @@ export default function FillCarPage() {
           <h4 className="strong" style={{ marginTop: 24 }}>
             {t.fillCar.inventorySection}
           </h4>
+          <p className="muted small fill-car-delta-legend">{t.fillCar.deltaLegend}</p>
           {invLoading ? (
             <p className="muted">{t.common.loading}</p>
           ) : (
@@ -308,6 +323,9 @@ export default function FillCarPage() {
             <div className="fill-car-product-grid">
               {invTable.filtered.map((row) => {
                 const idx = inventory.findIndex((r) => r.product_id === row.product_id);
+                const soldQty = soldByProductId.get(row.product_id) ?? 0;
+                const baseQty = baselineQty[row.product_id] ?? row.quantity;
+                const addedQty = row.quantity - baseQty;
                 return (
                 <div key={row.product_id} className="fill-car-product-card">
                   {mediaUrl(row.image_url) ? (
@@ -316,7 +334,28 @@ export default function FillCarPage() {
                     <div className="fill-car-product-img fill-car-product-img--empty" />
                   )}
                   <div className="fill-car-product-body">
-                    <div className="strong">{row.name}</div>
+                    <div className="fill-car-product-head">
+                      <div className="strong">{row.name}</div>
+                      {(soldQty > 0 || addedQty !== 0) && (
+                        <div className="fill-car-deltas" aria-label={t.fillCar.deltaLegend}>
+                          {soldQty > 0 && (
+                            <span className="fill-car-delta fill-car-delta--sold" title={t.fillCar.soldDelta}>
+                              −{soldQty}
+                            </span>
+                          )}
+                          {addedQty > 0 && (
+                            <span className="fill-car-delta fill-car-delta--added" title={t.fillCar.addedDelta}>
+                              +{addedQty}
+                            </span>
+                          )}
+                          {addedQty < 0 && (
+                            <span className="fill-car-delta fill-car-delta--sold" title={t.fillCar.addedDelta}>
+                              {addedQty}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
                     {row.designation && <p className="muted small">{row.designation}</p>}
                     <p className="muted small">
                       {row.price} · {t.fillCar.onCar}:{" "}
