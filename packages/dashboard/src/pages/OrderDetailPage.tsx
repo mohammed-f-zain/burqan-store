@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import PaginationBar from "../components/PaginationBar";
-import { useClientPagination } from "../hooks/useClientPagination";
+import TableFilterBar from "../components/TableFilterBar";
+import { useTableFilters } from "../hooks/useTableFilters";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
 import { confirmDanger } from "../lib/swalConfirm";
@@ -35,7 +36,22 @@ export default function OrderDetailPage() {
   const [loading, setLoading] = useState(true);
 
   const lines = order?.lines ?? [];
-  const linePgn = useClientPagination(lines);
+
+  const lineFilterFields = useMemo(
+    () => [
+      { id: "product", label: t.orders.product, type: "text" as const, getValue: (l: OrderDetail["lines"][number]) => l.productName },
+      { id: "qty", label: t.orders.qty, type: "text" as const, getValue: (l: OrderDetail["lines"][number]) => l.quantity },
+      { id: "unit", label: t.orders.unit, type: "text" as const, getValue: (l: OrderDetail["lines"][number]) => l.unitPrice },
+      { id: "line", label: t.orders.line, type: "text" as const, getValue: (l: OrderDetail["lines"][number]) => l.lineTotal },
+    ],
+    [t.orders.line, t.orders.product, t.orders.qty, t.orders.unit]
+  );
+
+  const lineTable = useTableFilters(lines, {
+    searchAccessors: ["productName", "quantity", "unitPrice", "lineTotal", "productId"],
+    fields: lineFilterFields,
+  });
+  const linePgn = lineTable.pagination;
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -138,7 +154,15 @@ export default function OrderDetailPage() {
           <p className="muted">{t.orderDetail.noLines}</p>
         ) : (
           <>
-            {lines.length > 0 && (
+            <TableFilterBar
+              {...lineTable}
+              onSearchChange={lineTable.setSearch}
+              onFilterChange={lineTable.setFilter}
+              onClear={lineTable.clearFilters}
+              onToggleFilters={() => lineTable.setShowFilters((v) => !v)}
+              labels={t.tableFilters}
+            />
+            {lineTable.filteredCount > 0 && (
               <PaginationBar
                 className="pagination-bar--flush"
                 page={linePgn.page}

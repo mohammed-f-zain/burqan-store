@@ -3,7 +3,9 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import { api } from "../api";
 import AreaCoverageMap from "../components/AreaCoverageMap";
 import AreaGovernorateGroups from "../components/AreaGovernorateGroups";
+import TableFilterBar from "../components/TableFilterBar";
 import { useAuth } from "../auth/AuthContext";
+import { useTableFilters } from "../hooks/useTableFilters";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
 import type { VoronoiFeatureCollection } from "../lib/voronoiGeo";
@@ -68,6 +70,22 @@ export default function AreasPage() {
     () => areas.filter((a) => !a.name.endsWith(GOVERNORATE_COVERAGE_SUFFIX)),
     [areas]
   );
+
+  const areaFilterFields = useMemo(
+    () => [
+      { id: "name", label: t.areas.newLabel, type: "text" as const, getValue: (a: Area) => a.name },
+      { id: "gov", label: t.areas.governorateLabel, type: "text" as const, getValue: (a: Area) => a.governorate },
+      { id: "id", label: "ID", type: "text" as const, getValue: (a: Area) => a.id },
+    ],
+    [t.areas.governorateLabel, t.areas.newLabel]
+  );
+
+  const areaListTable = useTableFilters(neighborhoodAreas, {
+    searchAccessors: ["id", "name", "governorate", (a) => `${a.center_lat},${a.center_lng}`, "radius_km"],
+    fields: areaFilterFields,
+  });
+
+  const filteredNeighborhoodAreas = areaListTable.filtered;
 
   const mapVoronoi = useMemo((): VoronoiFeatureCollection | null => {
     if (!voronoiGeo?.features?.length) return voronoiGeo;
@@ -343,8 +361,20 @@ export default function AreasPage() {
         {neighborhoodAreas.length === 0 ? (
           <p className="muted">{t.areas.empty}</p>
         ) : (
+          <>
+            <TableFilterBar
+              {...areaListTable}
+              onSearchChange={areaListTable.setSearch}
+              onFilterChange={areaListTable.setFilter}
+              onClear={areaListTable.clearFilters}
+              onToggleFilters={() => areaListTable.setShowFilters((v) => !v)}
+              labels={t.tableFilters}
+            />
+            {filteredNeighborhoodAreas.length === 0 ? (
+              <p className="muted">{t.tableFilters.noResults}</p>
+            ) : (
           <AreaGovernorateGroups
-            areas={neighborhoodAreas}
+            areas={filteredNeighborhoodAreas}
             unassignedLabel={t.areas.unassignedGroup}
             expandAllLabel={t.areas.expandAll}
             collapseAllLabel={t.areas.collapseAll}
@@ -402,6 +432,8 @@ export default function AreasPage() {
               </div>
             )}
           </AreaGovernorateGroups>
+            )}
+          </>
         )}
       </div>
     </div>

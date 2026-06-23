@@ -1,9 +1,10 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import PaginationBar from "../components/PaginationBar";
-import { useClientPagination } from "../hooks/useClientPagination";
+import TableFilterBar from "../components/TableFilterBar";
+import { useTableFilters } from "../hooks/useTableFilters";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
 import { toastError, toastSuccess } from "../lib/toast";
@@ -28,7 +29,33 @@ export default function AdminsPage() {
   const [fullName, setFullName] = useState("");
   const [roleId, setRoleId] = useState("");
 
-  const adminPgn = useClientPagination(admins);
+  const roleNameById = useMemo(() => {
+    const m = new Map<number, string>();
+    for (const r of roles) m.set(r.id, r.name);
+    return m;
+  }, [roles]);
+
+  const adminFilterFields = useMemo(
+    () => [
+      { id: "email", label: t.admins.colEmail, type: "text" as const, getValue: (a: Admin) => a.email },
+      { id: "name", label: t.admins.colName, type: "text" as const, getValue: (a: Admin) => a.full_name },
+      { id: "role", label: t.admins.role, type: "text" as const, getValue: (a: Admin) => roleNameById.get(a.role_id ?? -1) ?? "" },
+      { id: "super", label: t.admins.colSuper, type: "boolean" as const, getValue: (a: Admin) => a.is_super_admin },
+      { id: "active", label: t.admins.colActive, type: "boolean" as const, getValue: (a: Admin) => a.is_active },
+    ],
+    [roleNameById, t.admins.colActive, t.admins.colEmail, t.admins.colName, t.admins.colSuper, t.admins.role]
+  );
+
+  const adminTable = useTableFilters(admins, {
+    searchAccessors: [
+      "email",
+      "full_name",
+      (a) => roleNameById.get(a.role_id ?? -1) ?? "",
+      "id",
+    ],
+    fields: adminFilterFields,
+  });
+  const adminPgn = adminTable.pagination;
 
   async function load() {
     const [a, r] = await Promise.all([api.get<{ admins: Admin[] }>("/accounts"), api.get<{ roles: Role[] }>("/roles")]);
@@ -109,7 +136,15 @@ export default function AdminsPage() {
         )}
       </div>
       <div className="card">
-        {admins.length > 0 && (
+        <TableFilterBar
+          {...adminTable}
+          onSearchChange={adminTable.setSearch}
+          onFilterChange={adminTable.setFilter}
+          onClear={adminTable.clearFilters}
+          onToggleFilters={() => adminTable.setShowFilters((v) => !v)}
+          labels={t.tableFilters}
+        />
+        {adminTable.filteredCount > 0 && (
           <PaginationBar
             className="pagination-bar--flush"
             page={adminPgn.page}

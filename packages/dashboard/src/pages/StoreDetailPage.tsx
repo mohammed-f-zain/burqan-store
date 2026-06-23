@@ -1,10 +1,12 @@
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 
 import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import StoreMap from "../components/StoreMap";
+import TableFilterBar from "../components/TableFilterBar";
+import { useTableFilters } from "../hooks/useTableFilters";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
 import { mediaUrl } from "../lib/mediaUrl";
@@ -64,6 +66,50 @@ export default function StoreDetailPage() {
   const [payNote, setPayNote] = useState("");
   const canDeleteOrder = can("orders.delete");
   const canDeleteStore = can("stores.write");
+
+  const orderFilterFields = useMemo(
+    () => [
+      { id: "id", label: t.orders.colId, type: "text" as const, getValue: (o: OrderRow) => o.id },
+      { id: "type", label: t.orders.colType, type: "text" as const, getValue: (o: OrderRow) => o.payment_type },
+      { id: "total", label: t.orders.colTotal, type: "text" as const, getValue: (o: OrderRow) => o.total_amount },
+      { id: "rep", label: t.storeDetail.rep, type: "text" as const, getValue: (o: OrderRow) => o.rep_name },
+      { id: "when", label: t.orders.colWhen, type: "text" as const, getValue: (o: OrderRow) => formatMarketDateTime(o.created_at) },
+    ],
+    [t.orders.colId, t.orders.colTotal, t.orders.colType, t.orders.colWhen, t.storeDetail.rep]
+  );
+
+  const storeOrdersTable = useTableFilters(orders, {
+    searchAccessors: ["id", "payment_type", "total_amount", "rep_name", (o) => formatMarketDateTime(o.created_at)],
+    fields: orderFilterFields,
+  });
+
+  const visitFilterFields = useMemo(
+    () => [
+      { id: "when", label: t.orders.colWhen, type: "text" as const, getValue: (v: VisitRow) => formatMarketDateTime(v.visited_at) },
+      { id: "rep", label: t.storeDetail.rep, type: "text" as const, getValue: (v: VisitRow) => v.rep_name },
+      { id: "note", label: t.visits.colReason, type: "text" as const, getValue: (v: VisitRow) => v.note },
+    ],
+    [t.orders.colWhen, t.storeDetail.rep, t.visits.colReason]
+  );
+
+  const storeVisitsTable = useTableFilters(visits, {
+    searchAccessors: ["id", (v) => formatMarketDateTime(v.visited_at), "rep_name", "note"],
+    fields: visitFilterFields,
+  });
+
+  const paymentFilterFields = useMemo(
+    () => [
+      { id: "amount", label: t.stores.amount, type: "text" as const, getValue: (p: PaymentRow) => p.amount },
+      { id: "note", label: t.stores.note, type: "text" as const, getValue: (p: PaymentRow) => p.note },
+      { id: "when", label: t.orders.colWhen, type: "text" as const, getValue: (p: PaymentRow) => formatMarketDateTime(p.created_at) },
+    ],
+    [t.orders.colWhen, t.stores.amount, t.stores.note]
+  );
+
+  const storePaymentsTable = useTableFilters(payments, {
+    searchAccessors: ["amount", "note", (p) => formatMarketDateTime(p.created_at), "id"],
+    fields: paymentFilterFields,
+  });
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -263,6 +309,18 @@ export default function StoreDetailPage() {
         {orders.length === 0 ? (
           <p className="muted">{t.storeDetail.noOrders}</p>
         ) : (
+          <>
+            <TableFilterBar
+              {...storeOrdersTable}
+              onSearchChange={storeOrdersTable.setSearch}
+              onFilterChange={storeOrdersTable.setFilter}
+              onClear={storeOrdersTable.clearFilters}
+              onToggleFilters={() => storeOrdersTable.setShowFilters((v) => !v)}
+              labels={t.tableFilters}
+            />
+            {storeOrdersTable.filteredCount === 0 ? (
+              <p className="muted">{t.tableFilters.noResults}</p>
+            ) : (
           <div className="table-wrap">
             <table className="table">
               <thead>
@@ -276,7 +334,7 @@ export default function StoreDetailPage() {
                 </tr>
               </thead>
               <tbody>
-                {orders.map((o) => (
+                {storeOrdersTable.filtered.map((o) => (
                   <tr
                     key={o.id}
                     className="store-row"
@@ -307,6 +365,8 @@ export default function StoreDetailPage() {
               </tbody>
             </table>
           </div>
+            )}
+          </>
         )}
       </div>
 
@@ -315,8 +375,20 @@ export default function StoreDetailPage() {
         {visits.length === 0 ? (
           <p className="muted">{t.storeDetail.noVisits}</p>
         ) : (
+          <>
+            <TableFilterBar
+              {...storeVisitsTable}
+              onSearchChange={storeVisitsTable.setSearch}
+              onFilterChange={storeVisitsTable.setFilter}
+              onClear={storeVisitsTable.clearFilters}
+              onToggleFilters={() => storeVisitsTable.setShowFilters((v) => !v)}
+              labels={t.tableFilters}
+            />
+            {storeVisitsTable.filteredCount === 0 ? (
+              <p className="muted">{t.tableFilters.noResults}</p>
+            ) : (
           <ul className="simple-list">
-            {visits.map((v) => (
+            {storeVisitsTable.filtered.map((v) => (
               <li key={v.id}>
                 <strong>{formatMarketDateTime(v.visited_at)}</strong>
                 {v.rep_name ? ` · ${v.rep_name}` : ""}
@@ -330,6 +402,8 @@ export default function StoreDetailPage() {
               </li>
             ))}
           </ul>
+            )}
+          </>
         )}
       </div>
 
@@ -338,8 +412,20 @@ export default function StoreDetailPage() {
         {payments.length === 0 ? (
           <p className="muted">{t.storeDetail.noPayments}</p>
         ) : (
+          <>
+            <TableFilterBar
+              {...storePaymentsTable}
+              onSearchChange={storePaymentsTable.setSearch}
+              onFilterChange={storePaymentsTable.setFilter}
+              onClear={storePaymentsTable.clearFilters}
+              onToggleFilters={() => storePaymentsTable.setShowFilters((v) => !v)}
+              labels={t.tableFilters}
+            />
+            {storePaymentsTable.filteredCount === 0 ? (
+              <p className="muted">{t.tableFilters.noResults}</p>
+            ) : (
           <ul className="simple-list">
-            {payments.map((p) => (
+            {storePaymentsTable.filtered.map((p) => (
               <li key={p.id}>
                 <strong>{p.amount}</strong>
                 {p.note ? <span className="muted"> — {p.note}</span> : null}
@@ -347,6 +433,8 @@ export default function StoreDetailPage() {
               </li>
             ))}
           </ul>
+            )}
+          </>
         )}
       </div>
 

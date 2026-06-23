@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 
@@ -7,7 +7,8 @@ import { useAuth } from "../auth/AuthContext";
 import GooglePlacesPanel from "../components/GooglePlacesPanel";
 import StoreMap from "../components/StoreMap";
 import PaginationBar from "../components/PaginationBar";
-import { useClientPagination } from "../hooks/useClientPagination";
+import TableFilterBar from "../components/TableFilterBar";
+import { useTableFilters } from "../hooks/useTableFilters";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
 import { confirmDanger } from "../lib/swalConfirm";
@@ -35,7 +36,36 @@ export default function StoresPage() {
   const [payAmount, setPayAmount] = useState("");
   const [payNote, setPayNote] = useState("");
 
-  const storePgn = useClientPagination(stores);
+  const storeFilterFields = useMemo(
+    () => [
+      { id: "name", label: t.stores.colStore, type: "text" as const, getValue: (s: Store) => s.name },
+      { id: "phone", label: t.storeDetail.phone, type: "text" as const, getValue: (s: Store) => s.phone },
+      { id: "area", label: t.stores.colArea, type: "text" as const, getValue: (s: Store) => s.area_name },
+      { id: "owner", label: t.stores.colOwner, type: "text" as const, getValue: (s: Store) => s.owner_name },
+      { id: "qr", label: t.stores.colQr, type: "text" as const, getValue: (s: Store) => s.qr_public_token },
+      {
+        id: "deferred",
+        label: t.stores.colDeferred,
+        type: "boolean" as const,
+        getValue: (s: Store) => s.deferred_payment_enabled,
+      },
+    ],
+    [t.storeDetail.phone, t.stores.colArea, t.stores.colDeferred, t.stores.colOwner, t.stores.colQr, t.stores.colStore]
+  );
+
+  const storeTable = useTableFilters(stores, {
+    searchAccessors: [
+      "id",
+      "name",
+      "phone",
+      "owner_name",
+      "area_name",
+      "qr_public_token",
+      (s) => `${s.location_lat},${s.location_lng}`,
+    ],
+    fields: storeFilterFields,
+  });
+  const storePgn = storeTable.pagination;
   const canWrite = can("stores.write");
 
   async function load() {
@@ -91,7 +121,15 @@ export default function StoresPage() {
         <h2>{t.stores.title}</h2>
         <p className="muted">{t.stores.hint}</p>
         <p className="muted small">{t.stores.rowHint}</p>
-        {stores.length > 0 && (
+        <TableFilterBar
+          {...storeTable}
+          onSearchChange={storeTable.setSearch}
+          onFilterChange={storeTable.setFilter}
+          onClear={storeTable.clearFilters}
+          onToggleFilters={() => storeTable.setShowFilters((v) => !v)}
+          labels={t.tableFilters}
+        />
+        {storeTable.filteredCount > 0 && (
           <PaginationBar
             className="pagination-bar--flush"
             page={storePgn.page}

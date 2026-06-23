@@ -1,6 +1,8 @@
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import { api } from "../api";
+import TableFilterBar from "../components/TableFilterBar";
+import { useTableFilters } from "../hooks/useTableFilters";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
 import { toastError, toastSuccess } from "../lib/toast";
@@ -62,6 +64,30 @@ export default function GooglePlacesPanel() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const placeFilterFields = useMemo(
+    () => [
+      { id: "name", label: t.stores.colStore, type: "text" as const, getValue: (p: GooglePlace) => p.name },
+      { id: "address", label: t.stores.colLocation, type: "text" as const, getValue: (p: GooglePlace) => p.address_text },
+      { id: "area", label: t.stores.colArea, type: "text" as const, getValue: (p: GooglePlace) => p.area_name },
+      { id: "gov", label: t.stores.googleGov, type: "text" as const, getValue: (p: GooglePlace) => p.governorate },
+      { id: "match", label: t.stores.googleBurqanMatch, type: "text" as const, getValue: (p: GooglePlace) => p.matched_store_name },
+    ],
+    [t.stores.colArea, t.stores.colLocation, t.stores.colStore, t.stores.googleBurqanMatch, t.stores.googleGov]
+  );
+
+  const placesTable = useTableFilters(places, {
+    searchAccessors: [
+      "name",
+      "address_text",
+      "area_name",
+      "governorate",
+      "matched_store_name",
+      (p) => `${p.location_lat},${p.location_lng}`,
+    ],
+    fields: placeFilterFields,
+  });
+  const visiblePlaces = placesTable.filtered;
 
   async function onImport(e: FormEvent) {
     e.preventDefault();
@@ -135,6 +161,18 @@ export default function GooglePlacesPanel() {
       ) : places.length === 0 ? (
         <p className="muted">{t.stores.googleEmpty}</p>
       ) : (
+        <>
+          <TableFilterBar
+            {...placesTable}
+            onSearchChange={placesTable.setSearch}
+            onFilterChange={placesTable.setFilter}
+            onClear={placesTable.clearFilters}
+            onToggleFilters={() => placesTable.setShowFilters((v) => !v)}
+            labels={t.tableFilters}
+          />
+          {visiblePlaces.length === 0 ? (
+            <p className="muted">{t.tableFilters.noResults}</p>
+          ) : (
         <div className="table-wrap">
           <table className="table">
             <thead>
@@ -146,7 +184,7 @@ export default function GooglePlacesPanel() {
               </tr>
             </thead>
             <tbody>
-              {places.slice(0, 80).map((p) => (
+              {visiblePlaces.slice(0, 80).map((p) => (
                 <tr key={p.id}>
                   <td>
                     <div className="strong">{p.name}</div>
@@ -178,12 +216,14 @@ export default function GooglePlacesPanel() {
               ))}
             </tbody>
           </table>
-          {places.length > 80 ? (
+          {visiblePlaces.length > 80 ? (
             <p className="muted small" style={{ marginTop: 8 }}>
-              {t.stores.googleTruncated(places.length)}
+              {t.stores.googleTruncated(visiblePlaces.length)}
             </p>
           ) : null}
         </div>
+          )}
+        </>
       )}
     </div>
   );

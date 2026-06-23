@@ -4,7 +4,8 @@ import { QRCodeSVG } from "qrcode.react";
 import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import PaginationBar from "../components/PaginationBar";
-import { useClientPagination } from "../hooks/useClientPagination";
+import TableFilterBar from "../components/TableFilterBar";
+import { useTableFilters } from "../hooks/useTableFilters";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
 import { downloadQrPoolExcel } from "../lib/exportQrPoolExcel";
@@ -32,7 +33,20 @@ export default function QrPoolPage() {
   const [generating, setGenerating] = useState(false);
   const [exporting, setExporting] = useState(false);
 
-  const qrPgn = useClientPagination(items);
+  const qrFilterFields = useMemo(
+    () => [
+      { id: "id", label: t.qrPool.colId, type: "text" as const, getValue: (i: Item) => i.id },
+      { id: "token", label: t.qrPool.colToken, type: "text" as const, getValue: (i: Item) => i.publicToken },
+      { id: "created", label: t.qrPool.colCreated, type: "text" as const, getValue: (i: Item) => formatMarketDateTime(i.createdAt) },
+    ],
+    [t.qrPool.colCreated, t.qrPool.colId, t.qrPool.colToken]
+  );
+
+  const qrTable = useTableFilters(items, {
+    searchAccessors: ["id", "publicToken", (i) => formatMarketDateTime(i.createdAt)],
+    fields: qrFilterFields,
+  });
+  const qrPgn = qrTable.pagination;
 
   const load = useCallback(async (cursor: number | null, append: boolean) => {
     setLoadFailed(false);
@@ -176,7 +190,15 @@ export default function QrPoolPage() {
       {items.length > 0 && (
         <div className="card">
           <p className="muted small">{t.qrPool.payloadHint}</p>
-          {items.length > 0 && (
+          <TableFilterBar
+            {...qrTable}
+            onSearchChange={qrTable.setSearch}
+            onFilterChange={qrTable.setFilter}
+            onClear={qrTable.clearFilters}
+            onToggleFilters={() => qrTable.setShowFilters((v) => !v)}
+            labels={t.tableFilters}
+          />
+          {qrTable.filteredCount > 0 && (
             <PaginationBar
               className="pagination-bar--flush"
               page={qrPgn.page}

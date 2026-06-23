@@ -585,6 +585,18 @@ export const en: Messages = {
     loading: "Loading…",
   },
 
+  tableFilters: {
+    searchPlaceholder: "Search all fields…",
+    filtersToggle: "Field filters",
+    filtersHide: "Hide filters",
+    clear: "Clear",
+    all: "All",
+    yes: "Yes",
+    no: "No",
+    noResults: "No rows match your search or filters.",
+    filteredSummary: (filtered: number, total: number) => `${filtered} of ${total}`,
+  },
+
   pagination: {
     aria: "Pagination",
     first: "First",

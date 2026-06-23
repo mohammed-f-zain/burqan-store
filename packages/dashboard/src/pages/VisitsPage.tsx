@@ -4,7 +4,8 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import { NO_BUY_REASONS } from "../constants/noBuyReasons";
 import PaginationBar from "../components/PaginationBar";
-import { useClientPagination } from "../hooks/useClientPagination";
+import TableFilterBar from "../components/TableFilterBar";
+import { useTableFilters } from "../hooks/useTableFilters";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
 import { toastError } from "../lib/toast";
@@ -48,7 +49,29 @@ export default function VisitsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reload when filter changes
   }, [noBuyOnly]);
 
-  const pgn = useClientPagination(visits);
+  const visitFilterFields = useMemo(
+    () => [
+      { id: "time", label: t.visits.colTime, type: "text" as const, getValue: (v: VisitRow) => formatMarketDateTime(v.visitedAt) },
+      { id: "store", label: t.visits.colStore, type: "text" as const, getValue: (v: VisitRow) => v.storeName },
+      { id: "area", label: t.stores.colArea, type: "text" as const, getValue: (v: VisitRow) => v.areaName },
+      { id: "rep", label: t.visits.colRep, type: "text" as const, getValue: (v: VisitRow) => v.repName },
+      { id: "reason", label: t.visits.colReason, type: "text" as const, getValue: (v: VisitRow) => v.note },
+    ],
+    [t.stores.colArea, t.visits.colReason, t.visits.colRep, t.visits.colStore, t.visits.colTime]
+  );
+
+  const visitTable = useTableFilters(visits, {
+    searchAccessors: [
+      "id",
+      (v) => formatMarketDateTime(v.visitedAt),
+      "storeName",
+      "areaName",
+      "repName",
+      "note",
+    ],
+    fields: visitFilterFields,
+  });
+  const pgn = visitTable.pagination;
 
   const countsByReason = useMemo(() => {
     const m = new Map<string, number>();
@@ -86,6 +109,17 @@ export default function VisitsPage() {
         {loading ? <p className="muted">{t.common.loading}</p> : null}
 
         {!loading && visits.length > 0 && (
+          <TableFilterBar
+            {...visitTable}
+            onSearchChange={visitTable.setSearch}
+            onFilterChange={visitTable.setFilter}
+            onClear={visitTable.clearFilters}
+            onToggleFilters={() => visitTable.setShowFilters((v) => !v)}
+            labels={t.tableFilters}
+          />
+        )}
+
+        {!loading && visitTable.filteredCount > 0 && (
           <PaginationBar
             className="pagination-bar--flush"
             page={pgn.page}
@@ -102,6 +136,10 @@ export default function VisitsPage() {
         )}
 
         {!loading && visits.length === 0 ? <p className="muted">{t.visits.empty}</p> : null}
+
+        {!loading && visits.length > 0 && visitTable.filteredCount === 0 ? (
+          <p className="muted">{t.tableFilters.noResults}</p>
+        ) : null}
 
         {!loading && pgn.slice.length > 0 ? (
           <div className="table-wrap" style={{ marginTop: 12 }}>

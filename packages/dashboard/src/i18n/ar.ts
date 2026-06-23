@@ -584,6 +584,18 @@ export const ar = {
     loading: "جاري التحميل…",
   },
 
+  tableFilters: {
+    searchPlaceholder: "بحث في كل الحقول…",
+    filtersToggle: "تصفية الحقول",
+    filtersHide: "إخفاء التصفية",
+    clear: "مسح",
+    all: "الكل",
+    yes: "نعم",
+    no: "لا",
+    noResults: "لا توجد صفوف تطابق البحث أو التصفية.",
+    filteredSummary: (filtered: number, total: number) => `${filtered} من ${total}`,
+  },
+
   pagination: {
     aria: "تصفح الصفحات",
     first: "الأولى",

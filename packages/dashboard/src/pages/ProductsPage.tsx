@@ -1,9 +1,10 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import PaginationBar from "../components/PaginationBar";
-import { useClientPagination } from "../hooks/useClientPagination";
+import TableFilterBar from "../components/TableFilterBar";
+import { useTableFilters } from "../hooks/useTableFilters";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
 import { mediaUrl } from "../lib/mediaUrl";
@@ -43,7 +44,46 @@ export default function ProductsPage() {
   });
   const [uploading, setUploading] = useState(false);
   const [editUploading, setEditUploading] = useState(false);
-  const pgn = useClientPagination(products);
+  const productFilterFields = useMemo(
+    () => [
+      { id: "name", label: t.products.colName, type: "text" as const, getValue: (p: Product) => p.name },
+      { id: "designation", label: t.products.designation, type: "text" as const, getValue: (p: Product) => p.designation },
+      { id: "unit", label: t.products.unit, type: "text" as const, getValue: (p: Product) => p.unit_label },
+      { id: "carton", label: t.products.carton, type: "text" as const, getValue: (p: Product) => p.carton_spec },
+      { id: "dimensions", label: t.products.dimensions, type: "text" as const, getValue: (p: Product) => p.dimensions_cm },
+      { id: "weight", label: t.products.weight, type: "text" as const, getValue: (p: Product) => p.carton_weight_kg },
+      { id: "price", label: t.products.colPrice, type: "text" as const, getValue: (p: Product) => p.price },
+      { id: "loyalty", label: t.products.colLoyalty, type: "text" as const, getValue: (p: Product) => p.loyalty_points_per_unit },
+      { id: "active", label: t.products.colActive, type: "boolean" as const, getValue: (p: Product) => p.is_active },
+    ],
+    [
+      t.products.carton,
+      t.products.colActive,
+      t.products.colLoyalty,
+      t.products.colName,
+      t.products.colPrice,
+      t.products.designation,
+      t.products.dimensions,
+      t.products.unit,
+      t.products.weight,
+    ]
+  );
+
+  const productTable = useTableFilters(products, {
+    searchAccessors: [
+      "id",
+      "name",
+      "designation",
+      "unit_label",
+      "carton_spec",
+      "dimensions_cm",
+      "carton_weight_kg",
+      "price",
+      "loyalty_points_per_unit",
+    ],
+    fields: productFilterFields,
+  });
+  const pgn = productTable.pagination;
 
   async function load() {
     const { data } = await api.get<{ products: Product[] }>("/products");
@@ -232,7 +272,15 @@ export default function ProductsPage() {
 
       <div className="card">
         <h2>{t.products.titleList}</h2>
-        {products.length > 0 && (
+        <TableFilterBar
+          {...productTable}
+          onSearchChange={productTable.setSearch}
+          onFilterChange={productTable.setFilter}
+          onClear={productTable.clearFilters}
+          onToggleFilters={() => productTable.setShowFilters((v) => !v)}
+          labels={t.tableFilters}
+        />
+        {productTable.filteredCount > 0 && (
           <PaginationBar
             className="pagination-bar--flush"
             page={pgn.page}

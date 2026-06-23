@@ -1,10 +1,11 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import PaginationBar from "../components/PaginationBar";
+import TableFilterBar from "../components/TableFilterBar";
 import { PERMISSION_KEYS } from "../constants/permissions";
-import { useClientPagination } from "../hooks/useClientPagination";
+import { useTableFilters } from "../hooks/useTableFilters";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
 import { confirmDanger } from "../lib/swalConfirm";
@@ -20,7 +21,25 @@ export default function RolesPage() {
   const [slug, setSlug] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [editing, setEditing] = useState<Role | null>(null);
-  const rolePgn = useClientPagination(roles);
+  const roleFilterFields = useMemo(
+    () => [
+      { id: "name", label: t.roles.colName, type: "text" as const, getValue: (r: Role) => r.name },
+      { id: "slug", label: t.roles.colSlug, type: "text" as const, getValue: (r: Role) => r.slug },
+      { id: "perms", label: t.roles.colPerms, type: "text" as const, getValue: (r: Role) => (r.permissions ?? []).join(", ") },
+    ],
+    [t.roles.colName, t.roles.colPerms, t.roles.colSlug]
+  );
+
+  const roleTable = useTableFilters(roles, {
+    searchAccessors: [
+      "name",
+      "slug",
+      (r) => (r.permissions ?? []).join(" "),
+      "id",
+    ],
+    fields: roleFilterFields,
+  });
+  const rolePgn = roleTable.pagination;
 
   async function load() {
     const { data } = await api.get<{ roles: Role[] }>("/roles");
@@ -120,7 +139,15 @@ export default function RolesPage() {
 
       <div className="card">
         <h3>{t.roles.listTitle}</h3>
-        {roles.length > 0 && (
+        <TableFilterBar
+          {...roleTable}
+          onSearchChange={roleTable.setSearch}
+          onFilterChange={roleTable.setFilter}
+          onClear={roleTable.clearFilters}
+          onToggleFilters={() => roleTable.setShowFilters((v) => !v)}
+          labels={t.tableFilters}
+        />
+        {roleTable.filteredCount > 0 && (
           <PaginationBar
             className="pagination-bar--flush"
             page={rolePgn.page}

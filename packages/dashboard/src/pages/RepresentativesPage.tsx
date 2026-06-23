@@ -5,7 +5,8 @@ import { api } from "../api";
 import RepAreaMapPicker from "../components/RepAreaMapPicker";
 import { useAuth } from "../auth/AuthContext";
 import PaginationBar from "../components/PaginationBar";
-import { useClientPagination } from "../hooks/useClientPagination";
+import TableFilterBar from "../components/TableFilterBar";
+import { useTableFilters } from "../hooks/useTableFilters";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
 import { mediaUrl } from "../lib/mediaUrl";
@@ -61,7 +62,6 @@ export default function RepresentativesPage() {
   const [eIsActive, setEIsActive] = useState(true);
   const [eNewPassword, setENewPassword] = useState("");
   const [eUploading, setEUploading] = useState(false);
-  const repPgn = useClientPagination(reps);
   const canFillCar = can("fill_car.read") || can("reps.read");
 
   const areaNameById = useMemo(() => {
@@ -218,6 +218,30 @@ export default function RepresentativesPage() {
     return ids.map((id) => areaNameById.get(id) ?? id).join(", ");
   }
 
+  const repFilterFields = useMemo(
+    () => [
+      { id: "name", label: t.reps.colName, type: "text" as const, getValue: (r: Rep) => r.full_name },
+      { id: "email", label: t.reps.colEmail, type: "text" as const, getValue: (r: Rep) => r.email },
+      { id: "phone", label: t.reps.phone, type: "text" as const, getValue: (r: Rep) => r.phone },
+      { id: "car", label: t.reps.colCar, type: "text" as const, getValue: (r: Rep) => r.car_plate },
+      { id: "areas", label: t.reps.colAreas, type: "text" as const, getValue: (r: Rep) => formatAreasCell(r) },
+      { id: "active", label: t.reps.colActive, type: "boolean" as const, getValue: (r: Rep) => r.is_active },
+    ],
+    [t.reps.colActive, t.reps.colAreas, t.reps.colCar, t.reps.colEmail, t.reps.colName, t.reps.phone]
+  );
+
+  const repTable = useTableFilters(reps, {
+    searchAccessors: [
+      "full_name",
+      "email",
+      "phone",
+      "car_plate",
+      (r) => formatAreasCell(r),
+    ],
+    fields: repFilterFields,
+  });
+  const repPgn = repTable.pagination;
+
   const write = can("reps.write");
 
   return (
@@ -264,7 +288,15 @@ export default function RepresentativesPage() {
 
       <div className="card">
         <h2>{t.reps.titleList}</h2>
-        {reps.length > 0 && (
+        <TableFilterBar
+          {...repTable}
+          onSearchChange={repTable.setSearch}
+          onFilterChange={repTable.setFilter}
+          onClear={repTable.clearFilters}
+          onToggleFilters={() => repTable.setShowFilters((v) => !v)}
+          labels={t.tableFilters}
+        />
+        {repTable.filteredCount > 0 && (
           <PaginationBar
             className="pagination-bar--flush"
             page={repPgn.page}

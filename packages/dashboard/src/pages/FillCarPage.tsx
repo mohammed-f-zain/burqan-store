@@ -3,6 +3,8 @@ import { useSearchParams } from "react-router-dom";
 
 import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
+import TableFilterBar from "../components/TableFilterBar";
+import { useTableFilters } from "../hooks/useTableFilters";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
 import { mediaUrl } from "../lib/mediaUrl";
@@ -88,6 +90,53 @@ export default function FillCarPage() {
     [salesReps, repId]
   );
 
+  const salesFilterFields = useMemo(
+    () => [
+      { id: "name", label: t.fillCar.colRep, type: "text" as const, getValue: (r: RepSales) => r.full_name },
+      { id: "email", label: t.reps.colEmail, type: "text" as const, getValue: (r: RepSales) => r.email },
+      { id: "orders", label: t.fillCar.colOrders, type: "text" as const, getValue: (r: RepSales) => r.order_count },
+      { id: "sold", label: t.fillCar.colSold, type: "text" as const, getValue: (r: RepSales) => r.total_sales },
+      { id: "active", label: t.reps.colActive, type: "boolean" as const, getValue: (r: RepSales) => r.is_active },
+    ],
+    [t.fillCar.colOrders, t.fillCar.colRep, t.fillCar.colSold, t.reps.colActive, t.reps.colEmail]
+  );
+
+  const salesTable = useTableFilters(salesReps, {
+    searchAccessors: ["full_name", "email", "order_count", "total_sales", "id"],
+    fields: salesFilterFields,
+  });
+
+  const soldLines = selected?.lines ?? [];
+
+  const soldFilterFields = useMemo(
+    () => [
+      { id: "product", label: t.orders.product, type: "text" as const, getValue: (l: SalesLine) => l.product_name },
+      { id: "qty", label: t.orders.qty, type: "text" as const, getValue: (l: SalesLine) => l.quantity },
+      { id: "total", label: t.orders.line, type: "text" as const, getValue: (l: SalesLine) => l.line_total },
+    ],
+    [t.orders.line, t.orders.product, t.orders.qty]
+  );
+
+  const soldTable = useTableFilters(soldLines, {
+    searchAccessors: ["product_name", "quantity", "line_total", "product_id"],
+    fields: soldFilterFields,
+  });
+
+  const invFilterFields = useMemo(
+    () => [
+      { id: "name", label: t.orders.product, type: "text" as const, getValue: (r: InvRow) => r.name },
+      { id: "price", label: t.products.colPrice, type: "text" as const, getValue: (r: InvRow) => r.price },
+      { id: "designation", label: t.products.designation, type: "text" as const, getValue: (r: InvRow) => r.designation },
+      { id: "qty", label: t.fillCar.onCar, type: "text" as const, getValue: (r: InvRow) => r.quantity },
+    ],
+    [t.fillCar.onCar, t.orders.product, t.products.colPrice, t.products.designation]
+  );
+
+  const invTable = useTableFilters(inventory, {
+    searchAccessors: ["name", "price", "designation", "quantity", "product_id"],
+    fields: invFilterFields,
+  });
+
   async function save() {
     if (!canWrite || !repId) return;
     const ok = await confirmSave({
@@ -144,6 +193,15 @@ export default function FillCarPage() {
         {salesLoading && salesReps.length === 0 ? (
           <p className="muted">{t.common.loading}</p>
         ) : (
+          <>
+            <TableFilterBar
+              {...salesTable}
+              onSearchChange={salesTable.setSearch}
+              onFilterChange={salesTable.setFilter}
+              onClear={salesTable.clearFilters}
+              onToggleFilters={() => salesTable.setShowFilters((v) => !v)}
+              labels={t.tableFilters}
+            />
           <div className="table-wrap">
             <table className="table table-clickable">
               <thead>
@@ -155,7 +213,7 @@ export default function FillCarPage() {
                 </tr>
               </thead>
               <tbody>
-                {salesReps.map((r) => (
+                {salesTable.filtered.map((r) => (
                   <tr
                     key={r.id}
                     className={String(r.id) === repId ? "row-selected" : undefined}
@@ -174,6 +232,7 @@ export default function FillCarPage() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
 
@@ -199,6 +258,15 @@ export default function FillCarPage() {
           {selected.lines.length === 0 ? (
             <p className="muted">{t.fillCar.noSales}</p>
           ) : (
+            <>
+              <TableFilterBar
+                {...soldTable}
+                onSearchChange={soldTable.setSearch}
+                onFilterChange={soldTable.setFilter}
+                onClear={soldTable.clearFilters}
+                onToggleFilters={() => soldTable.setShowFilters((v) => !v)}
+                labels={t.tableFilters}
+              />
             <div className="table-wrap">
               <table className="table">
                 <thead>
@@ -209,7 +277,7 @@ export default function FillCarPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {selected.lines.map((l) => (
+                  {soldTable.filtered.map((l) => (
                     <tr key={l.product_id}>
                       <td>{l.product_name}</td>
                       <td>{l.quantity}</td>
@@ -219,6 +287,7 @@ export default function FillCarPage() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
 
           <h4 className="strong" style={{ marginTop: 24 }}>
@@ -227,8 +296,19 @@ export default function FillCarPage() {
           {invLoading ? (
             <p className="muted">{t.common.loading}</p>
           ) : (
+            <>
+              <TableFilterBar
+                {...invTable}
+                onSearchChange={invTable.setSearch}
+                onFilterChange={invTable.setFilter}
+                onClear={invTable.clearFilters}
+                onToggleFilters={() => invTable.setShowFilters((v) => !v)}
+                labels={t.tableFilters}
+              />
             <div className="fill-car-product-grid">
-              {inventory.map((row, idx) => (
+              {invTable.filtered.map((row) => {
+                const idx = inventory.findIndex((r) => r.product_id === row.product_id);
+                return (
                 <div key={row.product_id} className="fill-car-product-card">
                   {mediaUrl(row.image_url) ? (
                     <img src={mediaUrl(row.image_url)} alt="" className="fill-car-product-img" />
@@ -261,8 +341,10 @@ export default function FillCarPage() {
                     </p>
                   </div>
                 </div>
-              ))}
+              );
+              })}
             </div>
+            </>
           )}
           {canWrite && inventory.length > 0 && (
             <button

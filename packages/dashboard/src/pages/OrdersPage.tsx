@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import PaginationBar from "../components/PaginationBar";
-import { useClientPagination } from "../hooks/useClientPagination";
+import TableFilterBar from "../components/TableFilterBar";
+import { useTableFilters } from "../hooks/useTableFilters";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
 import { confirmDanger } from "../lib/swalConfirm";
@@ -29,7 +30,30 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const canDelete = can("orders.delete");
 
-  const orderPgn = useClientPagination(orders);
+  const orderFilterFields = useMemo(
+    () => [
+      { id: "id", label: t.orders.colId, type: "text" as const, getValue: (o: OrderRow) => o.id },
+      { id: "store", label: t.orders.colStore, type: "text" as const, getValue: (o: OrderRow) => o.store_name },
+      { id: "rep", label: t.orders.colRep, type: "text" as const, getValue: (o: OrderRow) => o.rep_name },
+      { id: "type", label: t.orders.colType, type: "text" as const, getValue: (o: OrderRow) => o.payment_type },
+      { id: "total", label: t.orders.colTotal, type: "text" as const, getValue: (o: OrderRow) => o.total_amount },
+      { id: "when", label: t.orders.colWhen, type: "text" as const, getValue: (o: OrderRow) => formatMarketDateTime(o.created_at) },
+    ],
+    [t.orders.colId, t.orders.colRep, t.orders.colStore, t.orders.colTotal, t.orders.colType, t.orders.colWhen]
+  );
+
+  const orderTable = useTableFilters(orders, {
+    searchAccessors: [
+      "id",
+      "store_name",
+      "rep_name",
+      "payment_type",
+      "total_amount",
+      (o) => formatMarketDateTime(o.created_at),
+    ],
+    fields: orderFilterFields,
+  });
+  const orderPgn = orderTable.pagination;
 
   async function load() {
     const { data } = await api.get<{ orders: OrderRow[] }>("/orders");
@@ -68,7 +92,15 @@ export default function OrdersPage() {
       <div className="card">
         <h2>{t.orders.title}</h2>
         <p className="muted small">{t.orders.rowHint}</p>
-        {orders.length > 0 && (
+        <TableFilterBar
+          {...orderTable}
+          onSearchChange={orderTable.setSearch}
+          onFilterChange={orderTable.setFilter}
+          onClear={orderTable.clearFilters}
+          onToggleFilters={() => orderTable.setShowFilters((v) => !v)}
+          labels={t.tableFilters}
+        />
+        {orderTable.filteredCount > 0 && (
           <PaginationBar
             className="pagination-bar--flush"
             page={orderPgn.page}

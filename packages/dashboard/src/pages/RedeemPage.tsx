@@ -5,7 +5,8 @@ import { useAuth } from "../auth/AuthContext";
 import LoyaltyBadge from "../components/LoyaltyBadge";
 import LoyaltyIcon from "../components/LoyaltyIcon";
 import PaginationBar from "../components/PaginationBar";
-import { useClientPagination } from "../hooks/useClientPagination";
+import TableFilterBar from "../components/TableFilterBar";
+import { useTableFilters } from "../hooks/useTableFilters";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
 import { mediaUrl } from "../lib/mediaUrl";
@@ -101,7 +102,43 @@ export default function RedeemPage() {
     [redemptions]
   );
 
-  const catalogPgn = useClientPagination(activeProducts);
+  const catalogFilterFields = useMemo(
+    () => [
+      { id: "name", label: t.redeem.colProduct, type: "text" as const, getValue: (p: Product) => p.name },
+      { id: "points", label: t.redeem.colRedeemPoints, type: "text" as const, getValue: (p: Product) => p.redeem_points_per_unit },
+      { id: "enabled", label: t.redeem.colEnabled, type: "boolean" as const, getValue: (p: Product) => p.redeem_enabled },
+    ],
+    [t.redeem.colEnabled, t.redeem.colProduct, t.redeem.colRedeemPoints]
+  );
+
+  const catalogTable = useTableFilters(activeProducts, {
+    searchAccessors: ["id", "name", "redeem_points_per_unit"],
+    fields: catalogFilterFields,
+  });
+  const catalogPgn = catalogTable.pagination;
+
+  const redemptionFilterFields = useMemo(
+    () => [
+      { id: "store", label: t.orders.colStore, type: "text" as const, getValue: (r: Redemption) => r.storeName },
+      { id: "rep", label: t.orders.colRep, type: "text" as const, getValue: (r: Redemption) => r.repName },
+      { id: "points", label: t.redeem.statPointsRedeemed, type: "text" as const, getValue: (r: Redemption) => r.totalPointsSpent },
+      { id: "when", label: t.orders.colWhen, type: "text" as const, getValue: (r: Redemption) => formatMarketDateTime(r.createdAt, locale) },
+      { id: "lines", label: t.redeem.colProduct, type: "text" as const, getValue: (r: Redemption) => r.lines.map((l) => l.productName).join(", ") },
+    ],
+    [locale, t.orders.colRep, t.orders.colStore, t.orders.colWhen, t.redeem.colProduct, t.redeem.statPointsRedeemed]
+  );
+
+  const historyTable = useTableFilters(redemptions, {
+    searchAccessors: [
+      "id",
+      "storeName",
+      "repName",
+      "totalPointsSpent",
+      (r) => formatMarketDateTime(r.createdAt, locale),
+      (r) => r.lines.map((l) => `${l.productName} ${l.quantity}`).join(" "),
+    ],
+    fields: redemptionFilterFields,
+  });
 
   return (
     <div className="grid redeem-page">
@@ -146,7 +183,15 @@ export default function RedeemPage() {
           <p className="muted redeem-page-loading">{t.common.loading}</p>
         ) : (
           <>
-            {activeProducts.length > 0 && (
+            <TableFilterBar
+              {...catalogTable}
+              onSearchChange={catalogTable.setSearch}
+              onFilterChange={catalogTable.setFilter}
+              onClear={catalogTable.clearFilters}
+              onToggleFilters={() => catalogTable.setShowFilters((v) => !v)}
+              labels={t.tableFilters}
+            />
+            {catalogTable.filteredCount > 0 && (
               <PaginationBar
                 className="pagination-bar--flush"
                 page={catalogPgn.page}
@@ -260,11 +305,21 @@ export default function RedeemPage() {
       {can("redeem.read") ? (
         <div className="card">
           <h2>{t.redeem.historyTitle}</h2>
+          <TableFilterBar
+            {...historyTable}
+            onSearchChange={historyTable.setSearch}
+            onFilterChange={historyTable.setFilter}
+            onClear={historyTable.clearFilters}
+            onToggleFilters={() => historyTable.setShowFilters((v) => !v)}
+            labels={t.tableFilters}
+          />
           {redemptions.length === 0 ? (
             <p className="muted">{t.redeem.emptyHistory}</p>
+          ) : historyTable.filteredCount === 0 ? (
+            <p className="muted">{t.tableFilters.noResults}</p>
           ) : (
             <ul className="redeem-history-list">
-              {redemptions.map((r) => (
+              {historyTable.filtered.map((r) => (
                 <li key={r.id} className="redeem-history-item">
                   <div className="redeem-history-item-head">
                     <div>
