@@ -66,6 +66,12 @@ function renderField<T>(
           searchPlaceholder={labels.selectSearch}
           ariaLabel={field.label}
         />
+      ) : field.type === "dateFrom" || field.type === "dateTo" ? (
+        <input
+          type="date"
+          value={filters[field.id] ?? ""}
+          onChange={(e) => onFilterChange(field.id, e.target.value)}
+        />
       ) : (
         <input
           type="text"

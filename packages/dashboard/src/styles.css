@@ -1022,6 +1022,10 @@ html.locale-en body {
   min-width: 160px;
 }
 
+.table-filter-field--compact input[type="date"] {
+  min-height: 36px;
+}
+
 .table-filter-summary {
   margin-inline-start: auto;
 }

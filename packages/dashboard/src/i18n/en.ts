@@ -456,6 +456,8 @@ export const en: Messages = {
     colType: "Type",
     colTotal: "Total",
     colWhen: "Date",
+    dateFrom: "From",
+    dateTo: "To",
     colActions: "Actions",
     detailTitle: "Order #",
     product: "Product",

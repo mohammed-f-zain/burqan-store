@@ -455,6 +455,8 @@ export const ar = {
     colType: "النوع",
     colTotal: "الإجمالي",
     colWhen: "التاريخ",
+    dateFrom: "من",
+    dateTo: "إلى",
     colActions: "إجراءات",
     detailTitle: "طلب رقم",
     product: "المنتج",

@@ -30,16 +30,68 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const canDelete = can("orders.delete");
 
+  const repFilterOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const o of orders) {
+      const n = o.rep_name?.trim();
+      if (n) names.add(n);
+    }
+    return [...names]
+      .sort((a, b) => a.localeCompare(b, "ar"))
+      .map((name) => ({ value: name, label: name }));
+  }, [orders]);
+
+  const paymentTypeOptions = useMemo(
+    () => [
+      { value: "cash", label: t.overview.payCash },
+      { value: "deferred", label: t.overview.payDeferred },
+    ],
+    [t.overview.payCash, t.overview.payDeferred]
+  );
+
   const orderFilterFields = useMemo(
     () => [
       { id: "id", label: t.orders.colId, type: "text" as const, getValue: (o: OrderRow) => o.id },
       { id: "store", label: t.orders.colStore, type: "text" as const, getValue: (o: OrderRow) => o.store_name },
-      { id: "rep", label: t.orders.colRep, type: "text" as const, getValue: (o: OrderRow) => o.rep_name },
-      { id: "type", label: t.orders.colType, type: "text" as const, getValue: (o: OrderRow) => o.payment_type },
+      {
+        id: "rep",
+        label: t.orders.colRep,
+        type: "searchableSelect" as const,
+        getValue: (o: OrderRow) => o.rep_name,
+        options: repFilterOptions,
+      },
+      {
+        id: "type",
+        label: t.orders.colType,
+        type: "select" as const,
+        getValue: (o: OrderRow) => o.payment_type,
+        options: paymentTypeOptions,
+      },
       { id: "total", label: t.orders.colTotal, type: "text" as const, getValue: (o: OrderRow) => o.total_amount },
-      { id: "when", label: t.orders.colWhen, type: "text" as const, getValue: (o: OrderRow) => formatMarketDateTime(o.created_at) },
+      {
+        id: "dateFrom",
+        label: t.orders.dateFrom,
+        type: "dateFrom" as const,
+        getValue: (o: OrderRow) => o.created_at,
+      },
+      {
+        id: "dateTo",
+        label: t.orders.dateTo,
+        type: "dateTo" as const,
+        getValue: (o: OrderRow) => o.created_at,
+      },
     ],
-    [t.orders.colId, t.orders.colRep, t.orders.colStore, t.orders.colTotal, t.orders.colType, t.orders.colWhen]
+    [
+      paymentTypeOptions,
+      repFilterOptions,
+      t.orders.colId,
+      t.orders.colRep,
+      t.orders.colStore,
+      t.orders.colTotal,
+      t.orders.colType,
+      t.orders.dateFrom,
+      t.orders.dateTo,
+    ]
   );
 
   const orderTable = useTableFilters(orders, {
@@ -54,6 +106,12 @@ export default function OrdersPage() {
     fields: orderFilterFields,
   });
   const orderPgn = orderTable.pagination;
+
+  function paymentTypeLabel(type: string): string {
+    if (type === "cash") return t.overview.payCash;
+    if (type === "deferred") return t.overview.payDeferred;
+    return type;
+  }
 
   async function load() {
     const { data } = await api.get<{ orders: OrderRow[] }>("/orders");
@@ -98,6 +156,7 @@ export default function OrdersPage() {
           onFilterChange={orderTable.setFilter}
           onClear={orderTable.clearFilters}
           onToggleFilters={() => orderTable.setShowFilters((v) => !v)}
+          pinnedFieldIds={["dateFrom", "dateTo", "type", "rep"]}
           labels={t.tableFilters}
         />
         {orderTable.filteredCount > 0 && (
@@ -145,7 +204,7 @@ export default function OrdersPage() {
                   <td className="strong">#{o.id}</td>
                   <td>{o.store_name}</td>
                   <td>{o.rep_name}</td>
-                  <td>{o.payment_type}</td>
+                  <td>{paymentTypeLabel(o.payment_type)}</td>
                   <td>{o.total_amount}</td>
                   <td className="small muted">{formatMarketDateTime(o.created_at)}</td>
                   {canDelete && (
