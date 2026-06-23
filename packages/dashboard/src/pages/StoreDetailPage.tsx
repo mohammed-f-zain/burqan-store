@@ -5,6 +5,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import StoreMap from "../components/StoreMap";
+import StoreEditModal, { type EditableStore } from "../components/StoreEditModal";
 import TableFilterBar from "../components/TableFilterBar";
 import { useTableFilters } from "../hooks/useTableFilters";
 import { useLocale } from "../i18n/LocaleContext";
@@ -26,6 +27,7 @@ type StoreDetail = {
   address_text: string | null;
   image_url: string | null;
   area_name: string;
+  area_id: number;
   deferred_payment_enabled: boolean;
   qr_public_token: string;
   owner_portal_token: string;
@@ -64,6 +66,7 @@ export default function StoreDetailPage() {
   const [payOpen, setPayOpen] = useState(false);
   const [payAmount, setPayAmount] = useState("");
   const [payNote, setPayNote] = useState("");
+  const [editOpen, setEditOpen] = useState(false);
   const canDeleteOrder = can("orders.delete");
   const canDeleteStore = can("stores.write");
 
@@ -212,6 +215,18 @@ export default function StoreDetailPage() {
 
   const photo = mediaUrl(store.image_url);
   const portalUrl = ownerPortalUrl(store.owner_portal_token);
+  const editableStore: EditableStore = {
+    id: store.id,
+    name: store.name,
+    phone: store.phone,
+    owner_name: store.owner_name,
+    location_lat: store.location_lat,
+    location_lng: store.location_lng,
+    address_text: store.address_text,
+    image_url: store.image_url,
+    area_id: store.area_id,
+    area_name: store.area_name,
+  };
 
   return (
     <div className="grid store-detail">
@@ -238,9 +253,14 @@ export default function StoreDetailPage() {
               </button>
             )}
             {canDeleteStore && (
-              <button type="button" className="ghost danger" onClick={() => void removeStore()}>
-                {t.stores.delete}
-              </button>
+              <>
+                <button type="button" className="ghost" onClick={() => setEditOpen(true)}>
+                  {t.stores.edit}
+                </button>
+                <button type="button" className="ghost danger" onClick={() => void removeStore()}>
+                  {t.stores.delete}
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -437,6 +457,14 @@ export default function StoreDetailPage() {
           </>
         )}
       </div>
+
+      {editOpen && (
+        <StoreEditModal
+          store={editableStore}
+          onClose={() => setEditOpen(false)}
+          onSaved={() => void load()}
+        />
+      )}
 
       {payOpen && (
         <div className="modal-backdrop" onClick={() => setPayOpen(false)} role="presentation">

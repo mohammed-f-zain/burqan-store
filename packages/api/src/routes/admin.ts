@@ -1661,10 +1661,12 @@ router.get(
   async (_req, res, next) => {
     try {
       const { rows } = await query(`
-        SELECT s.*, a.name AS area_name, qc.public_token AS qr_public_token
+        SELECT s.*, a.name AS area_name, qc.public_token AS qr_public_token,
+          r.full_name AS registered_by_rep_name
         FROM stores s
         JOIN areas a ON a.id = s.area_id
         JOIN qr_codes qc ON qc.id = s.qr_code_id
+        LEFT JOIN representatives r ON r.id = s.registered_by_representative_id
         ORDER BY s.id DESC
       `);
       res.json({ stores: rows });
@@ -1694,6 +1696,95 @@ router.get(
         [id]
       );
       if (!rows[0]) throw new HttpError(404, "Store not found");
+      res.json({ store: rows[0] });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+const patchStoreSchema = z.object({
+  name: z.string().trim().min(1).max(255).optional(),
+  phone: z.string().trim().min(1).max(40).optional(),
+  ownerName: z.string().trim().min(1).max(255).optional(),
+  locationLat: z.number().finite().optional(),
+  locationLng: z.number().finite().optional(),
+  addressText: z.string().max(2000).nullable().optional(),
+  imageUrl: optionalStoredImagePathNullableSchema.optional(),
+  areaId: z.number().int().positive().optional(),
+});
+
+router.patch(
+  "/stores/:id",
+  adminAuthMiddleware,
+  requireAdminPermission("stores.write"),
+  async (req, res, next) => {
+    try {
+      const id = z.coerce.number().int().positive().parse(req.params.id);
+      const body = patchStoreSchema.parse(req.body);
+
+      if (body.areaId != null) {
+        const { rows: areaRows } = await query(`SELECT id FROM areas WHERE id = $1`, [body.areaId]);
+        if (!areaRows[0]) throw new HttpError(400, "المنطقة غير موجودة");
+      }
+
+      const sets: string[] = [];
+      const vals: unknown[] = [];
+      let i = 1;
+      if (body.name !== undefined) {
+        sets.push(`name = $${i++}`);
+        vals.push(body.name);
+      }
+      if (body.phone !== undefined) {
+        sets.push(`phone = $${i++}`);
+        vals.push(body.phone);
+      }
+      if (body.ownerName !== undefined) {
+        sets.push(`owner_name = $${i++}`);
+        vals.push(body.ownerName);
+      }
+      if (body.locationLat !== undefined) {
+        sets.push(`location_lat = $${i++}`);
+        vals.push(body.locationLat);
+      }
+      if (body.locationLng !== undefined) {
+        sets.push(`location_lng = $${i++}`);
+        vals.push(body.locationLng);
+      }
+      if (body.addressText !== undefined) {
+        sets.push(`address_text = $${i++}`);
+        vals.push(body.addressText);
+      }
+      if (body.imageUrl !== undefined) {
+        sets.push(`image_url = $${i++}`);
+        vals.push(body.imageUrl);
+      }
+      if (body.areaId !== undefined) {
+        sets.push(`area_id = $${i++}`);
+        vals.push(body.areaId);
+      }
+
+      if (sets.length === 0) throw new HttpError(400, "لا توجد حقول للتحديث");
+
+      vals.push(id);
+      const { rowCount } = await query(
+        `UPDATE stores SET ${sets.join(", ")}, updated_at = now() WHERE id = $${i}`,
+        vals
+      );
+      if (!rowCount) throw new HttpError(404, "المتجر غير موجود");
+
+      const { rows } = await query(
+        `
+        SELECT s.*, a.name AS area_name, qc.public_token AS qr_public_token,
+          r.full_name AS registered_by_rep_name
+        FROM stores s
+        JOIN areas a ON a.id = s.area_id
+        JOIN qr_codes qc ON qc.id = s.qr_code_id
+        LEFT JOIN representatives r ON r.id = s.registered_by_representative_id
+        WHERE s.id = $1
+      `,
+        [id]
+      );
       res.json({ store: rows[0] });
     } catch (e) {
       next(e);

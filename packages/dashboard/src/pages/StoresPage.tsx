@@ -4,10 +4,10 @@ import { QRCodeSVG } from "qrcode.react";
 
 import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
-import GooglePlacesPanel from "../components/GooglePlacesPanel";
-import StoreMap from "../components/StoreMap";
 import PaginationBar from "../components/PaginationBar";
+import StoreEditModal, { type EditableStore } from "../components/StoreEditModal";
 import TableFilterBar from "../components/TableFilterBar";
+import StoreMap from "../components/StoreMap";
 import { useTableFilters } from "../hooks/useTableFilters";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
@@ -21,10 +21,14 @@ type Store = {
   phone: string;
   owner_name: string;
   deferred_payment_enabled: boolean;
+  area_id: number;
   area_name: string;
   qr_public_token: string;
   location_lat: number;
   location_lng: number;
+  address_text: string | null;
+  image_url: string | null;
+  registered_by_rep_name: string | null;
 };
 
 export default function StoresPage() {
@@ -35,6 +39,7 @@ export default function StoresPage() {
   const [payStoreId, setPayStoreId] = useState<number | null>(null);
   const [payAmount, setPayAmount] = useState("");
   const [payNote, setPayNote] = useState("");
+  const [editStore, setEditStore] = useState<EditableStore | null>(null);
 
   const storeFilterFields = useMemo(
     () => [
@@ -42,6 +47,7 @@ export default function StoresPage() {
       { id: "phone", label: t.storeDetail.phone, type: "text" as const, getValue: (s: Store) => s.phone },
       { id: "area", label: t.stores.colArea, type: "text" as const, getValue: (s: Store) => s.area_name },
       { id: "owner", label: t.stores.colOwner, type: "text" as const, getValue: (s: Store) => s.owner_name },
+      { id: "rep", label: t.stores.colRegisteredBy, type: "text" as const, getValue: (s: Store) => s.registered_by_rep_name },
       { id: "qr", label: t.stores.colQr, type: "text" as const, getValue: (s: Store) => s.qr_public_token },
       {
         id: "deferred",
@@ -50,7 +56,15 @@ export default function StoresPage() {
         getValue: (s: Store) => s.deferred_payment_enabled,
       },
     ],
-    [t.storeDetail.phone, t.stores.colArea, t.stores.colDeferred, t.stores.colOwner, t.stores.colQr, t.stores.colStore]
+    [
+      t.storeDetail.phone,
+      t.stores.colArea,
+      t.stores.colDeferred,
+      t.stores.colOwner,
+      t.stores.colQr,
+      t.stores.colRegisteredBy,
+      t.stores.colStore,
+    ]
   );
 
   const storeTable = useTableFilters(stores, {
@@ -60,6 +74,7 @@ export default function StoresPage() {
       "phone",
       "owner_name",
       "area_name",
+      "registered_by_rep_name",
       "qr_public_token",
       (s) => `${s.location_lat},${s.location_lng}`,
     ],
@@ -101,6 +116,22 @@ export default function StoresPage() {
     }
   }
 
+  function openEdit(s: Store, e: React.MouseEvent) {
+    e.stopPropagation();
+    setEditStore({
+      id: s.id,
+      name: s.name,
+      phone: s.phone,
+      owner_name: s.owner_name,
+      location_lat: s.location_lat,
+      location_lng: s.location_lng,
+      address_text: s.address_text,
+      image_url: s.image_url,
+      area_id: s.area_id,
+      area_name: s.area_name,
+    });
+  }
+
   async function recordPayment(e: FormEvent) {
     e.preventDefault();
     if (!payStoreId) return;
@@ -116,7 +147,6 @@ export default function StoresPage() {
 
   return (
     <div className="grid">
-      {can("stores.write") ? <GooglePlacesPanel /> : null}
       <div className="card">
         <h2>{t.stores.title}</h2>
         <p className="muted">{t.stores.hint}</p>
@@ -150,6 +180,7 @@ export default function StoresPage() {
                 <th>{t.stores.colStore}</th>
                 <th>{t.stores.colArea}</th>
                 <th>{t.stores.colOwner}</th>
+                <th>{t.stores.colRegisteredBy}</th>
                 <th>{t.stores.colLocation}</th>
                 <th>{t.stores.colQr}</th>
                 <th>{t.stores.colDeferred}</th>
@@ -178,6 +209,7 @@ export default function StoresPage() {
                   </td>
                   <td>{s.area_name}</td>
                   <td>{s.owner_name}</td>
+                  <td className="small">{s.registered_by_rep_name ?? "—"}</td>
                   <td onClick={(e) => e.stopPropagation()}>
                     <StoreMap lat={s.location_lat} lng={s.location_lng} variant="thumb" />
                   </td>
@@ -207,9 +239,14 @@ export default function StoresPage() {
                   )}
                   {canWrite && (
                     <td onClick={(e) => e.stopPropagation()}>
-                      <button type="button" className="ghost danger" onClick={() => void removeStore(s.id)}>
-                        {t.stores.delete}
-                      </button>
+                      <span className="row" style={{ gap: 8 }}>
+                        <button type="button" className="ghost" onClick={(e) => openEdit(s, e)}>
+                          {t.stores.edit}
+                        </button>
+                        <button type="button" className="ghost danger" onClick={() => void removeStore(s.id)}>
+                          {t.stores.delete}
+                        </button>
+                      </span>
                     </td>
                   )}
                 </tr>
@@ -218,6 +255,14 @@ export default function StoresPage() {
           </table>
         </div>
       </div>
+
+      {editStore && (
+        <StoreEditModal
+          store={editStore}
+          onClose={() => setEditStore(null)}
+          onSaved={() => void load()}
+        />
+      )}
 
       {payStoreId != null && (
         <div className="modal-backdrop" onClick={() => setPayStoreId(null)} role="presentation">
