@@ -8,6 +8,7 @@ import TableFilterBar from "../components/TableFilterBar";
 import { useTableFilters } from "../hooks/useTableFilters";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
+import { ownerFormatMoney } from "../owner/ownerFormat";
 import { confirmDanger } from "../lib/swalConfirm";
 import { toastError, toastSuccess } from "../lib/toast";
 import { formatMarketDateTime } from "../utils/formatMarketDateTime";
@@ -107,6 +108,14 @@ export default function OrdersPage() {
   });
   const orderPgn = orderTable.pagination;
 
+  const filteredTotalAmount = useMemo(
+    () => orderTable.filtered.reduce((sum, o) => sum + (parseFloat(o.total_amount) || 0), 0),
+    [orderTable.filtered]
+  );
+
+  const formatMoney = (n: number) =>
+    ownerFormatMoney(n, t.overview.currency);
+
   function paymentTypeLabel(type: string): string {
     if (type === "cash") return t.overview.payCash;
     if (type === "deferred") return t.overview.payDeferred;
@@ -159,6 +168,23 @@ export default function OrdersPage() {
           pinnedFieldIds={["dateFrom", "dateTo", "type", "rep"]}
           labels={t.tableFilters}
         />
+        {orders.length > 0 && (
+          <div className="orders-filter-totals stat-row">
+            <div className="stat-pill">
+              <span className="muted small">{t.orders.filteredOrders}</span>
+              <strong>{orderTable.filteredCount}</strong>
+            </div>
+            <div className="stat-pill stat-pill--accent">
+              <span className="muted small">{t.orders.filteredTotal}</span>
+              <strong>{formatMoney(filteredTotalAmount)}</strong>
+            </div>
+            {orderTable.hasActiveFilters && orderTable.filteredCount !== orders.length ? (
+              <span className="muted small orders-filter-totals-hint">
+                {t.tableFilters.filteredSummary(orderTable.filteredCount, orders.length)}
+              </span>
+            ) : null}
+          </div>
+        )}
         {orderTable.filteredCount > 0 && (
           <PaginationBar
             className="pagination-bar--flush"

@@ -458,6 +458,8 @@ export const en: Messages = {
     colWhen: "Date",
     dateFrom: "From",
     dateTo: "To",
+    filteredOrders: "Orders shown",
+    filteredTotal: "Total amount",
     colActions: "Actions",
     detailTitle: "Order #",
     product: "Product",

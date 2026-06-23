@@ -1284,6 +1284,21 @@ html[dir="rtl"] .swal-toast-burqan .swal2-icon {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
+  align-items: center;
+}
+
+.orders-filter-totals {
+  margin: 0 0 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.stat-pill--accent strong {
+  color: var(--accent, #2563eb);
+}
+
+.orders-filter-totals-hint {
+  margin-inline-start: auto;
 }
 
 .stat-pill {
