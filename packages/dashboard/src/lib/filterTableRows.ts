@@ -3,7 +3,7 @@ export type SearchAccessor<T> = keyof T | ((row: T) => string | number | boolean
 export type FilterFieldDef<T> = {
   id: string;
   label: string;
-  type: "text" | "select" | "boolean";
+  type: "text" | "select" | "searchableSelect" | "boolean";
   getValue: (row: T) => string | number | boolean | null | undefined;
   options?: { value: string; label: string }[];
 };
@@ -53,7 +53,7 @@ export function filterTableRows<T>(
       }
 
       const text = norm(cellText(raw));
-      if (field.type === "select") {
+      if (field.type === "select" || field.type === "searchableSelect") {
         if (text !== norm(filterVal)) return false;
       } else if (!text.includes(norm(filterVal))) {
         return false;

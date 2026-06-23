@@ -1017,12 +1017,93 @@ html.locale-en body {
   font-size: 0.8rem;
 }
 
+.table-filter-field--compact {
+  flex: 0 1 200px;
+  min-width: 160px;
+}
+
 .table-filter-summary {
   margin-inline-start: auto;
 }
 
 .table-filter-empty {
   margin: 8px 0 0;
+}
+
+.searchable-select {
+  position: relative;
+}
+
+.searchable-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 10px;
+  text-align: start;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: inherit;
+  cursor: pointer;
+}
+
+.searchable-select-caret {
+  color: var(--muted);
+  font-size: 0.75rem;
+  flex-shrink: 0;
+}
+
+.searchable-select-panel {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  min-width: 200px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+}
+
+.searchable-select-search {
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  margin: 0;
+}
+
+.searchable-select-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.searchable-select-option {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  text-align: start;
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.searchable-select-option:hover,
+.searchable-select-option.is-selected {
+  background: var(--hover, rgba(0, 0, 0, 0.06));
+}
+
+.searchable-select-empty {
+  padding: 8px 12px;
 }
 
 .pagination-bar--flush {

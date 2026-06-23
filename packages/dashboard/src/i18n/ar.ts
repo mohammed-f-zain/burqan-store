@@ -603,6 +603,7 @@ export const ar = {
     yes: "نعم",
     no: "لا",
     noResults: "لا توجد صفوف تطابق البحث أو التصفية.",
+    selectSearch: "بحث…",
     filteredSummary: (filtered: number, total: number) => `${filtered} من ${total}`,
   },
 

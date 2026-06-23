@@ -41,13 +41,47 @@ export default function StoresPage() {
   const [payNote, setPayNote] = useState("");
   const [editStore, setEditStore] = useState<EditableStore | null>(null);
 
+  const areaFilterOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const s of stores) {
+      const n = s.area_name?.trim();
+      if (n) names.add(n);
+    }
+    return [...names]
+      .sort((a, b) => a.localeCompare(b, "ar"))
+      .map((name) => ({ value: name, label: name }));
+  }, [stores]);
+
+  const repFilterOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const s of stores) {
+      const n = s.registered_by_rep_name?.trim();
+      if (n) names.add(n);
+    }
+    return [...names]
+      .sort((a, b) => a.localeCompare(b, "ar"))
+      .map((name) => ({ value: name, label: name }));
+  }, [stores]);
+
   const storeFilterFields = useMemo(
     () => [
       { id: "name", label: t.stores.colStore, type: "text" as const, getValue: (s: Store) => s.name },
       { id: "phone", label: t.storeDetail.phone, type: "text" as const, getValue: (s: Store) => s.phone },
-      { id: "area", label: t.stores.colArea, type: "text" as const, getValue: (s: Store) => s.area_name },
+      {
+        id: "area",
+        label: t.stores.colArea,
+        type: "searchableSelect" as const,
+        getValue: (s: Store) => s.area_name,
+        options: areaFilterOptions,
+      },
       { id: "owner", label: t.stores.colOwner, type: "text" as const, getValue: (s: Store) => s.owner_name },
-      { id: "rep", label: t.stores.colRegisteredBy, type: "text" as const, getValue: (s: Store) => s.registered_by_rep_name },
+      {
+        id: "rep",
+        label: t.stores.colRegisteredBy,
+        type: "searchableSelect" as const,
+        getValue: (s: Store) => s.registered_by_rep_name,
+        options: repFilterOptions,
+      },
       { id: "qr", label: t.stores.colQr, type: "text" as const, getValue: (s: Store) => s.qr_public_token },
       {
         id: "deferred",
@@ -57,6 +91,8 @@ export default function StoresPage() {
       },
     ],
     [
+      areaFilterOptions,
+      repFilterOptions,
       t.storeDetail.phone,
       t.stores.colArea,
       t.stores.colDeferred,
@@ -157,6 +193,7 @@ export default function StoresPage() {
           onFilterChange={storeTable.setFilter}
           onClear={storeTable.clearFilters}
           onToggleFilters={() => storeTable.setShowFilters((v) => !v)}
+          pinnedFieldIds={["area", "rep"]}
           labels={t.tableFilters}
         />
         {storeTable.filteredCount > 0 && (

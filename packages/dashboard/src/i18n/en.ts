@@ -604,6 +604,7 @@ export const en: Messages = {
     yes: "Yes",
     no: "No",
     noResults: "No rows match your search or filters.",
+    selectSearch: "Search…",
     filteredSummary: (filtered: number, total: number) => `${filtered} of ${total}`,
   },
 
