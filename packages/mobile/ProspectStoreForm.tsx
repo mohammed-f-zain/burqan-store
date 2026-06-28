@@ -19,7 +19,8 @@ import { voronoiGeoJsonToCells, type VoronoiMapCell } from "./voronoiMapGeo";
 const RegisterMapPanelLazy = lazy(() =>
   import("./registerMapPanel").then((m) => ({ default: m.RegisterMapPanel }))
 );
-import { getRepPosition, LocationDeniedError, LocationTimeoutError } from "./getDeviceLocation";
+import { getRepPosition, LocationDeniedError, LocationInaccurateError, LocationTimeoutError } from "./getDeviceLocation";
+import { resolveRepArea } from "./resolveRepArea";
 import { productImageUrl } from "./productImage";
 import { theme } from "./theme";
 
@@ -45,6 +46,9 @@ const labels = {
   saveStore: "حفظ العميل المحتمل",
   locating: "جاري تحديد موقعك…",
   locationDenied: "يلزم تفعيل الموقع",
+  locationInaccurate: (m: number) =>
+    `دقة GPS ضعيفة (±${Math.round(m)} م). قف عند مدخل المتجر في مكان مفتوح ثم اضغط «تحديث الموقع».`,
+  gpsAccuracy: (m: number) => `دقة GPS: ±${Math.round(m)} م`,
   photosPermission: "يلزم إذن الوصول إلى الصور",
   cameraDenied: "يلزم إذن الكاميرا",
   uploadFailed: "فشل رفع الصورة",
@@ -100,6 +104,9 @@ export default function ProspectStoreForm(props: Props) {
   const [busy, setBusy] = useState(false);
   const [uploadBusy, setUploadBusy] = useState(false);
   const [imagePath, setImagePath] = useState<string | null>(null);
+  const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
+
+  const mapAreas = jordanAreas;
 
   const mapRegion = useMemo((): MapRegion => {
     if (lat != null && lng != null) {
@@ -124,31 +131,15 @@ export default function ProspectStoreForm(props: Props) {
   const refreshLocation = useCallback(async () => {
     setLocating(true);
     try {
-      const pos = await getRepPosition({ timeoutMs: 12_000 });
+      const pos = await getRepPosition({ timeoutMs: 20_000 });
       setLat(pos.lat);
       setLng(pos.lng);
-      const { res, data } = await fetchJson<{
-        areaId?: number;
-        areaName?: string;
-        governorate?: string | null;
-        assignedToRep?: boolean;
-        error?: string;
-      }>(
-        `${props.apiBase}/api/v1/rep/areas/resolve?lat=${pos.lat}&lng=${pos.lng}&forRegister=1`,
-        { headers: props.headers, timeoutMs: 20_000 }
-      );
-      if (res.ok && data.areaId) {
-        setAreaId(data.areaId);
-        const gov = typeof data.governorate === "string" ? data.governorate : "";
-        const nm = data.areaName ?? "";
-        setAreaName(gov && nm ? `${nm} · ${gov}` : nm);
-        setAreaAssignedToRep(data.assignedToRep !== false);
-        setAreaResolved(true);
-      } else {
-        setAreaResolved(false);
-        setAreaId(undefined);
-        props.onNotice(typeof data.error === "string" ? data.error : labels.areaDetecting);
-      }
+      setGpsAccuracy(pos.accuracyM);
+      const resolved = await resolveRepArea(props.apiBase, props.headers, pos.lat, pos.lng);
+      setAreaId(resolved.areaId);
+      setAreaName(resolved.areaName);
+      setAreaAssignedToRep(resolved.assignedToRep);
+      setAreaResolved(true);
       void loadJordanAreas(pos.lat, pos.lng).catch((e) => {
         props.onNotice(e instanceof Error ? e.message : labels.mapLoadFailed);
       });
@@ -157,6 +148,7 @@ export default function ProspectStoreForm(props: Props) {
       setAreaId(undefined);
       if (e instanceof LocationDeniedError) props.onNotice(labels.locationDenied);
       else if (e instanceof LocationTimeoutError) props.onNotice(labels.locating);
+      else if (e instanceof LocationInaccurateError) props.onNotice(labels.locationInaccurate(e.accuracyM));
       else props.onNotice(e instanceof Error ? e.message : labels.locating);
     } finally {
       setLocating(false);
@@ -213,12 +205,9 @@ export default function ProspectStoreForm(props: Props) {
   }
 
   async function submit() {
-    if (!areaId || lat == null || lng == null || !areaResolved) {
-      props.onNotice(labels.locating);
-      return;
-    }
     setBusy(true);
     try {
+      const pos = await getRepPosition({ timeoutMs: 20_000 });
       const res = await fetch(`${props.apiBase}/api/v1/rep/prospect-stores`, {
         method: "POST",
         headers: props.headers,
@@ -226,8 +215,8 @@ export default function ProspectStoreForm(props: Props) {
           name,
           phone,
           ownerName,
-          locationLat: lat,
-          locationLng: lng,
+          locationLat: pos.lat,
+          locationLng: pos.lng,
           addressText: address || undefined,
           imageUrl: imagePath ?? undefined,
         }),
@@ -236,7 +225,10 @@ export default function ProspectStoreForm(props: Props) {
       if (!res.ok) throw new Error(data.error ?? labels.registerFailed);
       props.onDone(labels.storeCreated, true);
     } catch (e) {
-      props.onDone(e instanceof Error ? e.message : labels.registerFailed, false);
+      if (e instanceof LocationDeniedError) props.onDone(labels.locationDenied, false);
+      else if (e instanceof LocationTimeoutError) props.onDone(labels.locating, false);
+      else if (e instanceof LocationInaccurateError) props.onDone(labels.locationInaccurate(e.accuracyM), false);
+      else props.onDone(e instanceof Error ? e.message : labels.registerFailed, false);
     } finally {
       setBusy(false);
     }
@@ -314,6 +306,9 @@ export default function ProspectStoreForm(props: Props) {
           <Text style={styles.coordsValue}>
             {lat.toFixed(6)}, {lng.toFixed(6)}
           </Text>
+          {gpsAccuracy != null ? (
+            <Text style={styles.accuracyHint}>{labels.gpsAccuracy(gpsAccuracy)}</Text>
+          ) : null}
           <Text style={styles.muted}>{labels.locationReadonly}</Text>
         </View>
       ) : null}
@@ -455,6 +450,13 @@ const styles = StyleSheet.create({
     marginTop: 4,
     textAlign: "right",
     fontVariant: ["tabular-nums"],
+  },
+  accuracyHint: {
+    color: "#16a34a",
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 6,
+    textAlign: "right",
   },
   preview: {
     width: "100%",

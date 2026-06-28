@@ -19,7 +19,8 @@ import { voronoiGeoJsonToCells, type VoronoiMapCell } from "./voronoiMapGeo";
 const RegisterMapPanelLazy = lazy(() =>
   import("./registerMapPanel").then((m) => ({ default: m.RegisterMapPanel }))
 );
-import { getRepPosition, LocationDeniedError, LocationTimeoutError } from "./getDeviceLocation";
+import { getRepPosition, LocationDeniedError, LocationInaccurateError, LocationTimeoutError } from "./getDeviceLocation";
+import { resolveRepArea } from "./resolveRepArea";
 import { productImageUrl } from "./productImage";
 import { theme } from "./theme";
 import type { StoreBrief } from "./storeTypes";
@@ -45,6 +46,9 @@ const labels = {
   saveStore: "حفظ المتجر",
   locating: "جاري تحديد موقعك…",
   locationDenied: "يلزم تفعيل الموقع",
+  locationInaccurate: (m: number) =>
+    `دقة GPS ضعيفة (±${Math.round(m)} م). قف عند مدخل المتجر في مكان مفتوح ثم اضغط «تحديث الموقع».`,
+  gpsAccuracy: (m: number) => `دقة GPS: ±${Math.round(m)} م`,
   photosPermission: "يلزم إذن الوصول إلى الصور",
   cameraDenied: "يلزم إذن الكاميرا",
   uploadFailed: "فشل رفع الصورة",
@@ -101,6 +105,7 @@ export default function RegisterStoreForm(props: Props) {
   const [busy, setBusy] = useState(false);
   const [uploadBusy, setUploadBusy] = useState(false);
   const [imagePath, setImagePath] = useState<string | null>(null);
+  const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
 
   const mapAreas = jordanAreas;
 
@@ -129,48 +134,47 @@ export default function RegisterStoreForm(props: Props) {
     [props.apiBase, props.headers]
   );
 
-  const refreshLocation = useCallback(async () => {
-    setLocating(true);
-    try {
-      const pos = await getRepPosition({ timeoutMs: 12_000 });
+  const applyGpsPosition = useCallback(
+    async (pos: { lat: number; lng: number; accuracyM: number | null }) => {
       setLat(pos.lat);
       setLng(pos.lng);
-      const { res, data } = await fetchJson<{
-        areaId?: number;
-        areaName?: string;
-        governorate?: string | null;
-        assignedToRep?: boolean;
-        error?: string;
-      }>(
-        `${props.apiBase}/api/v1/rep/areas/resolve?lat=${pos.lat}&lng=${pos.lng}&forRegister=1`,
-        { headers: props.headers, timeoutMs: 20_000 }
-      );
-      if (res.ok && data.areaId) {
-        setAreaId(data.areaId);
-        const gov = typeof data.governorate === "string" ? data.governorate : "";
-        const nm = data.areaName ?? "";
-        setAreaName(gov && nm ? `${nm} · ${gov}` : nm);
-        setAreaAssignedToRep(data.assignedToRep !== false);
-        setAreaResolved(true);
-      } else {
-        setAreaResolved(false);
-        setAreaId(undefined);
-        props.onNotice(typeof data.error === "string" ? data.error : labels.areaDetecting);
-      }
+      setGpsAccuracy(pos.accuracyM);
+      const resolved = await resolveRepArea(props.apiBase, props.headers, pos.lat, pos.lng);
+      setAreaId(resolved.areaId);
+      setAreaName(resolved.areaName);
+      setAreaAssignedToRep(resolved.assignedToRep);
+      setAreaResolved(true);
       void loadJordanAreas(pos.lat, pos.lng).catch((e) => {
         props.onNotice(e instanceof Error ? e.message : labels.mapLoadFailed);
       });
-    } catch (e) {
+    },
+    [props.apiBase, props.headers, props.onNotice, loadJordanAreas]
+  );
+
+  const handleLocationError = useCallback(
+    (e: unknown) => {
       setAreaResolved(false);
       setAreaId(undefined);
       if (e instanceof LocationDeniedError) props.onNotice(labels.locationDenied);
       else if (e instanceof LocationTimeoutError) props.onNotice(labels.locating);
+      else if (e instanceof LocationInaccurateError) props.onNotice(labels.locationInaccurate(e.accuracyM));
       else if (e instanceof Error && e.message === "network_timeout") props.onNotice(labels.mapLoadFailed);
       else props.onNotice(e instanceof Error ? e.message : labels.locating);
+    },
+    [props.onNotice]
+  );
+
+  const refreshLocation = useCallback(async () => {
+    setLocating(true);
+    try {
+      const pos = await getRepPosition({ timeoutMs: 20_000 });
+      await applyGpsPosition(pos);
+    } catch (e) {
+      handleLocationError(e);
     } finally {
       setLocating(false);
     }
-  }, [props.apiBase, props.headers, props.onNotice, loadJordanAreas]);
+  }, [applyGpsPosition, handleLocationError]);
 
   useEffect(() => {
     void refreshLocation();
@@ -222,12 +226,18 @@ export default function RegisterStoreForm(props: Props) {
   }
 
   async function submit() {
-    if (!areaId || lat == null || lng == null || !areaResolved) {
-      props.onNotice(labels.locating);
-      return;
-    }
     setBusy(true);
     try {
+      const pos = await getRepPosition({ timeoutMs: 20_000 });
+      const resolved = await resolveRepArea(props.apiBase, props.headers, pos.lat, pos.lng);
+      setLat(pos.lat);
+      setLng(pos.lng);
+      setGpsAccuracy(pos.accuracyM);
+      setAreaId(resolved.areaId);
+      setAreaName(resolved.areaName);
+      setAreaAssignedToRep(resolved.assignedToRep);
+      setAreaResolved(true);
+
       const res = await fetch(`${props.apiBase}/api/v1/rep/stores/register`, {
         method: "POST",
         headers: props.headers,
@@ -236,22 +246,25 @@ export default function RegisterStoreForm(props: Props) {
           name,
           phone,
           ownerName,
-          locationLat: lat,
-          locationLng: lng,
+          locationLat: pos.lat,
+          locationLng: pos.lng,
           addressText: address || undefined,
-          areaId,
+          areaId: resolved.areaId,
           imageUrl: imagePath ?? undefined,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? labels.registerFailed);
       const hint =
-        data.assignedToRep === false && typeof data.areaName === "string"
-          ? `${labels.storeCreated(data.store?.id ?? 0)} — ${labels.areaOutsideRep} (${data.areaName})`
+        resolved.assignedToRep === false
+          ? `${labels.storeCreated(data.store?.id ?? 0)} — ${labels.areaOutsideRep} (${resolved.areaName})`
           : labels.storeCreated(data.store?.id ?? 0);
       props.onDone(hint, data.store as StoreBrief);
     } catch (e) {
-      props.onDone(e instanceof Error ? e.message : labels.registerFailed);
+      if (e instanceof LocationDeniedError) props.onDone(labels.locationDenied);
+      else if (e instanceof LocationTimeoutError) props.onDone(labels.locating);
+      else if (e instanceof LocationInaccurateError) props.onDone(labels.locationInaccurate(e.accuracyM));
+      else props.onDone(e instanceof Error ? e.message : labels.registerFailed);
     } finally {
       setBusy(false);
     }
@@ -328,6 +341,9 @@ export default function RegisterStoreForm(props: Props) {
           <Text style={styles.coordsValue}>
             {lat.toFixed(6)}, {lng.toFixed(6)}
           </Text>
+          {gpsAccuracy != null ? (
+            <Text style={styles.accuracyHint}>{labels.gpsAccuracy(gpsAccuracy)}</Text>
+          ) : null}
           <Text style={styles.muted}>{labels.locationReadonly}</Text>
         </View>
       ) : null}
@@ -470,6 +486,13 @@ const styles = StyleSheet.create({
     marginTop: 4,
     textAlign: "right",
     fontVariant: ["tabular-nums"],
+  },
+  accuracyHint: {
+    color: "#16a34a",
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 6,
+    textAlign: "right",
   },
   preview: {
     width: "100%",

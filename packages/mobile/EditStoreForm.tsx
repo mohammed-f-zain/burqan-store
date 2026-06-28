@@ -18,7 +18,7 @@ import { fetchJson } from "./fetchJson";
 import RegisterMapFallback from "./RegisterMapFallback";
 import type { MapRegion } from "./registerMapConfig";
 import { shouldLoadNativeMapsModule } from "./registerMapConfig";
-import { getRepPosition, LocationDeniedError, LocationTimeoutError } from "./getDeviceLocation";
+import { getRepPosition, LocationDeniedError, LocationInaccurateError, LocationTimeoutError } from "./getDeviceLocation";
 import { productImageUrl } from "./productImage";
 import type { StoreBrief } from "./storeTypes";
 import { theme } from "./theme";
@@ -48,6 +48,8 @@ const labels = {
   saveStore: "حفظ التعديلات",
   locating: "جاري تحديد موقعك…",
   locationDenied: "يلزم تفعيل الموقع لتحديث الإحداثيات",
+  locationInaccurate: (m: number) =>
+    `دقة GPS ضعيفة (±${Math.round(m)} م). قف عند المتجر في مكان مفتوح ثم أعد التحديث.`,
   photosPermission: "يلزم إذن الوصول إلى الصور",
   cameraDenied: "يلزم إذن الكاميرا",
   uploadFailed: "فشل رفع الصورة",
@@ -164,7 +166,7 @@ export default function EditStoreForm(props: Props) {
   const refreshLocation = useCallback(async () => {
     setLocating(true);
     try {
-      const pos = await getRepPosition({ timeoutMs: 12_000 });
+      const pos = await getRepPosition({ timeoutMs: 20_000 });
       setLat(pos.lat);
       setLng(pos.lng);
       await resolveAreaAt(pos.lat, pos.lng);
@@ -172,6 +174,7 @@ export default function EditStoreForm(props: Props) {
       setAreaResolved(false);
       if (e instanceof LocationDeniedError) props.onNotice(labels.locationDenied);
       else if (e instanceof LocationTimeoutError) props.onNotice(labels.locating);
+      else if (e instanceof LocationInaccurateError) props.onNotice(labels.locationInaccurate(e.accuracyM));
       else props.onNotice(e instanceof Error ? e.message : labels.locating);
     } finally {
       setLocating(false);
@@ -253,9 +256,9 @@ export default function EditStoreForm(props: Props) {
       const locationChanged =
         Math.abs(lat - initialLat) > 1e-6 || Math.abs(lng - initialLng) > 1e-6;
       if (locationChanged) {
-        const pos = await getRepPosition({ timeoutMs: 12_000 });
-        body.locationLat = lat;
-        body.locationLng = lng;
+        const pos = await getRepPosition({ timeoutMs: 20_000 });
+        body.locationLat = pos.lat;
+        body.locationLng = pos.lng;
         body.repLat = pos.lat;
         body.repLng = pos.lng;
       }
@@ -278,7 +281,10 @@ export default function EditStoreForm(props: Props) {
       if (data.store) props.onSaved(data.store);
       else props.onSaved({ ...store, name: name.trim(), phone: phone.trim(), ownerName: ownerName.trim(), addressText: addr || null, imageUrl: imagePath, location: { lat, lng } });
     } catch (e) {
-      props.onNotice(e instanceof Error ? e.message : labels.saveFailed);
+      if (e instanceof LocationDeniedError) props.onNotice(labels.locationDenied);
+      else if (e instanceof LocationInaccurateError) props.onNotice(labels.locationInaccurate(e.accuracyM));
+      else if (e instanceof LocationTimeoutError) props.onNotice(labels.locating);
+      else props.onNotice(e instanceof Error ? e.message : labels.saveFailed);
     } finally {
       setBusy(false);
     }

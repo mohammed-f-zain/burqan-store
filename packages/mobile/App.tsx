@@ -35,7 +35,9 @@ import {
   ensureLocationPermission,
   getRepPosition,
   LocationDeniedError,
+  LocationInaccurateError,
   LocationTimeoutError,
+  warmRepPosition,
 } from "./getDeviceLocation";
 import ProductCatalogGrid from "./ProductCatalogGrid";
 import InventoryList from "./InventoryList";
@@ -167,6 +169,8 @@ const t = {
   storeCreated: (id: number) => `تم إنشاء المتجر #${id}.`,
   currency: "د.أ",
   locationDenied: "يلزم تفعيل الموقع للمسح وتسجيل المتاجر.",
+  locationInaccurate: (m: number) =>
+    `دقة GPS ضعيفة (±${Math.round(m)} م). قف عند المتجر في مكان مفتوح ثم أعد المسح.`,
   locating: "جاري تحديد موقعك…",
   areaAuto: "المنطقة (تلقائي من الخريطة)",
   areaDetecting: "جاري تحديد المنطقة…",
@@ -927,7 +931,7 @@ export default function App() {
     hideToast();
 
     try {
-      const pos = await getRepPosition({ timeoutMs: 12_000 });
+      const pos = await getRepPosition({ timeoutMs: 20_000 });
       setBusy(true);
       setBusyMessage(t.qrResolving);
       const { res, data } = await fetchJson<{
@@ -998,6 +1002,7 @@ export default function App() {
       }
     } catch (e) {
       if (e instanceof LocationDeniedError) showToast(t.locationDenied, "error");
+      else if (e instanceof LocationInaccurateError) showToast(t.locationInaccurate(e.accuracyM), "error");
       else if (e instanceof LocationTimeoutError) showToast(t.locationTimeout, "error");
       else if (e instanceof Error && e.message === "network_timeout") showToast(t.networkTimeout, "error");
       else showToast(e instanceof Error ? e.message : t.qrFailed, "error");
@@ -1030,7 +1035,7 @@ export default function App() {
     if (!locOk) {
       showToast(t.locationDenied, "error");
     } else {
-      void getRepPosition({ timeoutMs: 10_000 }).catch(() => {});
+      void warmRepPosition().catch(() => {});
     }
 
     if (shouldUseSystemQrScanner()) {
@@ -1186,6 +1191,8 @@ export default function App() {
       await Promise.all([refreshStoreData(activeStore.id), loadInventory()]);
     } catch (e) {
       if (e instanceof LocationDeniedError) showToast(t.locationDenied, "error");
+      else if (e instanceof LocationInaccurateError) showToast(t.locationInaccurate(e.accuracyM), "error");
+      else if (e instanceof LocationTimeoutError) showToast(t.locationTimeout, "error");
       else showToast(e instanceof Error ? e.message : t.orderFailed, "error");
     } finally {
       setBusy(false);
@@ -1278,7 +1285,7 @@ export default function App() {
     }
     setBusy(true);
     try {
-      const pos = await getRepPosition({ timeoutMs: 12_000 });
+      const pos = await getRepPosition({ timeoutMs: 20_000 });
       const res = await apiPost("/api/v1/rep/prize-redemptions", {
         storeId: activeStore.id,
         lines,
@@ -1295,6 +1302,8 @@ export default function App() {
       void loadPrizes();
     } catch (e) {
       if (e instanceof LocationDeniedError) showToast(t.locationDenied, "error");
+      else if (e instanceof LocationInaccurateError) showToast(t.locationInaccurate(e.accuracyM), "error");
+      else if (e instanceof LocationTimeoutError) showToast(t.locationTimeout, "error");
       else showToast(e instanceof Error ? e.message : t.redeemFailed, "error");
     } finally {
       setBusy(false);
