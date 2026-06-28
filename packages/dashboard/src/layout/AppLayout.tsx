@@ -21,6 +21,7 @@ export default function AppLayout() {
     { to: "/app/representatives", label: t.nav.representatives, perm: "reps.read" },
     { to: "/app/fill-car", label: t.nav.fillCar, permAny: ["fill_car.read", "reps.read"] },
     { to: "/app/stores", label: t.nav.stores, perm: "stores.read" },
+    { to: "/app/possible-clients", label: t.nav.possibleClients, perm: "stores.read" },
     { to: "/app/visits", label: t.nav.visits, perm: "stores.read" },
     { to: "/app/orders", label: t.nav.orders, perm: "orders.read" },
     { to: "/app/qr-pool", label: t.nav.qrPool, perm: "qr_pool.read" },

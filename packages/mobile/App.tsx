@@ -58,6 +58,7 @@ import { theme } from "./theme";
 
 /** Lazy: keeps react-native-maps out of the register screen chunk on Android. */
 const RegisterStoreForm = lazy(() => import("./RegisterStoreForm"));
+const ProspectStoreForm = lazy(() => import("./ProspectStoreForm"));
 
 void ExpoSplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -204,6 +205,18 @@ const t = {
   dailyStoresCollapseAll: "إغلاق الكل",
   dailyStoresNoSearchResults: "لا نتائج — جرّب بحثاً آخر",
   dailyStoresVisitQr: "زيارة",
+  prospectsTitle: "عملاء محتملون",
+  prospectsHint: "متاجر بدون QR — اربط بطاقة جديدة عند الزيارة التالية",
+  prospectsEmpty: "لا يوجد عملاء محتملون",
+  prospectsAdd: "إضافة",
+  prospectsLinkQr: "ربط رمز QR",
+  prospectsVisited: "تمت زيارته",
+  prospectsPending: "باقٍ",
+  prospectsSearch: "بحث…",
+  prospectsPill: "محتمل",
+  prospectConverted: "تم تحويل العميل إلى متجر مسجّل",
+  prospectConvertFailed: "تعذّر ربط الرمز",
+  prospectLinkScanHint: "امسح رمز بطاقة جديد غير مستخدم لربط هذا العميل",
   navGoogle: "خرائط Google",
   googleTabTitle: "سوبرماركت ومتاجر المنطقة",
   googleTabHint: "نتائج البحث من Google Maps في مناطق عملك",
@@ -282,6 +295,7 @@ function mapProductRow(r: {
 
 type Area = { id: number; name: string };
 import DailyStoresByArea from "./DailyStoresByArea";
+import PossibleClientsSection from "./PossibleClientsSection";
 import GooglePlacesByArea, { type GooglePlaceAreaSummary } from "./GooglePlacesByArea";
 import {
   groupRawGooglePlacesByArea,
@@ -292,7 +306,7 @@ import OrderInvoiceModal from "./OrderInvoiceModal";
 import StoreCartPanel from "./StoreCartPanel";
 import StorePeekModal from "./StorePeekModal";
 import type { ReceiptData } from "./receiptFormat";
-import type { DailyStoreCard, PrizeProduct, StoreBrief } from "./storeTypes";
+import type { DailyStoreCard, PrizeProduct, ProspectCard, StoreBrief } from "./storeTypes";
 export type { StoreBrief } from "./storeTypes";
 
 type BottomTab = "home" | "google" | "inventory" | "store" | "profile";
@@ -359,7 +373,7 @@ export default function App() {
     return () => clearTimeout(id);
   }, [toast]);
 
-  const [mode, setMode] = useState<"home" | "scan" | "register" | "store">("home");
+  const [mode, setMode] = useState<"home" | "scan" | "register" | "prospect-add" | "store">("home");
   const [permission, requestPermission] = useCameraPermissions();
   /** iOS sometimes lags updating `permission` after the user taps Allow — still show CameraView if request() just succeeded. */
   const [scanPermissionOverride, setScanPermissionOverride] = useState(false);
@@ -420,6 +434,9 @@ export default function App() {
   const [homeRefreshing, setHomeRefreshing] = useState(false);
   const [googleRefreshing, setGoogleRefreshing] = useState(false);
   const [dailyStores, setDailyStores] = useState<DailyStoreCard[]>([]);
+  const [prospects, setProspects] = useState<ProspectCard[]>([]);
+  const [prospectsLoading, setProspectsLoading] = useState(false);
+  const [convertingProspectId, setConvertingProspectId] = useState<number | null>(null);
   const [googlePlacesReady, setGooglePlacesReady] = useState(true);
   const [dailyStoresLoading, setDailyStoresLoading] = useState(false);
   const [googlePlacesLoading, setGooglePlacesLoading] = useState(false);
@@ -601,6 +618,40 @@ export default function App() {
       })),
     []
   );
+
+  const loadProspects = useCallback(async () => {
+    if (!token) return;
+    setProspectsLoading(true);
+    try {
+      const data = await apiGet("/api/v1/rep/prospect-stores");
+      const rows = (data.prospects ?? []) as Array<{
+        id: number;
+        name: string;
+        phone: string;
+        ownerName: string;
+        location: { lat: number; lng: number };
+        addressText?: string | null;
+        areaName?: string | null;
+        visitedToday?: boolean;
+      }>;
+      setProspects(
+        rows.map((p) => ({
+          id: p.id,
+          name: p.name,
+          phone: p.phone,
+          ownerName: p.ownerName,
+          location: p.location,
+          addressText: p.addressText,
+          areaName: p.areaName,
+          visitedToday: p.visitedToday,
+        }))
+      );
+    } catch {
+      setProspects([]);
+    } finally {
+      setProspectsLoading(false);
+    }
+  }, [apiGet, token]);
 
   const loadDailyStores = useCallback(async () => {
     if (!token) return;
@@ -836,7 +887,8 @@ export default function App() {
     void loadProfile();
     void loadInventory();
     void loadDailyStores();
-  }, [token, loadProfile, loadInventory, loadDailyStores]);
+    void loadProspects();
+  }, [token, loadProfile, loadInventory, loadDailyStores, loadProspects]);
 
   async function resolveQr(raw: string) {
     if (!token || qrResolveInFlightRef.current) return;
@@ -874,6 +926,35 @@ export default function App() {
       if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : t.qrFailed);
 
       setLastScanToken(publicToken);
+      if (convertingProspectId) {
+        if (data.status !== "unassigned") {
+          showToast(t.prospectConvertFailed, "error");
+          setConvertingProspectId(null);
+          return;
+        }
+        const convertRes = await apiPost(`/api/v1/rep/prospect-stores/${convertingProspectId}/convert`, {
+          qrPublicToken: publicToken,
+          repLat: pos.lat,
+          repLng: pos.lng,
+        });
+        const store = convertRes.store as StoreBrief | undefined;
+        setConvertingProspectId(null);
+        if (store) {
+          setActiveStore(store);
+          setStorePointsBalance(store.loyaltyPointsBalance ?? 0);
+          setRedeemCart({});
+          setVisitHadOrder(false);
+          setMode("store");
+          setBottomTab("home");
+          setStoreTab("sell");
+          showToast(t.prospectConverted, "success");
+          void Promise.all([refreshStoreData(store.id), loadDailyStores(), loadProspects()]);
+        } else {
+          showToast(t.prospectConvertFailed, "error");
+          setMode("home");
+        }
+        return;
+      }
       if (data.status === "unassigned") {
         setActiveStore(null);
         setBottomTab("home");
@@ -971,20 +1052,21 @@ export default function App() {
       });
       const aj = await a.json();
       if (a.ok) setAreas(aj.areas ?? []);
-      await Promise.all([loadInventory(), loadProfile(), loadDailyStores()]);
+      await Promise.all([loadInventory(), loadProfile(), loadDailyStores(), loadProspects()]);
       if (activeStore) await refreshStoreData(activeStore.id);
     } catch {
       /* ignore */
     } finally {
       setHomeRefreshing(false);
     }
-  }, [token, activeStore, refreshStoreData, loadInventory, loadProfile, loadDailyStores]);
+  }, [token, activeStore, refreshStoreData, loadInventory, loadProfile, loadDailyStores, loadProspects]);
 
   useEffect(() => {
-    if (token && bottomTab === "home" && mode !== "store" && mode !== "register") {
+    if (token && bottomTab === "home" && mode !== "store" && mode !== "register" && mode !== "prospect-add") {
       void loadDailyStores();
+      void loadProspects();
     }
-  }, [token, bottomTab, mode, loadDailyStores]);
+  }, [token, bottomTab, mode, loadDailyStores, loadProspects]);
 
   useEffect(() => {
     if (token && bottomTab === "google" && mode !== "store" && mode !== "register") {
@@ -1401,12 +1483,15 @@ export default function App() {
             ) : undefined
           }
         >
-      {bottomTab === "home" && mode !== "store" && mode !== "register" && !activeStore && (
+      {bottomTab === "home" && mode !== "store" && mode !== "register" && mode !== "prospect-add" && !activeStore && (
         <>
           <View style={styles.card}>
             <Pressable style={styles.scanPrimary} onPress={() => void openQrScanner()}>
               <Text style={styles.scanPrimaryText}>{t.openScanner}</Text>
             </Pressable>
+            {convertingProspectId ? (
+              <Text style={styles.prospectLinkHint}>{t.prospectLinkScanHint}</Text>
+            ) : null}
             <TextInput
               style={styles.input}
               value={manualToken}
@@ -1419,6 +1504,28 @@ export default function App() {
               <Text style={styles.secondaryText}>{t.lookup}</Text>
             </Pressable>
           </View>
+
+          <PossibleClientsSection
+            prospects={prospects}
+            loading={prospectsLoading}
+            labels={{
+              title: t.prospectsTitle,
+              hint: t.prospectsHint,
+              empty: t.prospectsEmpty,
+              add: t.prospectsAdd,
+              linkQr: t.prospectsLinkQr,
+              visited: t.prospectsVisited,
+              pending: t.prospectsPending,
+              searchPlaceholder: t.prospectsSearch,
+              pill: t.prospectsPill,
+            }}
+            onAdd={() => setMode("prospect-add")}
+            onLinkQr={(p) => {
+              setConvertingProspectId(p.id);
+              showToast(t.prospectLinkScanHint, "info");
+              void openQrScanner();
+            }}
+          />
 
           <DailyStoresByArea
             stores={dailyStores}
@@ -1656,6 +1763,34 @@ export default function App() {
             </View>
           )}
         </View>
+      )}
+
+      {mode === "prospect-add" && token && bottomTab === "home" && (
+        <RegisterErrorBoundary
+          onBack={() => {
+            setMode("home");
+          }}
+        >
+          <Suspense
+            fallback={
+              <View style={styles.center}>
+                <ActivityIndicator color={accent} size="large" />
+              </View>
+            }
+          >
+            <ProspectStoreForm
+              headers={headers}
+              apiBase={API_BASE}
+              authToken={token}
+              onNotice={(msg) => showToast(msg, "info")}
+              onDone={(msg, success) => {
+                showToast(msg, success ? "success" : "error");
+                setMode("home");
+                if (success) void loadProspects();
+              }}
+            />
+          </Suspense>
+        </RegisterErrorBoundary>
       )}
 
       {mode === "register" && lastScanToken && token && bottomTab === "home" && (
@@ -2170,6 +2305,14 @@ const styles = StyleSheet.create({
     borderColor: theme.accent2,
   },
   scanPrimaryText: { color: "#fff", fontWeight: "800", fontSize: 16 },
+  prospectLinkHint: {
+    color: accent,
+    fontSize: 13,
+    fontWeight: "700",
+    textAlign: "right",
+    marginTop: 10,
+    lineHeight: 20,
+  },
   resumeCard: {
     flexDirection: "row-reverse",
     alignItems: "center",

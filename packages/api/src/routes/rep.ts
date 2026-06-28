@@ -3,7 +3,6 @@ import { randomBytes } from "node:crypto";
 import { Router } from "express";
 import { z } from "zod";
 
-import { NO_BUY_REASONS } from "../data/noBuyReasons.js";
 import { imageUpload } from "../lib/uploadConfig.js";
 import { query, pool } from "../db/pool.js";
 import { repAuthMiddleware } from "../middleware/repAuth.js";
@@ -191,7 +190,11 @@ router.get("/inventory", repAuthMiddleware, async (req, res, next) => {
     const rep = req.rep!;
     const { rows } = await query(
       `SELECT p.id, p.name, p.designation, p.unit_label, p.carton_spec, p.dimensions_cm,
-              p.carton_weight_kg, p.image_url, p.price, ri.quantity
+              p.carton_weight_kg, p.image_url,
+              p.price AS catalog_price,
+              COALESCE(ri.price, p.price) AS price,
+              ri.price AS rep_price,
+              ri.quantity
        FROM representative_inventory ri
        INNER JOIN products p ON p.id = ri.product_id AND p.is_active = true
        WHERE ri.representative_id = $1 AND ri.quantity > 0
@@ -398,6 +401,283 @@ router.post("/stores/register", repAuthMiddleware, async (req, res, next) => {
   }
 });
 
+const prospectStoreSchema = z.object({
+  name: z.string().min(2),
+  phone: z.string().min(6),
+  ownerName: z.string().min(2),
+  locationLat: z.number(),
+  locationLng: z.number(),
+  addressText: z.string().optional(),
+  imageUrl: optionalStoredImagePathSchema,
+});
+
+const prospectConvertSchema = z.object({
+  qrPublicToken: z.string().min(16).max(64),
+  repLat: z.number().min(-90).max(90),
+  repLng: z.number().min(-180).max(180),
+});
+
+function mapProspectRow(row: {
+  id: number;
+  name: string;
+  phone: string;
+  owner_name: string;
+  location_lat: number;
+  location_lng: number;
+  address_text: string | null;
+  image_url: string | null;
+  area_id: number;
+  area_name: string;
+  status: string;
+  converted_store_id: number | null;
+  created_at: string;
+}) {
+  return {
+    id: row.id,
+    name: row.name,
+    phone: row.phone,
+    ownerName: row.owner_name,
+    location: { lat: row.location_lat, lng: row.location_lng },
+    addressText: row.address_text,
+    imageUrl: row.image_url,
+    areaId: row.area_id,
+    areaName: row.area_name,
+    status: row.status,
+    convertedStoreId: row.converted_store_id,
+    createdAt: row.created_at,
+  };
+}
+
+async function loadProspectForRep(
+  prospectId: number,
+  rep: { id: number; areaIds: number[] }
+) {
+  const areaFilterIds = await expandRepAreaIds(rep.areaIds);
+  const { rows } = await query<{
+    id: number;
+    name: string;
+    phone: string;
+    owner_name: string;
+    location_lat: number;
+    location_lng: number;
+    address_text: string | null;
+    image_url: string | null;
+    area_id: number;
+    area_name: string;
+    status: string;
+    converted_store_id: number | null;
+    created_by_representative_id: number;
+    created_at: string;
+  }>(
+    `SELECT ps.*, a.name AS area_name
+     FROM prospect_stores ps
+     JOIN areas a ON a.id = ps.area_id
+     WHERE ps.id = $1`,
+    [prospectId]
+  );
+  const p = rows[0];
+  if (!p) throw new HttpError(404, "العميل المحتمل غير موجود");
+  const canAccess =
+    p.created_by_representative_id === rep.id || areaFilterIds.includes(p.area_id);
+  if (!canAccess) throw new HttpError(403, "ليس ضمن مناطقك");
+  return p;
+}
+
+/** Possible clients (no QR) — list open prospects in rep areas or created by rep. */
+router.get("/prospect-stores", repAuthMiddleware, async (req, res, next) => {
+  try {
+    const rep = req.rep!;
+    const areaFilterIds = await expandRepAreaIds(rep.areaIds);
+    const { rows } = await query<{
+      id: number;
+      name: string;
+      phone: string;
+      owner_name: string;
+      location_lat: number;
+      location_lng: number;
+      address_text: string | null;
+      image_url: string | null;
+      area_id: number;
+      area_name: string;
+      status: string;
+      converted_store_id: number | null;
+      created_at: string;
+      visited_today: boolean;
+    }>(
+      `SELECT ps.id, ps.name, ps.phone, ps.owner_name, ps.location_lat, ps.location_lng,
+              ps.address_text, ps.image_url, ps.area_id, ps.status, ps.converted_store_id,
+              ps.created_at, a.name AS area_name,
+              EXISTS (
+                SELECT 1 FROM prospect_visits pv
+                WHERE pv.prospect_store_id = ps.id
+                  AND pv.representative_id = $2
+                  AND (pv.visited_at AT TIME ZONE 'Asia/Amman')::date =
+                      (NOW() AT TIME ZONE 'Asia/Amman')::date
+              ) AS visited_today
+       FROM prospect_stores ps
+       JOIN areas a ON a.id = ps.area_id
+       WHERE ps.status = 'open'
+         AND (ps.created_by_representative_id = $2 OR ps.area_id = ANY($1::int[]))
+       ORDER BY visited_today ASC, a.name ASC, ps.name ASC`,
+      [areaFilterIds, rep.id]
+    );
+    res.json({
+      prospects: rows.map((r) => ({
+        ...mapProspectRow(r),
+        visitedToday: r.visited_today,
+      })),
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post("/prospect-stores", repAuthMiddleware, async (req, res, next) => {
+  try {
+    const body = prospectStoreSchema.parse(req.body);
+    const rep = req.rep!;
+    const resolved = await resolveAreaIdFromAllAreas(body.locationLat, body.locationLng);
+    const { rows } = await query<{ id: number }>(
+      `INSERT INTO prospect_stores (
+         name, phone, owner_name, location_lat, location_lng, address_text, image_url,
+         area_id, created_by_representative_id
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       RETURNING id`,
+      [
+        body.name,
+        body.phone,
+        body.ownerName,
+        body.locationLat,
+        body.locationLng,
+        body.addressText ?? null,
+        body.imageUrl || null,
+        resolved.areaId,
+        rep.id,
+      ]
+    );
+    const prospectId = rows[0]!.id;
+    await query(
+      `INSERT INTO prospect_visits (prospect_store_id, representative_id, note)
+       VALUES ($1, $2, $3)`,
+      [prospectId, rep.id, "Initial visit"]
+    );
+    const loaded = await loadProspectForRep(prospectId, rep);
+    res.status(201).json({
+      prospect: mapProspectRow(loaded),
+      areaName: resolved.areaName,
+      assignedToRep: rep.areaIds.includes(resolved.areaId),
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get("/prospect-stores/:id", repAuthMiddleware, async (req, res, next) => {
+  try {
+    const id = z.coerce.number().int().positive().parse(req.params.id);
+    const p = await loadProspectForRep(id, req.rep!);
+    res.json({ prospect: mapProspectRow(p) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** Link unassigned QR and convert prospect → registered store. */
+router.post("/prospect-stores/:id/convert", repAuthMiddleware, async (req, res, next) => {
+  try {
+    const prospectId = z.coerce.number().int().positive().parse(req.params.id);
+    const body = prospectConvertSchema.parse(req.body);
+    const rep = req.rep!;
+    const prospect = await loadProspectForRep(prospectId, rep);
+    if (prospect.status !== "open") {
+      throw new HttpError(409, "تم تحويل هذا العميل المحتمل مسبقاً");
+    }
+    assertWithinScanDistance(
+      body.repLat,
+      body.repLng,
+      prospect.location_lat,
+      prospect.location_lng
+    );
+
+    const c = await pool.connect();
+    try {
+      await c.query("BEGIN");
+      const qr = await c.query<{ id: string }>(
+        `SELECT qc.id FROM qr_codes qc
+         WHERE qc.public_token = $1
+           AND NOT EXISTS (SELECT 1 FROM stores s WHERE s.qr_code_id = qc.id)
+         FOR UPDATE`,
+        [body.qrPublicToken]
+      );
+      if (!qr.rows[0]) throw new HttpError(409, "رمز QR مستخدم مسبقاً أو غير صالح");
+
+      const ownerToken = randomBytes(24).toString("hex");
+      const ins = await c.query<{ id: number }>(
+        `INSERT INTO stores (
+           qr_code_id, name, phone, owner_name, location_lat, location_lng, address_text, image_url,
+           area_id, deferred_payment_enabled, owner_portal_token, registered_by_representative_id
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,false,$10,$11)
+         RETURNING id`,
+        [
+          qr.rows[0].id,
+          prospect.name,
+          prospect.phone,
+          prospect.owner_name,
+          prospect.location_lat,
+          prospect.location_lng,
+          prospect.address_text,
+          prospect.image_url,
+          prospect.area_id,
+          ownerToken,
+          rep.id,
+        ]
+      );
+      const storeId = ins.rows[0]!.id;
+      await c.query(
+        `INSERT INTO visits (representative_id, store_id, note) VALUES ($1, $2, $3)`,
+        [rep.id, storeId, "Converted from possible client"]
+      );
+      await c.query(
+        `UPDATE prospect_stores
+         SET status = 'converted', converted_store_id = $1, updated_at = now()
+         WHERE id = $2`,
+        [storeId, prospectId]
+      );
+      await c.query("COMMIT");
+      const store = await loadStoreForRep(storeId, rep);
+      res.status(201).json({ store, prospectId, converted: true });
+    } catch (e) {
+      await c.query("ROLLBACK");
+      throw e;
+    } finally {
+      c.release();
+    }
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** Record a visit to a possible client today. */
+router.post("/prospect-stores/:id/visits", repAuthMiddleware, async (req, res, next) => {
+  try {
+    const id = z.coerce.number().int().positive().parse(req.params.id);
+    const rep = req.rep!;
+    const prospect = await loadProspectForRep(id, rep);
+    if (prospect.status !== "open") throw new HttpError(409, "العميل المحتمل مغلق");
+    const loc = repLocationSchema.parse(req.body);
+    assertWithinScanDistance(loc.repLat, loc.repLng, prospect.location_lat, prospect.location_lng);
+    const { rows } = await query(
+      `INSERT INTO prospect_visits (prospect_store_id, representative_id)
+       VALUES ($1, $2)
+       RETURNING id, visited_at`,
+      [id, rep.id]
+    );
+    res.status(201).json({ visit: rows[0] });
+  } catch (e) {
+    next(e);
+  }
+});
+
 /** Burqan stores in rep areas for the home tab (Google places use GET /google-places). */
 router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
   try {
@@ -545,7 +825,7 @@ const visitNoteSchema = z.object({
   note: z.string().max(2000).optional().nullable(),
 });
 
-/** Attach note to today's latest visit for this rep at the store (from QR scan). */
+/** Attach optional visit note or no-buy reason to today's latest visit (end-visit modal). */
 router.patch("/stores/:id/today-visit-note", repAuthMiddleware, async (req, res, next) => {
   try {
     const storeId = z.coerce.number().int().positive().parse(req.params.id);
@@ -553,9 +833,6 @@ router.patch("/stores/:id/today-visit-note", repAuthMiddleware, async (req, res,
     const rep = req.rep!;
     await loadStoreForRep(storeId, rep);
     const note = body.note?.trim() ? body.note.trim() : null;
-    if (note && !(NO_BUY_REASONS as readonly string[]).includes(note)) {
-      throw new HttpError(400, "سبب عدم الشراء غير صالح");
-    }
     const { rows } = await query<{ id: string; visited_at: string; note: string | null }>(
       `UPDATE visits SET note = $1
        WHERE id = (
@@ -879,13 +1156,20 @@ router.post("/orders", repAuthMiddleware, async (req, res, next) => {
       let orderLoyaltyTotal = 0;
       for (const line of body.lines) {
         const pr = await c.query<{
-          price: string;
+          catalog_price: string;
+          rep_price: string | null;
           is_active: boolean;
           loyalty_points_per_unit: number;
           name: string;
-        }>(`SELECT price, is_active, loyalty_points_per_unit, name FROM products WHERE id = $1`, [
-          line.productId,
-        ]);
+        }>(
+          `SELECT p.price AS catalog_price, ri.price AS rep_price,
+                  p.is_active, p.loyalty_points_per_unit, p.name
+           FROM products p
+           LEFT JOIN representative_inventory ri
+             ON ri.product_id = p.id AND ri.representative_id = $2
+           WHERE p.id = $1`,
+          [line.productId, rep.id]
+        );
         const p = pr.rows[0];
         if (!p?.is_active) throw new HttpError(400, "منتج غير صالح");
         const inv = await c.query<{ quantity: number }>(
@@ -898,7 +1182,7 @@ router.post("/orders", repAuthMiddleware, async (req, res, next) => {
         if (stock < line.quantity) {
           throw new HttpError(400, `الكمية غير كافية في مخزون السيارة (متوفر: ${stock})`);
         }
-        const unit = parseFloat(p.price);
+        const unit = parseFloat(p.rep_price ?? p.catalog_price);
         const lineTotal = unit * line.quantity;
         const loyaltyPoints = Math.max(0, Number(p.loyalty_points_per_unit) || 0) * line.quantity;
         total += lineTotal;

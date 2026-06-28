@@ -18,6 +18,8 @@ type InvRow = {
   product_id: number;
   name: string;
   price: string;
+  catalog_price?: string;
+  rep_price?: string | null;
   quantity: number;
   designation?: string | null;
   image_url?: string | null;
@@ -165,6 +167,7 @@ export default function FillCarPage() {
         items: inventory.map((row) => ({
           productId: row.product_id,
           quantity: row.quantity,
+          price: parseRepPriceForSave(row),
         })),
       });
       setBaselineQty(Object.fromEntries(inventory.map((row) => [row.product_id, row.quantity])));
@@ -307,6 +310,7 @@ export default function FillCarPage() {
           <h4 className="strong" style={{ marginTop: 24 }}>
             {t.fillCar.inventorySection}
           </h4>
+          <p className="muted small">{t.fillCar.repPriceHint}</p>
           <p className="muted small fill-car-delta-legend">{t.fillCar.deltaLegend}</p>
           {invLoading ? (
             <p className="muted">{t.common.loading}</p>
@@ -359,7 +363,42 @@ export default function FillCarPage() {
                     </div>
                     {row.designation && <p className="muted small">{row.designation}</p>}
                     <p className="muted small">
-                      {row.price} · {t.fillCar.onCar}:{" "}
+                      {t.fillCar.catalogPrice}: {row.catalog_price ?? row.price}
+                    </p>
+                    <p className="muted small">
+                      {t.fillCar.repPrice}:{" "}
+                      {canWrite ? (
+                        <input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          placeholder={t.fillCar.repPricePlaceholder}
+                          value={row.rep_price ?? ""}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            setInventory((rows) =>
+                              rows.map((r, i) =>
+                                i === idx
+                                  ? {
+                                      ...r,
+                                      rep_price: raw === "" ? null : raw,
+                                      price: raw === "" ? (r.catalog_price ?? r.price) : raw,
+                                    }
+                                  : r
+                              )
+                            );
+                          }}
+                          style={{ width: 96, display: "inline-block" }}
+                        />
+                      ) : (
+                        row.rep_price ?? row.catalog_price ?? row.price
+                      )}
+                      {!row.rep_price && canWrite ? (
+                        <span className="muted"> ({t.fillCar.repPricePlaceholder})</span>
+                      ) : null}
+                    </p>
+                    <p className="muted small">
+                      {t.fillCar.onCar}:{" "}
                       {canWrite ? (
                         <input
                           type="number"
@@ -402,4 +441,11 @@ export default function FillCarPage() {
       )}
     </div>
   );
+}
+
+function parseRepPriceForSave(row: InvRow): number | null {
+  const raw = row.rep_price;
+  if (raw == null || raw === "") return null;
+  const n = parseFloat(String(raw));
+  return Number.isFinite(n) && n >= 0 ? n : null;
 }

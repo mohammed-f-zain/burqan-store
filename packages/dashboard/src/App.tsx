@@ -14,6 +14,7 @@ import ResetPassword from "./pages/ResetPassword";
 import OrderDetailPage from "./pages/OrderDetailPage";
 import OrdersPage from "./pages/OrdersPage";
 import OverviewPage from "./pages/OverviewPage";
+import PossibleClientsPage from "./pages/PossibleClientsPage";
 import ProductsPage from "./pages/ProductsPage";
 import RedeemPage from "./pages/RedeemPage";
 import OwnerOrderDetail from "./pages/OwnerOrderDetail";
@@ -54,6 +55,7 @@ export default function App() {
                 <Route path="rep-sales" element={<Navigate to="/app/fill-car" replace />} />
                 <Route path="stores" element={<StoresPage />} />
                   <Route path="stores/:id" element={<StoreDetailPage />} />
+                  <Route path="possible-clients" element={<PossibleClientsPage />} />
                   <Route path="visits" element={<VisitsPage />} />
                   <Route path="orders" element={<OrdersPage />} />
                   <Route path="orders/:id" element={<OrderDetailPage />} />

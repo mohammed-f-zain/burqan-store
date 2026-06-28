@@ -44,7 +44,13 @@ type OrderRow = {
   rep_name: string;
 };
 
-type VisitRow = { id: string; visited_at: string; note: string | null; rep_name: string };
+type VisitRow = {
+  id: string;
+  visited_at: string;
+  note: string | null;
+  rep_name: string;
+  isNoBuyReason?: boolean;
+};
 type PaymentRow = { id: string; amount: string; note: string | null; created_at: string };
 
 function ownerPortalUrl(token: string): string {
@@ -413,7 +419,7 @@ export default function StoreDetailPage() {
                 <strong>{formatMarketDateTime(v.visited_at)}</strong>
                 {v.rep_name ? ` · ${v.rep_name}` : ""}
                 {v.note ? (
-                  isNoBuyReasonNote(v.note) ? (
+                  v.isNoBuyReason ?? isNoBuyReasonNote(v.note) ? (
                     <span className="no-buy-pill"> — {v.note}</span>
                   ) : (
                     <span className="muted"> — {v.note}</span>

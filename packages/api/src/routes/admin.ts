@@ -20,7 +20,12 @@ import { signAdminToken } from "../utils/jwt.js";
 import { countUnassignedQrCodes, insertQrCodes } from "../lib/generateQrCodes.js";
 import { optionalStoredImagePathNullableSchema, optionalStoredImagePathSchema } from "../utils/storedImagePath.js";
 import { JORDAN_GOVERNORATES } from "../data/jordanGovernorates.js";
-import { NO_BUY_REASONS } from "../data/noBuyReasons.js";
+import {
+  isNoBuyVisit,
+  NO_BUY_REASONS,
+  VISIT_HAD_ORDER_SAME_DAY_SQL,
+  VISIT_WITHOUT_ORDER_SAME_DAY_SQL,
+} from "../data/noBuyReasons.js";
 import { buildJordanVoronoiPayload } from "../utils/buildJordanVoronoiPayload.js";
 import { importGooglePlaces } from "../utils/importGooglePlaces.js";
 import { isGooglePlacesEnabled } from "../utils/googlePlaces.js";
@@ -305,6 +310,7 @@ router.get(
           `SELECT v.note, COUNT(*)::text AS count
            FROM visits v
            WHERE v.note = ANY($1::text[])
+             AND ${VISIT_WITHOUT_ORDER_SAME_DAY_SQL}
              AND v.visited_at >= ${monthStart}
            GROUP BY v.note`,
           [NO_BUY_REASONS]
@@ -313,6 +319,7 @@ router.get(
           `SELECT COUNT(*)::text AS count
            FROM visits v
            WHERE v.note = ANY($1::text[])
+             AND ${VISIT_WITHOUT_ORDER_SAME_DAY_SQL}
              AND v.visited_at >= ${monthStart}`,
           [NO_BUY_REASONS]
         ),
@@ -332,6 +339,7 @@ router.get(
            JOIN areas a ON a.id = s.area_id
            JOIN representatives r ON r.id = v.representative_id
            WHERE v.note = ANY($1::text[])
+             AND ${VISIT_WITHOUT_ORDER_SAME_DAY_SQL}
            ORDER BY v.id DESC
            LIMIT 15`,
           [NO_BUY_REASONS]
@@ -1498,6 +1506,7 @@ router.delete(
 const inventoryItemSchema = z.object({
   productId: z.number().int().positive(),
   quantity: z.number().int().min(0),
+  price: z.number().min(0).nullable().optional(),
 });
 
 const inventoryPutSchema = z.object({
@@ -1528,7 +1537,10 @@ router.get(
     try {
       const id = z.coerce.number().int().positive().parse(req.params.id);
       const { rows } = await query(
-        `SELECT p.id AS product_id, p.name, p.designation, p.image_url, p.price,
+        `SELECT p.id AS product_id, p.name, p.designation, p.image_url,
+                p.price AS catalog_price,
+                COALESCE(ri.price, p.price) AS price,
+                ri.price AS rep_price,
                 COALESCE(ri.quantity, 0) AS quantity
          FROM products p
          LEFT JOIN representative_inventory ri
@@ -1559,12 +1571,20 @@ router.put(
       try {
         await c.query("BEGIN");
         for (const item of body.items) {
+          const repPrice =
+            item.price === undefined ? null : item.price === null ? null : item.price.toFixed(2);
           await c.query(
-            `INSERT INTO representative_inventory (representative_id, product_id, quantity, updated_at)
-             VALUES ($1, $2, $3, now())
+            `INSERT INTO representative_inventory (representative_id, product_id, quantity, price, updated_at)
+             VALUES ($1, $2, $3, $4, now())
              ON CONFLICT (representative_id, product_id)
-             DO UPDATE SET quantity = EXCLUDED.quantity, updated_at = now()`,
-            [id, item.productId, item.quantity]
+             DO UPDATE SET
+               quantity = EXCLUDED.quantity,
+               price = CASE
+                 WHEN $5::boolean THEN EXCLUDED.price
+                 ELSE representative_inventory.price
+               END,
+               updated_at = now()`,
+            [id, item.productId, item.quantity, repPrice, item.price !== undefined]
           );
         }
         await c.query("COMMIT");
@@ -1648,6 +1668,88 @@ router.post(
       const body = googlePlacesImportSchema.parse(req.body ?? {});
       const result = await importGooglePlaces(body);
       res.json(result);
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+const prospectStatusSchema = z.enum(["open", "converted", "dismissed"]).optional();
+
+router.get(
+  "/prospect-stores",
+  adminAuthMiddleware,
+  requireAdminPermission("stores.read"),
+  async (req, res, next) => {
+    try {
+      const status = prospectStatusSchema.parse(req.query.status);
+      const params: unknown[] = [];
+      const statusFilter = status ? `AND ps.status = $1` : "";
+      if (status) params.push(status);
+      const { rows } = await query(
+        `SELECT ps.id, ps.name, ps.phone, ps.owner_name, ps.location_lat, ps.location_lng,
+                ps.address_text, ps.image_url, ps.area_id, ps.status, ps.converted_store_id,
+                ps.created_at, ps.updated_at,
+                a.name AS area_name,
+                r.full_name AS created_by_rep_name,
+                cs.name AS converted_store_name
+         FROM prospect_stores ps
+         JOIN areas a ON a.id = ps.area_id
+         JOIN representatives r ON r.id = ps.created_by_representative_id
+         LEFT JOIN stores cs ON cs.id = ps.converted_store_id
+         WHERE 1=1 ${statusFilter}
+         ORDER BY ps.id DESC
+         LIMIT 500`,
+        params
+      );
+      res.json({ prospects: rows });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+router.patch(
+  "/prospect-stores/:id",
+  adminAuthMiddleware,
+  requireAdminPermission("stores.write"),
+  async (req, res, next) => {
+    try {
+      const id = z.coerce.number().int().positive().parse(req.params.id);
+      const body = z
+        .object({
+          status: z.enum(["open", "dismissed"]).optional(),
+          name: z.string().min(2).optional(),
+          phone: z.string().min(6).optional(),
+          ownerName: z.string().min(2).optional(),
+        })
+        .parse(req.body);
+      const sets: string[] = ["updated_at = now()"];
+      const vals: unknown[] = [];
+      let i = 1;
+      if (body.status) {
+        sets.push(`status = $${i++}`);
+        vals.push(body.status);
+      }
+      if (body.name) {
+        sets.push(`name = $${i++}`);
+        vals.push(body.name);
+      }
+      if (body.phone) {
+        sets.push(`phone = $${i++}`);
+        vals.push(body.phone);
+      }
+      if (body.ownerName) {
+        sets.push(`owner_name = $${i++}`);
+        vals.push(body.ownerName);
+      }
+      vals.push(id);
+      const { rows } = await query(
+        `UPDATE prospect_stores SET ${sets.join(", ")} WHERE id = $${i} AND status <> 'converted' RETURNING id`,
+        vals
+      );
+      if (!rows[0]) throw new HttpError(404, "العميل المحتمل غير موجود أو تم تحويله");
+      res.json({ ok: true });
     } catch (e) {
       next(e);
     }
@@ -1837,7 +1939,9 @@ router.get(
     try {
       const q = visitsListQuerySchema.parse(req.query);
       const params = q.noBuyOnly ? [[...NO_BUY_REASONS]] : [];
-      const noBuyFilter = q.noBuyOnly ? `AND v.note = ANY($1::text[])` : "";
+      const noBuyFilter = q.noBuyOnly
+        ? `AND v.note = ANY($1::text[]) AND ${VISIT_WITHOUT_ORDER_SAME_DAY_SQL}`
+        : "";
       const { rows } = await query<{
         id: string;
         visited_at: string;
@@ -1847,9 +1951,11 @@ router.get(
         area_name: string;
         rep_id: number;
         rep_name: string;
+        had_order_same_day: boolean;
       }>(
         `SELECT v.id::text, v.visited_at, v.note, s.id AS store_id, s.name AS store_name,
-                a.name AS area_name, r.id AS rep_id, r.full_name AS rep_name
+                a.name AS area_name, r.id AS rep_id, r.full_name AS rep_name,
+                (${VISIT_HAD_ORDER_SAME_DAY_SQL}) AS had_order_same_day
          FROM visits v
          JOIN stores s ON s.id = v.store_id
          JOIN areas a ON a.id = s.area_id
@@ -1864,7 +1970,7 @@ router.get(
           id: v.id,
           visitedAt: v.visited_at,
           note: v.note,
-          isNoBuyReason: v.note != null && (NO_BUY_REASONS as readonly string[]).includes(v.note),
+          isNoBuyReason: isNoBuyVisit(v.note, v.had_order_same_day),
           storeId: v.store_id,
           storeName: v.store_name,
           areaName: v.area_name,
@@ -1886,8 +1992,15 @@ router.get(
   async (req, res, next) => {
     try {
       const id = z.coerce.number().int().positive().parse(req.params.id);
-      const { rows } = await query(
-        `SELECT v.id, v.visited_at, v.note, r.full_name AS rep_name
+      const { rows } = await query<{
+        id: string;
+        visited_at: string;
+        note: string | null;
+        rep_name: string;
+        had_order_same_day: boolean;
+      }>(
+        `SELECT v.id::text AS id, v.visited_at, v.note, r.full_name AS rep_name,
+                (${VISIT_HAD_ORDER_SAME_DAY_SQL}) AS had_order_same_day
          FROM visits v
          JOIN representatives r ON r.id = v.representative_id
          WHERE v.store_id = $1
@@ -1895,7 +2008,15 @@ router.get(
          LIMIT 100`,
         [id]
       );
-      res.json({ visits: rows });
+      res.json({
+        visits: rows.map((v) => ({
+          id: v.id,
+          visited_at: v.visited_at,
+          note: v.note,
+          rep_name: v.rep_name,
+          isNoBuyReason: isNoBuyVisit(v.note, v.had_order_same_day),
+        })),
+      });
     } catch (e) {
       next(e);
     }

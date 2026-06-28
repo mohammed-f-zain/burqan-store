@@ -1,3 +1,14 @@
+export type ProspectCard = {
+  id: number;
+  name: string;
+  phone: string;
+  ownerName: string;
+  location: { lat: number; lng: number };
+  addressText?: string | null;
+  areaName?: string | null;
+  visitedToday?: boolean;
+};
+
 export type DailyStoreCard = {
   id: number;
   /** burqan = registered with QR; google = prospect from Google Maps */
