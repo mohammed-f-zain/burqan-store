@@ -59,6 +59,7 @@ import { theme } from "./theme";
 /** Lazy: keeps react-native-maps out of the register screen chunk on Android. */
 const RegisterStoreForm = lazy(() => import("./RegisterStoreForm"));
 const ProspectStoreForm = lazy(() => import("./ProspectStoreForm"));
+const EditStoreForm = lazy(() => import("./EditStoreForm"));
 
 void ExpoSplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -137,6 +138,8 @@ const t = {
   locationUnknown: "لم يُسجَّل عنوان",
   openInMaps: "فتح على الخريطة",
   visitAutoHint: "تُسجَّل الزيارة تلقائياً عند مسح رمز المتجر.",
+  editStore: "تعديل بيانات المتجر",
+  storeUpdated: "تم تحديث بيانات المتجر.",
   payment: "الدفع",
   cash: "نقدي",
   deferredPay: "آجل",
@@ -432,6 +435,7 @@ export default function App() {
   const [areas, setAreas] = useState<Area[]>([]);
   const [activeStore, setActiveStore] = useState<StoreBrief | null>(null);
   const [storeTab, setStoreTab] = useState<"info" | "sell" | "redeem">("sell");
+  const [editStoreOpen, setEditStoreOpen] = useState(false);
   const [prizeProducts, setPrizeProducts] = useState<PrizeProduct[]>([]);
   const [redeemCart, setRedeemCart] = useState<Record<number, number>>({});
   const [storePointsBalance, setStorePointsBalance] = useState(0);
@@ -1663,6 +1667,23 @@ export default function App() {
 
           {storeTab === "info" && (
             <View style={styles.panel}>
+              {activeStore.imageUrl ? (
+                <Image
+                  source={{ uri: productImageUrl(activeStore.imageUrl) }}
+                  style={styles.storeInfoImage}
+                  resizeMode="cover"
+                />
+              ) : null}
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>{t.ownerName}</Text>
+                <Text style={styles.infoValue}>{activeStore.ownerName}</Text>
+              </View>
+              {activeStore.areaName ? (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>{t.area}</Text>
+                  <Text style={styles.infoValue}>{activeStore.areaName}</Text>
+                </View>
+              ) : null}
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>{t.phone}</Text>
                 <Pressable
@@ -1678,6 +1699,12 @@ export default function App() {
                   </Text>
                 </Pressable>
               </View>
+              {activeStore.addressText ? (
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>{t.address}</Text>
+                  <Text style={styles.infoValue}>{activeStore.addressText}</Text>
+                </View>
+              ) : null}
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>{t.location}</Text>
                 <Pressable
@@ -1693,7 +1720,25 @@ export default function App() {
                 </Pressable>
               </View>
               <Text style={styles.muted}>{t.visitAutoHint}</Text>
-              <Pressable style={[styles.primary, { marginTop: 16 }]} onPress={() => setStoreTab("sell")}>
+              <Pressable
+                style={[styles.secondary, { marginTop: 16 }]}
+                onPress={() => {
+                  void (async () => {
+                    try {
+                      const data = (await apiGet(`/api/v1/rep/stores/${activeStore.id}`)) as {
+                        store?: StoreBrief;
+                      };
+                      if (data.store) setActiveStore(data.store);
+                    } catch {
+                      /* keep current */
+                    }
+                    setEditStoreOpen(true);
+                  })();
+                }}
+              >
+                <Text style={styles.secondaryText}>{t.editStore}</Text>
+              </Pressable>
+              <Pressable style={[styles.primary, { marginTop: 12 }]} onPress={() => setStoreTab("sell")}>
                 <Text style={styles.primaryText}>{t.startOrder}</Text>
               </Pressable>
             </View>
@@ -1798,6 +1843,26 @@ export default function App() {
             subtitle={t.endVisitBtnSub}
             onPress={() => void openEndVisit()}
           />
+
+          {editStoreOpen && (
+            <Suspense fallback={null}>
+              <EditStoreForm
+                visible={editStoreOpen}
+                store={activeStore}
+                headers={headers}
+                apiBase={API_BASE}
+                authToken={token!}
+                onClose={() => setEditStoreOpen(false)}
+                onNotice={(msg) => showToast(msg, "info")}
+                onSaved={(store) => {
+                  setActiveStore(store);
+                  setEditStoreOpen(false);
+                  showToast(t.storeUpdated, "success");
+                  void loadDailyStores();
+                }}
+              />
+            </Suspense>
+          )}
         </View>
       )}
 
@@ -2457,6 +2522,13 @@ const styles = StyleSheet.create({
   metaChipText: { color: theme.accentDark, fontSize: 12, fontWeight: "700" },
   metaChipTextMuted: { color: muted, fontSize: 12, fontWeight: "600" },
   panel: { marginTop: 12 },
+  storeInfoImage: {
+    width: "100%",
+    height: 160,
+    borderRadius: theme.radius.lg,
+    marginBottom: 8,
+    backgroundColor: "#f1f5f9",
+  },
   infoRow: {
     flexDirection: "row-reverse",
     alignItems: "center",

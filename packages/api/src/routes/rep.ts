@@ -11,7 +11,10 @@ import { HttpError } from "../utils/errors.js";
 import { hashPassword, verifyPassword } from "../utils/password.js";
 import { signRepToken } from "../utils/jwt.js";
 import { config } from "../config.js";
-import { optionalStoredImagePathSchema } from "../utils/storedImagePath.js";
+import {
+  optionalStoredImagePathNullableSchema,
+  optionalStoredImagePathSchema,
+} from "../utils/storedImagePath.js";
 import {
   assertWithinScanDistance,
   repLocationSchema,
@@ -907,6 +910,84 @@ router.get("/stores/:id/visits", repAuthMiddleware, async (req, res, next) => {
       [id]
     );
     res.json({ visits: rows });
+  } catch (e) {
+    next(e);
+  }
+});
+
+const repPatchStoreSchema = z.object({
+  name: z.string().trim().min(2).max(255).optional(),
+  phone: z.string().trim().min(6).max(40).optional(),
+  ownerName: z.string().trim().min(2).max(255).optional(),
+  addressText: z.string().max(2000).nullable().optional(),
+  imageUrl: optionalStoredImagePathNullableSchema.optional(),
+  locationLat: z.number().finite().optional(),
+  locationLng: z.number().finite().optional(),
+  repLat: z.number().min(-90).max(90).optional(),
+  repLng: z.number().min(-180).max(180).optional(),
+});
+
+router.patch("/stores/:id", repAuthMiddleware, async (req, res, next) => {
+  try {
+    const id = z.coerce.number().int().positive().parse(req.params.id);
+    const body = repPatchStoreSchema.parse(req.body);
+    const rep = req.rep!;
+    await loadStoreForRep(id, rep);
+
+    if (body.locationLat !== undefined || body.locationLng !== undefined) {
+      if (body.locationLat === undefined || body.locationLng === undefined) {
+        throw new HttpError(400, "يجب تحديد خط العرض وخط الطول معاً");
+      }
+      if (body.repLat === undefined || body.repLng === undefined) {
+        throw new HttpError(400, "يلزم موقع المندوب لتحديث موقع المتجر");
+      }
+      assertWithinScanDistance(body.repLat, body.repLng, body.locationLat, body.locationLng);
+    }
+
+    const sets: string[] = [];
+    const vals: unknown[] = [];
+    let i = 1;
+    if (body.name !== undefined) {
+      sets.push(`name = $${i++}`);
+      vals.push(body.name);
+    }
+    if (body.phone !== undefined) {
+      sets.push(`phone = $${i++}`);
+      vals.push(body.phone);
+    }
+    if (body.ownerName !== undefined) {
+      sets.push(`owner_name = $${i++}`);
+      vals.push(body.ownerName);
+    }
+    if (body.addressText !== undefined) {
+      sets.push(`address_text = $${i++}`);
+      vals.push(body.addressText);
+    }
+    if (body.imageUrl !== undefined) {
+      sets.push(`image_url = $${i++}`);
+      vals.push(body.imageUrl);
+    }
+    if (body.locationLat !== undefined && body.locationLng !== undefined) {
+      const resolved = await resolveAreaIdFromAllAreas(body.locationLat, body.locationLng);
+      sets.push(`location_lat = $${i++}`);
+      vals.push(body.locationLat);
+      sets.push(`location_lng = $${i++}`);
+      vals.push(body.locationLng);
+      sets.push(`area_id = $${i++}`);
+      vals.push(resolved.areaId);
+    }
+
+    if (sets.length === 0) throw new HttpError(400, "لا توجد حقول للتحديث");
+
+    vals.push(id);
+    const { rowCount } = await query(
+      `UPDATE stores SET ${sets.join(", ")}, updated_at = now() WHERE id = $${i}`,
+      vals
+    );
+    if (!rowCount) throw new HttpError(404, "المتجر غير موجود");
+
+    const store = await loadStoreForRep(id, rep);
+    res.json({ store });
   } catch (e) {
     next(e);
   }

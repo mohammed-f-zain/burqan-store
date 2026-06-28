@@ -34,6 +34,7 @@ export type StoreBrief = {
   location: { lat: number; lng: number };
   addressText?: string | null;
   areaName?: string | null;
+  imageUrl?: string | null;
   deferredPaymentEnabled: boolean;
   ownerPortalUrl?: string;
   loyaltyPointsBalance?: number;
