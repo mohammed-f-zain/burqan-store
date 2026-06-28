@@ -78,6 +78,7 @@ const t = {
   lookup: "تأكيد",
   close: "إغلاق",
   endVisitBtn: "إنهاء الزيارة",
+  endVisitBtnSub: "العودة للرئيسية وإغلاق جلسة هذا المتجر",
   registerStore: "تسجيل متجر جديد",
   area: "المنطقة",
   storeName: "اسم المتجر",
@@ -257,6 +258,8 @@ const t = {
   visitEndNoBuyNoteLabel: "سبب عدم الشراء",
   visitEndNoBuyPickHint: "اختر سبباً واحداً",
   visitEndNotePlaceholder: "اكتب ملاحظة عن الزيارة…",
+  visitEndModeNote: "ملاحظة زيارة (اختياري)",
+  visitEndModeNoBuy: "سبب عدم الشراء — مطلوب",
   visitEndNoBuyNoteRequired: "يرجى اختيار سبب عدم الشراء",
   visitEndNoBuyMessage: "لم تُسجَّل أي مشتريات. اذكر سبب عدم الشراء قبل إغلاق الزيارة.",
   visitEndNoteFailed: "تعذّر حفظ ملاحظة الزيارة",
@@ -305,6 +308,7 @@ import {
   type RawGooglePlace,
 } from "./groupGooglePlacesByArea";
 import EndVisitModal from "./EndVisitModal";
+import EndVisitBar from "./EndVisitBar";
 import OrderInvoiceModal from "./OrderInvoiceModal";
 import StoreCartPanel from "./StoreCartPanel";
 import StorePeekModal from "./StorePeekModal";
@@ -1634,12 +1638,7 @@ export default function App() {
 
       {bottomTab === "home" && mode === "store" && activeStore && (
         <View style={styles.card}>
-          <View style={styles.rowBetween}>
-            <Text style={styles.cardTitle}>{activeStore.name}</Text>
-            <Pressable style={styles.endVisitBtn} onPress={() => void openEndVisit()}>
-              <Text style={styles.endVisitBtnText}>{t.endVisitBtn}</Text>
-            </Pressable>
-          </View>
+          <Text style={styles.cardTitle}>{activeStore.name}</Text>
           <View style={styles.metaChips}>
             <View style={styles.metaChip}>
               <Text style={styles.metaChipText}>
@@ -1793,6 +1792,12 @@ export default function App() {
               ) : null}
             </View>
           )}
+
+          <EndVisitBar
+            title={t.endVisitBtn}
+            subtitle={t.endVisitBtnSub}
+            onPress={() => void openEndVisit()}
+          />
         </View>
       )}
 
@@ -2107,6 +2112,8 @@ export default function App() {
           noteLabel: noPurchaseEndVisit ? t.visitEndNoBuyNoteLabel : t.visitEndNoteLabel,
           notePlaceholder: t.visitEndNotePlaceholder,
           pickReasonHint: noPurchaseEndVisit ? t.visitEndNoBuyPickHint : undefined,
+          modeVisitNote: t.visitEndModeNote,
+          modeNoBuy: t.visitEndModeNoBuy,
           stay: t.visitEndStay,
           goCart: t.visitEndGoCart,
           confirm: t.visitEndConfirm,
@@ -2525,15 +2532,6 @@ const styles = StyleSheet.create({
   secondaryText: { color: text, fontWeight: "700", fontSize: 15 },
   muted: { color: muted, marginTop: 6, fontSize: 13, textAlign: "right" },
   link: { color: accent, fontWeight: "800", fontSize: 15 },
-  endVisitBtn: {
-    backgroundColor: "#fef2f2",
-    borderWidth: 1,
-    borderColor: "#fecaca",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: theme.radius.md,
-  },
-  endVisitBtnText: { color: "#b91c1c", fontWeight: "800", fontSize: 14 },
   scannerModal: { flex: 1, backgroundColor: "#000" },
   scannerCenter: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24 },
   scannerHint: { color: "#e8eefc", marginTop: 16, textAlign: "center", fontSize: 15 },
