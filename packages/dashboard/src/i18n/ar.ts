@@ -355,6 +355,10 @@ export const ar = {
     repPrice: "سعر المندوب",
     repPricePlaceholder: "افتراضي",
     repPriceHint: "اتركه فارغاً لاستخدام سعر المنتج. يظهر للبيع لهذا المندوب فقط.",
+    resetRepPrice: "السعر الافتراضي",
+    resetAllRepPrices: "إعادة كل الأسعار للافتراضي",
+    resetRepPriceDone: "تم إرجاع السعر للافتراضي — احفظ لتطبيق التغيير.",
+    resetAllRepPricesDone: "تم إرجاع كل أسعار المندوب للافتراضي — احفظ لتطبيق التغيير.",
   },
 
   prospects: {

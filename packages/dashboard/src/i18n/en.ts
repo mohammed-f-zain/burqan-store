@@ -356,6 +356,10 @@ export const en: Messages = {
     repPrice: "Rep price",
     repPricePlaceholder: "Default",
     repPriceHint: "Leave empty to use catalog price. Only this rep sees and sells at this price.",
+    resetRepPrice: "Default price",
+    resetAllRepPrices: "Reset all prices to default",
+    resetRepPriceDone: "Price reset to catalog default. Save to apply.",
+    resetAllRepPricesDone: "All rep prices reset to catalog default. Save to apply.",
   },
 
   prospects: {

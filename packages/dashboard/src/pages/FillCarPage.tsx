@@ -152,6 +152,29 @@ export default function FillCarPage() {
     return m;
   }, [selected?.lines]);
 
+  const hasAnyCustomRepPrice = useMemo(
+    () => inventory.some((row) => hasCustomRepPrice(row)),
+    [inventory]
+  );
+
+  function resetProductPrice(productId: number) {
+    setInventory((rows) =>
+      rows.map((r) =>
+        r.product_id === productId
+          ? { ...r, rep_price: null, price: r.catalog_price ?? r.price }
+          : r
+      )
+    );
+    toastSuccess(t.fillCar.resetRepPriceDone);
+  }
+
+  function resetAllRepPrices() {
+    setInventory((rows) =>
+      rows.map((r) => ({ ...r, rep_price: null, price: r.catalog_price ?? r.price }))
+    );
+    toastSuccess(t.fillCar.resetAllRepPricesDone);
+  }
+
   async function save() {
     if (!canWrite || !repId) return;
     const ok = await confirmSave({
@@ -312,6 +335,16 @@ export default function FillCarPage() {
           </h4>
           <p className="muted small">{t.fillCar.repPriceHint}</p>
           <p className="muted small fill-car-delta-legend">{t.fillCar.deltaLegend}</p>
+          {canWrite && hasAnyCustomRepPrice ? (
+            <button
+              type="button"
+              className="secondary fill-car-reset-all"
+              disabled={invLoading || saving}
+              onClick={resetAllRepPrices}
+            >
+              {t.fillCar.resetAllRepPrices}
+            </button>
+          ) : null}
           {invLoading ? (
             <p className="muted">{t.common.loading}</p>
           ) : (
@@ -365,36 +398,47 @@ export default function FillCarPage() {
                     <p className="muted small">
                       {t.fillCar.catalogPrice}: {row.catalog_price ?? row.price}
                     </p>
-                    <p className="muted small">
-                      {t.fillCar.repPrice}:{" "}
-                      {canWrite ? (
-                        <input
-                          type="number"
-                          min={0}
-                          step="0.01"
-                          placeholder={t.fillCar.repPricePlaceholder}
-                          value={row.rep_price ?? ""}
-                          onChange={(e) => {
-                            const raw = e.target.value;
-                            setInventory((rows) =>
-                              rows.map((r, i) =>
-                                i === idx
-                                  ? {
-                                      ...r,
-                                      rep_price: raw === "" ? null : raw,
-                                      price: raw === "" ? (r.catalog_price ?? r.price) : raw,
-                                    }
-                                  : r
-                              )
-                            );
-                          }}
-                          style={{ width: 96, display: "inline-block" }}
-                        />
-                      ) : (
-                        row.rep_price ?? row.catalog_price ?? row.price
-                      )}
-                      {!row.rep_price && canWrite ? (
-                        <span className="muted"> ({t.fillCar.repPricePlaceholder})</span>
+                    <p className="muted small fill-car-price-row">
+                      <span>
+                        {t.fillCar.repPrice}:{" "}
+                        {canWrite ? (
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            placeholder={t.fillCar.repPricePlaceholder}
+                            value={row.rep_price ?? ""}
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              setInventory((rows) =>
+                                rows.map((r, i) =>
+                                  i === idx
+                                    ? {
+                                        ...r,
+                                        rep_price: raw === "" ? null : raw,
+                                        price: raw === "" ? (r.catalog_price ?? r.price) : raw,
+                                      }
+                                    : r
+                                )
+                              );
+                            }}
+                            style={{ width: 96, display: "inline-block" }}
+                          />
+                        ) : (
+                          row.rep_price ?? row.catalog_price ?? row.price
+                        )}
+                        {!row.rep_price && canWrite ? (
+                          <span className="muted"> ({t.fillCar.repPricePlaceholder})</span>
+                        ) : null}
+                      </span>
+                      {canWrite && hasCustomRepPrice(row) ? (
+                        <button
+                          type="button"
+                          className="ghost fill-car-reset-price"
+                          onClick={() => resetProductPrice(row.product_id)}
+                        >
+                          {t.fillCar.resetRepPrice}
+                        </button>
                       ) : null}
                     </p>
                     <p className="muted small">
@@ -448,4 +492,11 @@ function parseRepPriceForSave(row: InvRow): number | null {
   if (raw == null || raw === "") return null;
   const n = parseFloat(String(raw));
   return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+function hasCustomRepPrice(row: InvRow): boolean {
+  const raw = row.rep_price;
+  if (raw == null || raw === "") return false;
+  const catalog = row.catalog_price ?? row.price;
+  return String(raw) !== String(catalog);
 }

@@ -1386,6 +1386,25 @@ html[dir="rtl"] .swal-toast-burqan .swal2-icon {
   background: rgba(22, 163, 74, 0.12);
 }
 
+.fill-car-reset-all {
+  margin-top: 10px;
+  margin-bottom: 4px;
+}
+
+.fill-car-price-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+button.fill-car-reset-price {
+  font-size: 12px;
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+
 html[data-theme="dark"] .fill-car-delta--sold {
   color: #f87171;
   background: rgba(248, 113, 113, 0.15);
