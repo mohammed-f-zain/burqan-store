@@ -1721,24 +1721,18 @@ export default function App() {
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>{t.phone}</Text>
                 <Pressable
-                  style={[styles.infoValueWrap, styles.infoLtr]}
+                  style={styles.infoLtrWrap}
                   onPress={() => void Linking.openURL(`tel:${activeStore.phone}`)}
                 >
-                  <Text
-                    style={[styles.infoValue, styles.link, styles.infoValueSingleLine]}
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                  >
-                    {activeStore.phone}
+                  <Text style={[styles.infoValue, styles.infoValueLtr, styles.link]} numberOfLines={2}>
+                    {activeStore.phone || "—"}
                   </Text>
                 </Pressable>
               </View>
-              {activeStore.addressText ? (
-                <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>{t.address}</Text>
-                  <Text style={styles.infoValue}>{activeStore.addressText}</Text>
-                </View>
-              ) : null}
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>{t.address}</Text>
+                <Text style={styles.infoValue}>{activeStore.addressText?.trim() || "—"}</Text>
+              </View>
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>{t.location}</Text>
                 <Pressable
@@ -2545,7 +2539,7 @@ const styles = StyleSheet.create({
   metaChipMuted: { backgroundColor: "#f1f5f9" },
   metaChipText: { color: theme.accentDark, fontSize: 12, fontWeight: "700" },
   metaChipTextMuted: { color: muted, fontSize: 12, fontWeight: "600" },
-  panel: { marginTop: 12 },
+  panel: { marginTop: 12, width: "100%", alignSelf: "stretch" },
   storeInfoImage: {
     width: "100%",
     height: 160,
@@ -2554,19 +2548,25 @@ const styles = StyleSheet.create({
     backgroundColor: "#f1f5f9",
   },
   infoRow: {
-    flexDirection: "row-reverse",
-    alignItems: "center",
-    gap: 12,
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: line,
+    gap: 6,
+    alignSelf: "stretch",
   },
-  infoLabel: { color: muted, fontSize: 13, fontWeight: "600", flexShrink: 0, minWidth: 72 },
-  infoValueWrap: { flex: 1, minWidth: 0, alignItems: "flex-start" },
-  infoValue: { color: text, fontSize: 15, fontWeight: "700", textAlign: "left", width: "100%" },
-  infoValueSingleLine: { flexShrink: 1 },
-  infoLtr: { direction: "ltr" },
-  infoMapsHint: { color: theme.accent, fontSize: 12, fontWeight: "600", marginTop: 4 },
+  infoLabel: { color: muted, fontSize: 13, fontWeight: "600", textAlign: "right" },
+  infoValueWrap: { alignSelf: "stretch" },
+  infoValue: {
+    color: text,
+    fontSize: 15,
+    fontWeight: "700",
+    textAlign: "right",
+    lineHeight: 22,
+    flexShrink: 1,
+  },
+  infoValueLtr: { textAlign: "left" },
+  infoLtrWrap: { direction: "ltr", alignSelf: "stretch" },
+  infoMapsHint: { color: theme.accent, fontSize: 12, fontWeight: "600", marginTop: 4, textAlign: "right" },
   emptyText: { color: muted, fontSize: 15, textAlign: "center", marginTop: 24, fontWeight: "600" },
   segmented: {
     flexDirection: "row-reverse",
