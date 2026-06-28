@@ -29,11 +29,12 @@ type Props = {
   loading: boolean;
   labels: PossibleClientsLabels;
   onAdd: () => void;
+  onSelect: (prospect: ProspectCard) => void;
   onLinkQr: (prospect: ProspectCard) => void;
 };
 
 export default function PossibleClientsSection(props: Props) {
-  const { prospects, loading, labels, onAdd, onLinkQr } = props;
+  const { prospects, loading, labels, onAdd, onSelect, onLinkQr } = props;
   const [search, setSearch] = useState("");
 
   const filtered = useMemo(() => {
@@ -80,25 +81,27 @@ export default function PossibleClientsSection(props: Props) {
         <View style={styles.list}>
           {filtered.map((p) => (
             <View key={p.id} style={styles.card}>
-              <View style={styles.cardTop}>
-                <View style={styles.pill}>
-                  <Text style={styles.pillText}>{labels.pill}</Text>
-                </View>
-                {p.visitedToday ? (
-                  <View style={styles.visitedPill}>
-                    <Ionicons name="checkmark-circle" size={14} color="#16a34a" />
-                    <Text style={styles.visitedText}>{labels.visited}</Text>
+              <Pressable onPress={() => onSelect(p)}>
+                <View style={styles.cardTop}>
+                  <View style={styles.pill}>
+                    <Text style={styles.pillText}>{labels.pill}</Text>
                   </View>
-                ) : (
-                  <Text style={styles.pendingText}>{labels.pending}</Text>
-                )}
-              </View>
-              <Text style={styles.name}>{p.name}</Text>
-              <Text style={styles.meta}>
-                {p.ownerName} · {p.phone}
-              </Text>
-              {p.areaName ? <Text style={styles.area}>{p.areaName}</Text> : null}
-              {p.addressText ? <Text style={styles.address}>{p.addressText}</Text> : null}
+                  {p.visitedToday ? (
+                    <View style={styles.visitedPill}>
+                      <Ionicons name="checkmark-circle" size={14} color="#16a34a" />
+                      <Text style={styles.visitedText}>{labels.visited}</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.pendingText}>{labels.pending}</Text>
+                  )}
+                </View>
+                <Text style={styles.name}>{p.name}</Text>
+                <Text style={styles.meta}>
+                  {p.ownerName} · {p.phone}
+                </Text>
+                {p.areaName ? <Text style={styles.area}>{p.areaName}</Text> : null}
+                {p.addressText ? <Text style={styles.address}>{p.addressText}</Text> : null}
+              </Pressable>
               <Pressable style={styles.linkBtn} onPress={() => onLinkQr(p)}>
                 <Ionicons name="qr-code-outline" size={18} color={theme.accentDark} />
                 <Text style={styles.linkBtnText}>{labels.linkQr}</Text>

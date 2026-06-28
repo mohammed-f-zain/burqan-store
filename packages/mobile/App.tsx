@@ -217,6 +217,8 @@ const t = {
   prospectConverted: "تم تحويل العميل إلى متجر مسجّل",
   prospectConvertFailed: "تعذّر ربط الرمز",
   prospectLinkScanHint: "امسح رمز بطاقة جديد غير مستخدم لربط هذا العميل",
+  prospectCoords: "الإحداثيات",
+  prospectMapFallback: "معاينة الخريطة غير متاحة — اضغط فتح على الخريطة",
   navGoogle: "خرائط Google",
   googleTabTitle: "سوبرماركت ومتاجر المنطقة",
   googleTabHint: "نتائج البحث من Google Maps في مناطق عملك",
@@ -305,6 +307,7 @@ import EndVisitModal from "./EndVisitModal";
 import OrderInvoiceModal from "./OrderInvoiceModal";
 import StoreCartPanel from "./StoreCartPanel";
 import StorePeekModal from "./StorePeekModal";
+import ProspectPeekModal from "./ProspectPeekModal";
 import type { ReceiptData } from "./receiptFormat";
 import type { DailyStoreCard, PrizeProduct, ProspectCard, StoreBrief } from "./storeTypes";
 export type { StoreBrief } from "./storeTypes";
@@ -449,6 +452,7 @@ export default function App() {
   const [googleLazyApi, setGoogleLazyApi] = useState(true);
   const googleRawByAreaRef = useRef<Record<number, RawGooglePlace[]>>({});
   const [peekStore, setPeekStore] = useState<DailyStoreCard | null>(null);
+  const [peekProspect, setPeekProspect] = useState<ProspectCard | null>(null);
   const [endVisitOpen, setEndVisitOpen] = useState(false);
   const [endVisitBusy, setEndVisitBusy] = useState(false);
   const [visitHadOrder, setVisitHadOrder] = useState(false);
@@ -1520,6 +1524,7 @@ export default function App() {
               pill: t.prospectsPill,
             }}
             onAdd={() => setMode("prospect-add")}
+            onSelect={setPeekProspect}
             onLinkQr={(p) => {
               setConvertingProspectId(p.id);
               showToast(t.prospectLinkScanHint, "info");
@@ -2105,6 +2110,35 @@ export default function App() {
         }}
         formatLocation={(s) => formatStoreLocation(s, t.locationUnknown)}
         onClose={() => setPeekStore(null)}
+      />
+      <ProspectPeekModal
+        visible={peekProspect != null}
+        prospect={peekProspect}
+        labels={{
+          close: t.close,
+          phone: t.phone,
+          owner: t.storeOwner,
+          location: t.location,
+          address: t.address,
+          area: t.area,
+          coords: t.prospectCoords,
+          locationUnknown: t.locationUnknown,
+          openInMaps: t.openInMaps,
+          callStore: t.callStore,
+          linkQr: t.prospectsLinkQr,
+          prospectPill: t.prospectsPill,
+          visited: t.prospectsVisited,
+          pending: t.prospectsPending,
+          mapFallback: t.prospectMapFallback,
+          storeLocation: t.location,
+        }}
+        formatLocation={(p) => formatStoreLocation(p, t.locationUnknown)}
+        onClose={() => setPeekProspect(null)}
+        onLinkQr={(p) => {
+          setConvertingProspectId(p.id);
+          showToast(t.prospectLinkScanHint, "info");
+          void openQrScanner();
+        }}
       />
     </SafeAreaView>
   );
