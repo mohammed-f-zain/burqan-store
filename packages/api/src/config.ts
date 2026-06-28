@@ -26,8 +26,8 @@ export const config = {
   bcryptRounds: parseInt(process.env.BCRYPT_ROUNDS ?? "12", 10),
   ownerPortalBaseUrl: process.env.OWNER_PORTAL_BASE_URL ?? "https://burqan.store",
   qrPayloadBaseUrl: process.env.QR_PAYLOAD_BASE_URL ?? "https://burqan.store",
-  /** Max distance (m) from store for rep QR scan / visit / order. Default 1 km. */
-  scanMaxDistanceM: parseInt(process.env.SCAN_MAX_DISTANCE_M ?? "1000", 10),
+  /** Max distance (m) from store for rep QR scan / visit / order. Default 5 km. */
+  scanMaxDistanceM: parseInt(process.env.SCAN_MAX_DISTANCE_M ?? "5000", 10),
   /** Local folder for uploaded images (served at /uploads/...) */
   uploadDir: process.env.UPLOAD_DIR
     ? path.resolve(process.env.UPLOAD_DIR)
