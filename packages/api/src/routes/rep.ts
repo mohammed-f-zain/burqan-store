@@ -284,6 +284,11 @@ function repCanAccessStore(
   );
 }
 
+function formatAreaLabel(name: string, governorate: string | null): string {
+  const gov = governorate?.trim();
+  return gov ? `${name} · ${gov}` : name;
+}
+
 async function loadStoreForRep(storeId: number, rep: { id: number; areaIds: number[] }) {
   const { rows } = await query<{
     id: number;
@@ -300,9 +305,10 @@ async function loadStoreForRep(storeId: number, rep: { id: number; areaIds: numb
     owner_portal_token: string;
     qr_public_token: string;
     area_name: string;
+    governorate: string | null;
     loyalty_points_balance: number;
   }>(
-    `SELECT s.*, qc.public_token AS qr_public_token, a.name AS area_name
+    `SELECT s.*, qc.public_token AS qr_public_token, a.name AS area_name, a.governorate
      FROM stores s
      JOIN qr_codes qc ON qc.id = s.qr_code_id
      JOIN areas a ON a.id = s.area_id
@@ -320,7 +326,7 @@ async function loadStoreForRep(storeId: number, rep: { id: number; areaIds: numb
     ownerName: s.owner_name,
     location: { lat: s.location_lat, lng: s.location_lng },
     addressText: s.address_text,
-    areaName: s.area_name,
+    areaName: formatAreaLabel(s.area_name, s.governorate),
     imageUrl: s.image_url,
     areaId: s.area_id,
     deferredPaymentEnabled: s.deferred_payment_enabled,
@@ -699,12 +705,15 @@ router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
       location_lng: number;
       address_text: string | null;
       deferred_payment_enabled: boolean;
+      image_url: string | null;
       area_name: string;
+      governorate: string | null;
       visited_today: boolean;
       visit_note: string | null;
     }>(
       `SELECT s.id, s.name, s.phone, s.owner_name, s.location_lat, s.location_lng,
-              s.address_text, s.deferred_payment_enabled, a.name AS area_name,
+              s.address_text, s.image_url, s.deferred_payment_enabled,
+              a.name AS area_name, a.governorate,
               EXISTS (
                 SELECT 1 FROM visits v
                 WHERE v.store_id = s.id
@@ -746,7 +755,8 @@ router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
         ownerName: s.owner_name,
         location: { lat: s.location_lat, lng: s.location_lng },
         addressText: s.address_text,
-        areaName: s.area_name,
+        imageUrl: s.image_url,
+        areaName: formatAreaLabel(s.area_name, s.governorate),
         deferredPaymentEnabled: s.deferred_payment_enabled,
         visitedToday: s.visited_today,
         visitNote: s.visit_note,

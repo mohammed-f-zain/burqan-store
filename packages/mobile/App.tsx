@@ -318,6 +318,7 @@ import StorePeekModal from "./StorePeekModal";
 import ProspectPeekModal from "./ProspectPeekModal";
 import type { ReceiptData } from "./receiptFormat";
 import type { DailyStoreCard, PrizeProduct, ProspectCard, StoreBrief } from "./storeTypes";
+import { normalizeStoreBrief } from "./storeTypes";
 export type { StoreBrief } from "./storeTypes";
 
 type BottomTab = "home" | "google" | "inventory" | "store" | "profile";
@@ -954,7 +955,7 @@ export default function App() {
         const store = convertRes.store as StoreBrief | undefined;
         setConvertingProspectId(null);
         if (store) {
-          setActiveStore(store);
+          setActiveStore(normalizeStoreBrief(store as Record<string, unknown>));
           setStorePointsBalance(store.loyaltyPointsBalance ?? 0);
           setRedeemCart({});
           setVisitHadOrder(false);
@@ -982,15 +983,16 @@ export default function App() {
         }
         setMode("register");
       } else if (data.store) {
-        setActiveStore(data.store);
-        setStorePointsBalance(data.store.loyaltyPointsBalance ?? 0);
+        const store = normalizeStoreBrief(data.store as Record<string, unknown>);
+        setActiveStore(store);
+        setStorePointsBalance(store.loyaltyPointsBalance ?? 0);
         setRedeemCart({});
         setVisitHadOrder(false);
         setMode("store");
         setBottomTab("home");
         setStoreTab("sell");
         showToast(t.visitRecorded, "success");
-        void Promise.all([refreshStoreData(data.store.id), loadDailyStores()]);
+        void Promise.all([refreshStoreData(store.id), loadDailyStores()]);
       } else {
         throw new Error(t.qrFailed);
       }
@@ -1044,15 +1046,32 @@ export default function App() {
 
   const refreshStoreData = useCallback(
     async (storeId: number) => {
-      try {
+      const loadInventory = async () => {
         const inv = await apiGet("/api/v1/rep/inventory");
         const rows = (inv.inventory ?? []) as Parameters<typeof mapProductRow>[0][];
         const mapped = rows.map(mapProductRow).filter((r) => r.quantity > 0);
         setProducts(mapped);
         setInventory(mapped);
-      } catch {
-        /* ignore */
-      }
+      };
+      const loadProfile = async () => {
+        const data = (await apiGet(`/api/v1/rep/stores/${storeId}`)) as { store?: Record<string, unknown> };
+        if (!data.store) return;
+        const store = normalizeStoreBrief(data.store);
+        setActiveStore((prev) => (prev?.id === storeId ? { ...prev, ...store } : prev));
+        if (store.loyaltyPointsBalance != null) {
+          setStorePointsBalance(store.loyaltyPointsBalance);
+        }
+      };
+      await Promise.all([loadInventory().catch(() => {}), loadProfile().catch(() => {})]);
+    },
+    [apiGet]
+  );
+
+  const loadStoreProfile = useCallback(
+    async (storeId: number) => {
+      const data = (await apiGet(`/api/v1/rep/stores/${storeId}`)) as { store?: Record<string, unknown> };
+      if (!data.store) return null;
+      return normalizeStoreBrief(data.store);
     },
     [apiGet]
   );
@@ -1223,6 +1242,19 @@ export default function App() {
   useEffect(() => {
     if (storeTab === "redeem" && activeStore) void loadPrizes();
   }, [storeTab, activeStore, loadPrizes]);
+
+  useEffect(() => {
+    if (storeTab !== "info" || !activeStore?.id || !token) return;
+    void loadStoreProfile(activeStore.id).then((store) => {
+      if (!store) return;
+      setActiveStore((prev) => (prev?.id === store.id ? { ...prev, ...store } : prev));
+    });
+  }, [storeTab, activeStore?.id, loadStoreProfile, token]);
+
+  useEffect(() => {
+    if (mode !== "store" || !activeStore?.id || !token) return;
+    void refreshStoreData(activeStore.id);
+  }, [mode, activeStore?.id, refreshStoreData, token]);
 
   const redeemCartTotal = useMemo(() => {
     return Object.entries(redeemCart).reduce((sum, [pid, qty]) => {
@@ -1675,15 +1707,17 @@ export default function App() {
                 />
               ) : null}
               <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>{t.ownerName}</Text>
-                <Text style={styles.infoValue}>{activeStore.ownerName}</Text>
+                <Text style={styles.infoLabel}>{t.storeName}</Text>
+                <Text style={styles.infoValue}>{activeStore.name || "—"}</Text>
               </View>
-              {activeStore.areaName ? (
-                <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>{t.area}</Text>
-                  <Text style={styles.infoValue}>{activeStore.areaName}</Text>
-                </View>
-              ) : null}
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>{t.ownerName}</Text>
+                <Text style={styles.infoValue}>{activeStore.ownerName || "—"}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>{t.area}</Text>
+                <Text style={styles.infoValue}>{activeStore.areaName || t.dailyStoresUnknownArea}</Text>
+              </View>
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>{t.phone}</Text>
                 <Pressable
@@ -1722,19 +1756,7 @@ export default function App() {
               <Text style={styles.muted}>{t.visitAutoHint}</Text>
               <Pressable
                 style={[styles.secondary, { marginTop: 16 }]}
-                onPress={() => {
-                  void (async () => {
-                    try {
-                      const data = (await apiGet(`/api/v1/rep/stores/${activeStore.id}`)) as {
-                        store?: StoreBrief;
-                      };
-                      if (data.store) setActiveStore(data.store);
-                    } catch {
-                      /* keep current */
-                    }
-                    setEditStoreOpen(true);
-                  })();
-                }}
+                onPress={() => setEditStoreOpen(true)}
               >
                 <Text style={styles.secondaryText}>{t.editStore}</Text>
               </Pressable>
@@ -1855,7 +1877,7 @@ export default function App() {
                 onClose={() => setEditStoreOpen(false)}
                 onNotice={(msg) => showToast(msg, "info")}
                 onSaved={(store) => {
-                  setActiveStore(store);
+                  setActiveStore(normalizeStoreBrief(store as unknown as Record<string, unknown>));
                   setEditStoreOpen(false);
                   showToast(t.storeUpdated, "success");
                   void loadDailyStores();
@@ -1917,11 +1939,13 @@ export default function App() {
               onDone={async (msg, store) => {
                 showToast(msg, store ? "success" : msg === t.cancelled ? "info" : "error");
                 if (store) {
-                  setActiveStore(store);
+                  const normalized = normalizeStoreBrief(store as unknown as Record<string, unknown>);
+                  setActiveStore(normalized);
+                  setStorePointsBalance(normalized.loyaltyPointsBalance ?? 0);
                   setMode("store");
                   setBottomTab("home");
                   setStoreTab("sell");
-                  await Promise.all([refreshStoreData(store.id), loadDailyStores()]);
+                  await Promise.all([refreshStoreData(normalized.id), loadDailyStores()]);
                 } else {
                   setMode("home");
                   setBottomTab("home");
