@@ -4,6 +4,7 @@ import { Router } from "express";
 import { z } from "zod";
 
 import { imageUpload } from "../lib/uploadConfig.js";
+import { isNoBuyReasonNote } from "../data/noBuyReasons.js";
 import { query, pool } from "../db/pool.js";
 import { repAuthMiddleware } from "../middleware/repAuth.js";
 import { HttpError } from "../utils/errors.js";
@@ -823,6 +824,37 @@ router.get("/google-places", repAuthMiddleware, async (req, res, next) => {
 
 const visitNoteSchema = z.object({
   note: z.string().max(2000).optional().nullable(),
+  kind: z.enum(["visit-note", "no-buy-reason"]).optional(),
+});
+
+async function repHadOrderAtStoreToday(repId: number, storeId: number): Promise<boolean> {
+  const { rows } = await query<{ ok: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM orders o
+       WHERE o.representative_id = $1
+         AND o.store_id = $2
+         AND (o.created_at AT TIME ZONE 'Asia/Amman')::date =
+             (NOW() AT TIME ZONE 'Asia/Amman')::date
+     ) AS ok`,
+    [repId, storeId]
+  );
+  return Boolean(rows[0]?.ok);
+}
+
+/** Whether today's visit needs a no-buy reason (no sale yet). */
+router.get("/stores/:id/today-visit-status", repAuthMiddleware, async (req, res, next) => {
+  try {
+    const storeId = z.coerce.number().int().positive().parse(req.params.id);
+    const rep = req.rep!;
+    await loadStoreForRep(storeId, rep);
+    const hadOrderToday = await repHadOrderAtStoreToday(rep.id, storeId);
+    res.json({
+      hadOrderToday,
+      requiresNoBuyReason: !hadOrderToday,
+    });
+  } catch (e) {
+    next(e);
+  }
 });
 
 /** Attach optional visit note or no-buy reason to today's latest visit (end-visit modal). */
@@ -833,6 +865,19 @@ router.patch("/stores/:id/today-visit-note", repAuthMiddleware, async (req, res,
     const rep = req.rep!;
     await loadStoreForRep(storeId, rep);
     const note = body.note?.trim() ? body.note.trim() : null;
+    const hadOrderToday = await repHadOrderAtStoreToday(rep.id, storeId);
+    const kind =
+      body.kind ??
+      (hadOrderToday ? "visit-note" : note && isNoBuyReasonNote(note) ? "no-buy-reason" : "visit-note");
+
+    if (kind === "no-buy-reason") {
+      if (!note || !isNoBuyReasonNote(note)) {
+        throw new HttpError(400, "يرجى اختيار سبب عدم الشراء من القائمة");
+      }
+      if (hadOrderToday) {
+        throw new HttpError(400, "لا يمكن تسجيل سبب عدم الشراء بعد إتمام عملية بيع");
+      }
+    }
     const { rows } = await query<{ id: string; visited_at: string; note: string | null }>(
       `UPDATE visits SET note = $1
        WHERE id = (

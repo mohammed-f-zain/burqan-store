@@ -77,6 +77,7 @@ const t = {
   manualToken: "رمز البطاقة",
   lookup: "تأكيد",
   close: "إغلاق",
+  endVisitBtn: "إنهاء الزيارة",
   registerStore: "تسجيل متجر جديد",
   area: "المنطقة",
   storeName: "اسم المتجر",
@@ -247,7 +248,7 @@ const t = {
   tooFar: "أنت بعيد عن المتجر. اقترب إلى أقل من 100 متر.",
   noImage: "لا صورة",
   visitEndTitle: "إنهاء الزيارة؟",
-  visitEndMessage: "هل تريد إغلاق جلسة هذا المتجر والعودة للرئيسية؟",
+  visitEndMessage: "تمت الزيارة بنجاح؟ يمكنك إضافة ملاحظة اختيارية ثم إنهاء الزيارة.",
   visitEndMessageCart: (n: number) => `لديك ${n} منتج في السلة. يمكنك إتمام الطلب أو إنهاء الزيارة.`,
   visitEndStay: "متابعة الزيارة",
   visitEndGoCart: "الذهاب إلى السلة",
@@ -259,7 +260,7 @@ const t = {
   visitEndNoBuyNoteRequired: "يرجى اختيار سبب عدم الشراء",
   visitEndNoBuyMessage: "لم تُسجَّل أي مشتريات. اذكر سبب عدم الشراء قبل إغلاق الزيارة.",
   visitEndNoteFailed: "تعذّر حفظ ملاحظة الزيارة",
-  closeStoreBeforeScan: "أنهِ زيارة المتجر الحالي (إغلاق) قبل مسح متجر آخر",
+  closeStoreBeforeScan: "أنهِ زيارة المتجر الحالي (إنهاء الزيارة) قبل مسح متجر آخر",
   resumeOpenVisit: "زيارة قيد التنفيذ — اضغط للمتابعة",
 } as const;
 
@@ -455,6 +456,7 @@ export default function App() {
   const [peekProspect, setPeekProspect] = useState<ProspectCard | null>(null);
   const [endVisitOpen, setEndVisitOpen] = useState(false);
   const [endVisitBusy, setEndVisitBusy] = useState(false);
+  const [endVisitNoBuyRequired, setEndVisitNoBuyRequired] = useState(false);
   const [visitHadOrder, setVisitHadOrder] = useState(false);
   const [orderReceipt, setOrderReceipt] = useState<ReceiptData | null>(null);
   const [orderReceiptOpen, setOrderReceiptOpen] = useState(false);
@@ -1284,20 +1286,44 @@ export default function App() {
     void loadDailyStores();
   }, [loadDailyStores]);
 
-  const noPurchaseEndVisit = cartItemCount === 0 && !visitHadOrder;
+  const noPurchaseEndVisit = cartItemCount === 0 && !visitHadOrder && endVisitNoBuyRequired;
+
+  const openEndVisit = useCallback(async () => {
+    if (!activeStore) return;
+    let noBuyRequired = cartItemCount === 0 && !visitHadOrder;
+    try {
+      const data = (await apiGet(`/api/v1/rep/stores/${activeStore.id}/today-visit-status`)) as {
+        hadOrderToday?: boolean;
+        requiresNoBuyReason?: boolean;
+      };
+      if (data.hadOrderToday) {
+        setVisitHadOrder(true);
+        noBuyRequired = false;
+      } else if (typeof data.requiresNoBuyReason === "boolean") {
+        noBuyRequired = cartItemCount === 0 && data.requiresNoBuyReason;
+      }
+    } catch {
+      noBuyRequired = cartItemCount === 0 && !visitHadOrder;
+    }
+    setEndVisitNoBuyRequired(noBuyRequired);
+    setEndVisitOpen(true);
+  }, [activeStore, apiGet, cartItemCount, visitHadOrder]);
 
   const confirmEndVisit = useCallback(
-    async (note: string) => {
+    async (payload: { note: string; kind: "visit-note" | "no-buy-reason" }) => {
       if (!activeStore) return;
-      const trimmed = note.trim();
-      if (noPurchaseEndVisit && !trimmed) {
+      const trimmed = payload.note.trim();
+      if (payload.kind === "no-buy-reason" && !trimmed) {
         showToast(t.visitEndNoBuyNoteRequired, "error");
         return;
       }
       setEndVisitBusy(true);
       try {
-        if (trimmed) {
-          await apiPatch(`/api/v1/rep/stores/${activeStore.id}/today-visit-note`, { note: trimmed });
+        if (trimmed || payload.kind === "no-buy-reason") {
+          await apiPatch(`/api/v1/rep/stores/${activeStore.id}/today-visit-note`, {
+            note: trimmed || null,
+            kind: payload.kind,
+          });
         }
         endStoreSession();
       } catch (e) {
@@ -1306,7 +1332,7 @@ export default function App() {
         setEndVisitBusy(false);
       }
     },
-    [activeStore, apiPatch, endStoreSession, noPurchaseEndVisit, showToast]
+    [activeStore, apiPatch, endStoreSession, showToast]
   );
 
   const cartLines = useMemo(() => {
@@ -1610,8 +1636,8 @@ export default function App() {
         <View style={styles.card}>
           <View style={styles.rowBetween}>
             <Text style={styles.cardTitle}>{activeStore.name}</Text>
-            <Pressable onPress={() => setEndVisitOpen(true)}>
-              <Text style={styles.link}>{t.close}</Text>
+            <Pressable style={styles.endVisitBtn} onPress={() => void openEndVisit()}>
+              <Text style={styles.endVisitBtnText}>{t.endVisitBtn}</Text>
             </Pressable>
           </View>
           <View style={styles.metaChips}>
@@ -2072,7 +2098,7 @@ export default function App() {
       <EndVisitModal
         visible={endVisitOpen}
         cartItemCount={cartItemCount}
-        noteRequired={noPurchaseEndVisit}
+        noBuyReasonRequired={noPurchaseEndVisit}
         busy={endVisitBusy}
         labels={{
           title: t.visitEndTitle,
@@ -2092,7 +2118,7 @@ export default function App() {
           setMode("store");
           setStoreTab("sell");
         }}
-        onConfirm={(note) => void confirmEndVisit(note)}
+        onConfirm={(payload) => void confirmEndVisit(payload)}
       />
       <StorePeekModal
         visible={peekStore != null}
@@ -2499,6 +2525,15 @@ const styles = StyleSheet.create({
   secondaryText: { color: text, fontWeight: "700", fontSize: 15 },
   muted: { color: muted, marginTop: 6, fontSize: 13, textAlign: "right" },
   link: { color: accent, fontWeight: "800", fontSize: 15 },
+  endVisitBtn: {
+    backgroundColor: "#fef2f2",
+    borderWidth: 1,
+    borderColor: "#fecaca",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: theme.radius.md,
+  },
+  endVisitBtnText: { color: "#b91c1c", fontWeight: "800", fontSize: 14 },
   scannerModal: { flex: 1, backgroundColor: "#000" },
   scannerCenter: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24 },
   scannerHint: { color: "#e8eefc", marginTop: 16, textAlign: "center", fontSize: 15 },

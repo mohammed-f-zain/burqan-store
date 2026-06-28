@@ -29,16 +29,17 @@ export type EndVisitLabels = {
 type Props = {
   visible: boolean;
   cartItemCount: number;
-  noteRequired?: boolean;
+  /** When true, show fixed no-buy reasons; when false, free-text visit note. */
+  noBuyReasonRequired?: boolean;
   busy?: boolean;
   labels: EndVisitLabels;
   onStay: () => void;
   onGoCart: () => void;
-  onConfirm: (note: string) => void;
+  onConfirm: (payload: { note: string; kind: "visit-note" | "no-buy-reason" }) => void;
 };
 
 export default function EndVisitModal(props: Props) {
-  const { visible, cartItemCount, noteRequired, busy, labels } = props;
+  const { visible, cartItemCount, noBuyReasonRequired, busy, labels } = props;
   const [note, setNote] = useState("");
   const [noBuyReason, setNoBuyReason] = useState<string | null>(null);
 
@@ -50,7 +51,7 @@ export default function EndVisitModal(props: Props) {
   }, [visible]);
 
   const message = cartItemCount > 0 ? labels.messageCart(cartItemCount) : labels.message;
-  const canConfirm = noteRequired ? noBuyReason != null : true;
+  const canConfirm = noBuyReasonRequired ? noBuyReason != null : true;
 
   return (
     <Modal visible={visible} animationType="fade" transparent onRequestClose={props.onStay}>
@@ -64,7 +65,7 @@ export default function EndVisitModal(props: Props) {
             <Text style={styles.title}>{labels.title}</Text>
             <Text style={styles.message}>{message}</Text>
 
-            {noteRequired ? (
+            {noBuyReasonRequired ? (
               <>
                 <Text style={[styles.noteLabel, styles.noteLabelRequired]}>{labels.noteLabel}</Text>
                 {labels.pickReasonHint ? (
@@ -117,7 +118,12 @@ export default function EndVisitModal(props: Props) {
               ) : null}
               <Pressable
                 style={[styles.confirmBtn, (busy || !canConfirm) && styles.btnDisabled]}
-                onPress={() => props.onConfirm(noteRequired ? noBuyReason! : note.trim())}
+                onPress={() =>
+                  props.onConfirm({
+                    note: noBuyReasonRequired ? noBuyReason! : note.trim(),
+                    kind: noBuyReasonRequired ? "no-buy-reason" : "visit-note",
+                  })
+                }
                 disabled={busy || !canConfirm}
               >
                 <Text style={styles.confirmBtnText}>{labels.confirm}</Text>
