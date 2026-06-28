@@ -12,6 +12,11 @@ export const repLocationSchema = z.object({
   repLng: z.number().min(-180).max(180),
 });
 
+export function formatMaxScanDistance(meters: number): string {
+  if (meters >= 1000 && meters % 1000 === 0) return `${meters / 1000} كم`;
+  return `${meters} متر`;
+}
+
 export function assertWithinScanDistance(
   repLat: number,
   repLng: number,
@@ -23,7 +28,7 @@ export function assertWithinScanDistance(
   if (d > max) {
     throw new HttpError(
       403,
-      `يجب أن تكون على بُعد أقل من ${max} متر من المتجر (أنت على بُعد ${Math.round(d)} م)`
+      `يجب أن تكون على بُعد أقل من ${formatMaxScanDistance(max)} من المتجر (أنت على بُعد ${Math.round(d)} م)`
     );
   }
 }
