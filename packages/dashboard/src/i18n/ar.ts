@@ -33,6 +33,7 @@ export const ar = {
     qrPool: "رموز البطاقات",
     possibleClients: "عملاء محتملون",
     routeZones: "مسارات المناطق",
+    loyaltyStores: "نقاط الولاء",
     account: "الحساب",
   },
 
@@ -116,6 +117,23 @@ export const ar = {
     noBuyMonthCount: "بدون شراء هذا الشهر",
     noBuyViewAll: "عرض الكل",
     noBuyEmpty: "لا توجد زيارات بدون شراء مسجّلة بعد.",
+    loyaltyViewAll: "كل المتاجر",
+    viewAllOrders: "كل الطلبات",
+  },
+
+  loyaltyStores: {
+    title: "متاجر نقاط الولاء",
+    hint: "المتاجر التي لديها رصيد نقاط — اضغط على صف للتفاصيل.",
+    colStore: "المتجر",
+    colOwner: "المالك",
+    colPhone: "الهاتف",
+    colArea: "المنطقة",
+    colBalance: "رصيد النقاط",
+    statStores: "متاجر برصيد",
+    statTotalBalance: "إجمالي الأرصدة",
+    empty: "لا متاجر برصيد نقاط بعد.",
+    noMatch: "لا نتائج مطابقة للبحث أو الفلتر.",
+    loadFailed: "تعذّر تحميل المتاجر.",
   },
 
   visits: {

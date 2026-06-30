@@ -33,6 +33,7 @@ export const en: Messages = {
     qrPool: "Card QR codes",
     possibleClients: "Possible clients",
     routeZones: "Route zones",
+    loyaltyStores: "Loyalty points",
     account: "Account",
   },
 
@@ -116,6 +117,23 @@ export const en: Messages = {
     noBuyMonthCount: "No-purchase visits this month",
     noBuyViewAll: "View all",
     noBuyEmpty: "No no-purchase visits recorded yet.",
+    loyaltyViewAll: "All stores",
+    viewAllOrders: "All orders",
+  },
+
+  loyaltyStores: {
+    title: "Stores with loyalty points",
+    hint: "Stores with a points balance — click a row for details.",
+    colStore: "Store",
+    colOwner: "Owner",
+    colPhone: "Phone",
+    colArea: "Area",
+    colBalance: "Points balance",
+    statStores: "Stores with balance",
+    statTotalBalance: "Total balance",
+    empty: "No stores with points yet.",
+    noMatch: "No rows match your search or filters.",
+    loadFailed: "Could not load stores.",
   },
 
   visits: {

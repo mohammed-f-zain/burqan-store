@@ -9,6 +9,7 @@ import AccountPage from "./pages/AccountPage";
 import AdminsPage from "./pages/AdminsPage";
 import AreasPage from "./pages/AreasPage";
 import ForgotPassword from "./pages/ForgotPassword";
+import LoyaltyStoresPage from "./pages/LoyaltyStoresPage";
 import Login from "./pages/Login";
 import ResetPassword from "./pages/ResetPassword";
 import OrderDetailPage from "./pages/OrderDetailPage";
@@ -56,6 +57,7 @@ export default function App() {
                 <Route path="fill-car" element={<FillCarPage />} />
                 <Route path="rep-sales" element={<Navigate to="/app/fill-car" replace />} />
                 <Route path="stores" element={<StoresPage />} />
+                  <Route path="loyalty-stores" element={<LoyaltyStoresPage />} />
                   <Route path="stores/:id" element={<StoreDetailPage />} />
                   <Route path="possible-clients" element={<PossibleClientsPage />} />
                   <Route path="visits" element={<VisitsPage />} />
