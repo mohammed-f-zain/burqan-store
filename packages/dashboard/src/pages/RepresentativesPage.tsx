@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 
 import { api } from "../api";
 import RepAreaMapPicker from "../components/RepAreaMapPicker";
+import RepRouteScheduleModal from "../components/RepRouteScheduleModal";
 import { useAuth } from "../auth/AuthContext";
 import PaginationBar from "../components/PaginationBar";
 import TableFilterBar from "../components/TableFilterBar";
@@ -62,6 +63,7 @@ export default function RepresentativesPage() {
   const [eIsActive, setEIsActive] = useState(true);
   const [eNewPassword, setENewPassword] = useState("");
   const [eUploading, setEUploading] = useState(false);
+  const [scheduleRep, setScheduleRep] = useState<{ id: number; name: string } | null>(null);
   const canFillCar = can("fill_car.read") || can("reps.read");
 
   const areaNameById = useMemo(() => {
@@ -355,6 +357,15 @@ export default function RepresentativesPage() {
                         <button type="button" className="ghost" onClick={() => openEdit(r)}>
                           {t.reps.edit}
                         </button>
+                        {can("reps.write") ? (
+                          <button
+                            type="button"
+                            className="ghost"
+                            onClick={() => setScheduleRep({ id: r.id, name: r.full_name })}
+                          >
+                            {t.reps.scheduleBtn}
+                          </button>
+                        ) : null}
                         <button type="button" className="ghost danger" onClick={() => void removeRep(r.id)}>
                           {t.reps.delete}
                         </button>
@@ -435,6 +446,14 @@ export default function RepresentativesPage() {
           </div>
         </div>
       )}
+
+      {scheduleRep != null ? (
+        <RepRouteScheduleModal
+          repId={scheduleRep.id}
+          repName={scheduleRep.name}
+          onClose={() => setScheduleRep(null)}
+        />
+      ) : null}
     </div>
   );
 }

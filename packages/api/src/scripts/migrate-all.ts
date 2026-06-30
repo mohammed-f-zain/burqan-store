@@ -21,6 +21,7 @@ const FILES = [
   "009_google_map_places.sql",
   "010_prospect_stores.sql",
   "011_rep_inventory_price.sql",
+  "012_route_zones.sql",
 ] as const;
 
 async function main() {

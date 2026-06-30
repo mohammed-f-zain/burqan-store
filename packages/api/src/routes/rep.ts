@@ -25,6 +25,13 @@ import { parseQrPublicToken } from "../utils/qrToken.js";
 import { buildJordanVoronoiPayload } from "../utils/buildJordanVoronoiPayload.js";
 import { expandRepAreaIds } from "../utils/expandRepAreaIds.js";
 import {
+  ammanDayOfWeek,
+  ARABIC_WEEKDAY_NAMES,
+  formatDistanceM,
+  getRepRouteZoneForDay,
+  sortStoresByDistance,
+} from "../utils/routeZones.js";
+import {
   countGooglePlacesForRep,
   fetchAllGooglePlacesForRep,
   fetchGooglePlacesForArea,
@@ -683,6 +690,138 @@ router.post("/prospect-stores/:id/visits", repAuthMiddleware, async (req, res, n
       [id, rep.id]
     );
     res.status(201).json({ visit: rows[0] });
+  } catch (e) {
+    next(e);
+  }
+});
+
+const routeStoresQuerySchema = z.object({
+  lat: z.coerce.number().min(-90).max(90),
+  lng: z.coerce.number().min(-180).max(180),
+});
+
+/** Today's scheduled route zone for this rep (weekday in Asia/Amman). */
+router.get("/route/today", repAuthMiddleware, async (req, res, next) => {
+  try {
+    const rep = req.rep!;
+    const dayOfWeek = await ammanDayOfWeek();
+    const route = await getRepRouteZoneForDay(rep.id, dayOfWeek);
+    if (!route) {
+      return res.json({
+        active: false,
+        dayOfWeek,
+        dayName: ARABIC_WEEKDAY_NAMES[dayOfWeek],
+        message: "لا يوجد مسار مجدول لهذا اليوم — تواصل مع الإدارة",
+      });
+    }
+    res.json({
+      active: true,
+      dayOfWeek: route.dayOfWeek,
+      dayName: route.dayName,
+      routeZone: {
+        id: route.routeZone.id,
+        name: route.routeZone.name,
+        notes: route.routeZone.notes,
+        areaCount: route.routeZone.areaIds.length,
+        areas: route.routeZone.areaNames,
+      },
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** Stores in today's route zone, nearest first from rep GPS. */
+router.get("/stores/route", repAuthMiddleware, async (req, res, next) => {
+  try {
+    const rep = req.rep!;
+    const loc = routeStoresQuerySchema.parse(req.query);
+    const dayOfWeek = await ammanDayOfWeek();
+    const route = await getRepRouteZoneForDay(rep.id, dayOfWeek);
+
+    if (!route?.expandedAreaIds.length) {
+      return res.json({
+        active: false,
+        dayOfWeek,
+        dayName: route?.dayName ?? ARABIC_WEEKDAY_NAMES[dayOfWeek],
+        stores: [],
+        message: route
+          ? "منطقة المسار اليوم لا تحتوي مناطق — راجع الإدارة"
+          : "لا يوجد مسار مجدول لهذا اليوم",
+      });
+    }
+
+    const { rows } = await query<{
+      id: number;
+      name: string;
+      phone: string;
+      owner_name: string;
+      location_lat: number;
+      location_lng: number;
+      address_text: string | null;
+      deferred_payment_enabled: boolean;
+      image_url: string | null;
+      area_name: string;
+      governorate: string | null;
+      visited_today: boolean;
+      visit_note: string | null;
+    }>(
+      `SELECT s.id, s.name, s.phone, s.owner_name, s.location_lat, s.location_lng,
+              s.address_text, s.image_url, s.deferred_payment_enabled,
+              a.name AS area_name, a.governorate,
+              EXISTS (
+                SELECT 1 FROM visits v
+                WHERE v.store_id = s.id
+                  AND v.representative_id = $2
+                  AND (v.visited_at AT TIME ZONE 'Asia/Amman')::date =
+                      (NOW() AT TIME ZONE 'Asia/Amman')::date
+              ) AS visited_today,
+              (
+                SELECT v.note FROM visits v
+                WHERE v.store_id = s.id
+                  AND v.representative_id = $2
+                  AND (v.visited_at AT TIME ZONE 'Asia/Amman')::date =
+                      (NOW() AT TIME ZONE 'Asia/Amman')::date
+                ORDER BY v.visited_at DESC
+                LIMIT 1
+              ) AS visit_note
+       FROM stores s
+       JOIN areas a ON a.id = s.area_id
+       WHERE s.area_id = ANY($1::int[])
+       ORDER BY s.name ASC`,
+      [route.expandedAreaIds, rep.id]
+    );
+
+    const sorted = sortStoresByDistance(rows, loc.lat, loc.lng);
+
+    res.json({
+      active: true,
+      dayOfWeek: route.dayOfWeek,
+      dayName: route.dayName,
+      routeZone: {
+        id: route.routeZone.id,
+        name: route.routeZone.name,
+        notes: route.routeZone.notes,
+        areaCount: route.routeZone.areaIds.length,
+        areas: route.routeZone.areaNames,
+      },
+      stores: sorted.map((s) => ({
+        id: s.id,
+        source: "burqan" as const,
+        name: s.name,
+        phone: s.phone,
+        ownerName: s.owner_name,
+        location: { lat: s.location_lat, lng: s.location_lng },
+        addressText: s.address_text,
+        imageUrl: s.image_url,
+        areaName: formatAreaLabel(s.area_name, s.governorate),
+        deferredPaymentEnabled: s.deferred_payment_enabled,
+        visitedToday: s.visited_today,
+        visitNote: s.visit_note,
+        distanceM: Math.round(s.distance_m),
+        distanceLabel: formatDistanceM(s.distance_m),
+      })),
+    });
   } catch (e) {
     next(e);
   }

@@ -24,6 +24,7 @@ import QrPoolPage from "./pages/QrPoolPage";
 import FillCarPage from "./pages/FillCarPage";
 import RepresentativesPage from "./pages/RepresentativesPage";
 import RolesPage from "./pages/RolesPage";
+import RouteZonesPage from "./pages/RouteZonesPage";
 import StoreDetailPage from "./pages/StoreDetailPage";
 import StoresPage from "./pages/StoresPage";
 import VisitsPage from "./pages/VisitsPage";
@@ -48,6 +49,7 @@ export default function App() {
                   <Route path="roles" element={<RolesPage />} />
                 <Route path="admins" element={<AdminsPage />} />
                 <Route path="areas" element={<AreasPage />} />
+                <Route path="route-zones" element={<RouteZonesPage />} />
                 <Route path="products" element={<ProductsPage />} />
                 <Route path="redeem" element={<RedeemPage />} />
                 <Route path="representatives" element={<RepresentativesPage />} />

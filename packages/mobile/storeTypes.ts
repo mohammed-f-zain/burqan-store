@@ -24,6 +24,9 @@ export type DailyStoreCard = {
   visitNote?: string | null;
   googleMapsUrl?: string | null;
   googlePlaceId?: string | null;
+  /** Nearest-first route tab (meters from rep GPS). */
+  distanceM?: number;
+  distanceLabel?: string;
 };
 
 export type StoreBrief = {

@@ -16,6 +16,7 @@ export default function AppLayout() {
     { to: "/app/roles", label: t.nav.roles, perm: "roles.read" },
     { to: "/app/admins", label: t.nav.admins, perm: "admins.read" },
     { to: "/app/areas", label: t.nav.areas, perm: "areas.read" },
+    { to: "/app/route-zones", label: t.nav.routeZones, perm: "areas.read" },
     { to: "/app/products", label: t.nav.products, perm: "products.read" },
     { to: "/app/redeem", label: t.nav.redeem, perm: "redeem.read" },
     { to: "/app/representatives", label: t.nav.representatives, perm: "reps.read" },

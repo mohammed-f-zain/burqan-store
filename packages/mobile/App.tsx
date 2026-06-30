@@ -52,7 +52,7 @@ import { toArabicUserMessage } from "./arabicMessage";
 import ProductDetailModal, { type Product } from "./ProductDetailModal";
 import { productImageUrl } from "./productImage";
 import ProfileScreen, { type RepProfile } from "./ProfileScreen";
-import RegisterErrorBoundary from "./RegisterErrorBoundary";
+import RouteDayStores from "./RouteDayStores";
 import { clearRepToken, loadStoredRepToken, saveRepToken } from "./repSession";
 import SplashScreen from "./SplashScreen";
 import ToastOverlay, { type ToastKind } from "./ToastOverlay";
@@ -176,6 +176,17 @@ const t = {
   areaDetecting: "جاري تحديد المنطقة…",
   refreshLocation: "تحديث الموقع",
   navHome: "الرئيسية",
+  navRoute: "مسار اليوم",
+  routeDayTitle: "مسار اليوم",
+  routeDaySubtitle: "متاجر منطقتك المجدولة — الأقرب أولاً",
+  routeDayToday: (day: string, zone: string) => `${day} · ${zone}`,
+  routeDayAreas: "المناطق",
+  routeDayStoresCount: (n: number) => `${n} متجر`,
+  routeDayNearest: "مرتّبة حسب المسافة من موقعك الحالي",
+  routeDayEmpty: "لا متاجر في مسار اليوم.",
+  routeDayNoSchedule: "لا يوجد مسار مجدول لهذا اليوم — راجع الإدارة.",
+  routeDayNoZoneAreas: "منطقة المسار لا تحتوي مناطق.",
+  routeDayLoadFailed: "تعذّر تحميل مسار اليوم.",
   navInventory: "مخزون",
   navStore: "المنتجات",
   navProfile: "حسابي",
@@ -325,7 +336,7 @@ import type { DailyStoreCard, PrizeProduct, ProspectCard, StoreBrief } from "./s
 import { normalizeStoreBrief } from "./storeTypes";
 export type { StoreBrief } from "./storeTypes";
 
-type BottomTab = "home" | "google" | "inventory" | "store" | "profile";
+type BottomTab = "home" | "route" | "google" | "inventory" | "store" | "profile";
 function formatStoreLocation(
   store: Pick<StoreBrief, "addressText" | "areaName">,
   unknownLabel: string
@@ -474,6 +485,16 @@ export default function App() {
   const [orderReceipt, setOrderReceipt] = useState<ReceiptData | null>(null);
   const [orderReceiptOpen, setOrderReceiptOpen] = useState(false);
   const [storeRefreshing, setStoreRefreshing] = useState(false);
+  const [routeStores, setRouteStores] = useState<DailyStoreCard[]>([]);
+  const [routeMeta, setRouteMeta] = useState<{
+    active: boolean;
+    dayName?: string;
+    routeZone?: { id: number; name: string; notes?: string | null; areas?: string[] };
+    message?: string;
+  } | null>(null);
+  const [routeLoading, setRouteLoading] = useState(false);
+  const [routeLocating, setRouteLocating] = useState(false);
+  const [routeRefreshing, setRouteRefreshing] = useState(false);
   const [bottomTab, setBottomTab] = useState<BottomTab>("home");
   const [inventory, setInventory] = useState<Product[]>([]);
   const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
@@ -687,7 +708,56 @@ export default function App() {
     } finally {
       setDailyStoresLoading(false);
     }
-  }, [apiGet, mapGoogleProspects, token]);
+  }, [apiGet, token]);
+
+  const loadRouteStores = useCallback(async () => {
+    if (!token) return;
+    setRouteLoading(true);
+    setRouteLocating(true);
+    try {
+      const pos = await getRepPosition({ timeoutMs: 20_000 });
+      setRouteLocating(false);
+      const data = (await apiGet(
+        `/api/v1/rep/stores/route?lat=${pos.lat}&lng=${pos.lng}`
+      )) as {
+        active?: boolean;
+        dayName?: string;
+        routeZone?: { id: number; name: string; notes?: string | null; areas?: string[] };
+        message?: string;
+        stores?: DailyStoreCard[];
+      };
+      setRouteMeta({
+        active: Boolean(data.active),
+        dayName: data.dayName,
+        routeZone: data.routeZone,
+        message: data.message,
+      });
+      setRouteStores(Array.isArray(data.stores) ? data.stores : []);
+    } catch (e) {
+      setRouteStores([]);
+      setRouteMeta({
+        active: false,
+        message:
+          e instanceof LocationDeniedError
+            ? t.locationDenied
+            : e instanceof LocationInaccurateError
+              ? t.locationInaccurate(e.accuracyM)
+              : e instanceof LocationTimeoutError
+                ? t.locationTimeout
+                : t.routeDayLoadFailed,
+      });
+      if (e instanceof LocationDeniedError || e instanceof LocationInaccurateError) {
+        showToast(
+          e instanceof LocationInaccurateError ? t.locationInaccurate(e.accuracyM) : t.locationDenied,
+          "error"
+        );
+      }
+    } finally {
+      setRouteLoading(false);
+      setRouteLocating(false);
+      setRouteRefreshing(false);
+    }
+  }, [apiGet, showToast, token]);
 
   const loadGooglePlaces = useCallback(async () => {
     if (!token) return;
@@ -1107,6 +1177,12 @@ export default function App() {
   }, [token, bottomTab, mode, loadDailyStores, loadProspects]);
 
   useEffect(() => {
+    if (token && bottomTab === "route" && mode !== "store" && mode !== "register") {
+      void loadRouteStores();
+    }
+  }, [token, bottomTab, mode, loadRouteStores]);
+
+  useEffect(() => {
     if (token && bottomTab === "google" && mode !== "store" && mode !== "register") {
       void loadGooglePlaces();
     }
@@ -1473,6 +1549,11 @@ export default function App() {
                   </Text>
                   <Text style={styles.headerSub}>{t.homeSubtitle}</Text>
                 </View>
+              ) : bottomTab === "route" ? (
+                <View style={styles.headerText}>
+                  <Text style={styles.headerGreeting}>{t.routeDayTitle}</Text>
+                  <Text style={styles.headerSub}>{t.routeDaySubtitle}</Text>
+                </View>
               ) : bottomTab === "google" ? (
                 <View style={styles.headerText}>
                   <Text style={styles.headerGreeting}>{t.navGoogle}</Text>
@@ -1634,6 +1715,43 @@ export default function App() {
             onSelectStore={setPeekStore}
           />
         </>
+      )}
+
+      {bottomTab === "route" && mode !== "store" && mode !== "register" && (
+        <RouteDayStores
+          stores={routeStores}
+          meta={routeMeta}
+          loading={routeLoading}
+          locating={routeLocating}
+          refreshing={routeRefreshing}
+          labels={{
+            title: t.routeDayTitle,
+            subtitle: t.routeDaySubtitle,
+            today: t.routeDayToday,
+            areasIncluded: t.routeDayAreas,
+            storesCount: t.routeDayStoresCount,
+            nearestFirst: t.routeDayNearest,
+            empty: t.routeDayEmpty,
+            noSchedule: t.routeDayNoSchedule,
+            noZoneAreas: t.routeDayNoZoneAreas,
+            locating: t.locating,
+            locationDenied: t.locationDenied,
+            loadFailed: t.routeDayLoadFailed,
+            visited: t.dailyStoresVisited,
+            pending: t.dailyStoresPending,
+            searchPlaceholder: t.dailyStoresSearchPlaceholder,
+            filterAll: t.dailyStoresFilterAll,
+            filterPending: t.dailyStoresFilterPending,
+            filterDone: t.dailyStoresFilterDone,
+            noSearchResults: t.dailyStoresNoSearchResults,
+            refreshLocation: t.refreshLocation,
+          }}
+          onRefresh={() => {
+            setRouteRefreshing(true);
+            void loadRouteStores();
+          }}
+          onSelectStore={setPeekStore}
+        />
       )}
 
       {bottomTab === "google" && mode !== "store" && mode !== "register" && (
@@ -2107,6 +2225,19 @@ export default function App() {
             onPress={() => {
               setBottomTab("home");
               if (mode === "store") setMode("home");
+            }}
+          />
+          <BottomNavItem
+            active={bottomTab === "route"}
+            label={t.navRoute}
+            icon="navigate-outline"
+            iconActive="navigate"
+            activeColor="#0d9488"
+            activeBg="#ccfbf1"
+            onPress={() => {
+              setBottomTab("route");
+              if (mode === "store") setMode("home");
+              void loadRouteStores();
             }}
           />
           <BottomNavItem

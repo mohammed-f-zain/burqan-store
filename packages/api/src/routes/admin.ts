@@ -27,6 +27,7 @@ import {
   VISIT_WITHOUT_ORDER_SAME_DAY_SQL,
 } from "../data/noBuyReasons.js";
 import { buildJordanVoronoiPayload } from "../utils/buildJordanVoronoiPayload.js";
+import { ARABIC_WEEKDAY_NAMES } from "../utils/routeZones.js";
 import { importGooglePlaces } from "../utils/importGooglePlaces.js";
 import { isGooglePlacesEnabled } from "../utils/googlePlaces.js";
 import { GOVERNORATE_AREA_SUFFIX } from "../utils/matchAreaFromGoogle.js";
@@ -1605,6 +1606,130 @@ router.put(
   }
 );
 
+const repRouteScheduleEntrySchema = z.object({
+  dayOfWeek: z.number().int().min(0).max(6),
+  routeZoneId: z.number().int().positive().nullable(),
+});
+
+const repRouteSchedulePutSchema = z.object({
+  entries: z.array(repRouteScheduleEntrySchema),
+});
+
+router.get(
+  "/representatives/:id/route-schedule",
+  adminAuthMiddleware,
+  requireAdminPermission("reps.read"),
+  async (req, res, next) => {
+    try {
+      const id = z.coerce.number().int().positive().parse(req.params.id);
+      const { rows: repRows } = await query(`SELECT id FROM representatives WHERE id = $1`, [id]);
+      if (!repRows[0]) throw new HttpError(404, "المندوب غير موجود");
+
+      const { rows } = await query<{
+        day_of_week: number;
+        route_zone_id: number;
+        zone_name: string;
+      }>(
+        `SELECT rs.day_of_week, rs.route_zone_id, rz.name AS zone_name
+         FROM rep_route_schedule rs
+         JOIN route_zones rz ON rz.id = rs.route_zone_id
+         WHERE rs.representative_id = $1
+         ORDER BY rs.day_of_week ASC`,
+        [id]
+      );
+
+      const byDay = new Map(rows.map((r) => [r.day_of_week, r]));
+      res.json({
+        schedule: ARABIC_WEEKDAY_NAMES.map((dayName, dayOfWeek) => {
+          const hit = byDay.get(dayOfWeek);
+          return {
+            dayOfWeek,
+            dayName,
+            routeZoneId: hit?.route_zone_id ?? null,
+            routeZoneName: hit?.zone_name ?? null,
+          };
+        }),
+      });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+router.put(
+  "/representatives/:id/route-schedule",
+  adminAuthMiddleware,
+  requireAdminPermission("reps.write"),
+  async (req, res, next) => {
+    try {
+      const id = z.coerce.number().int().positive().parse(req.params.id);
+      const body = repRouteSchedulePutSchema.parse(req.body);
+      const { rows: repRows } = await query(`SELECT id FROM representatives WHERE id = $1`, [id]);
+      if (!repRows[0]) throw new HttpError(404, "المندوب غير موجود");
+
+      const zoneIds = body.entries
+        .map((e) => e.routeZoneId)
+        .filter((z): z is number => z != null);
+      if (zoneIds.length) {
+        const { rows: zones } = await query<{ id: number }>(
+          `SELECT id FROM route_zones WHERE id = ANY($1::int[]) AND is_active = true`,
+          [zoneIds]
+        );
+        if (zones.length !== new Set(zoneIds).size) {
+          throw new HttpError(400, "منطقة مسار غير موجودة أو غير مفعّلة");
+        }
+      }
+
+      const c = await pool.connect();
+      try {
+        await c.query("BEGIN");
+        await c.query(`DELETE FROM rep_route_schedule WHERE representative_id = $1`, [id]);
+        for (const entry of body.entries) {
+          if (entry.routeZoneId == null) continue;
+          await c.query(
+            `INSERT INTO rep_route_schedule (representative_id, day_of_week, route_zone_id)
+             VALUES ($1, $2, $3)`,
+            [id, entry.dayOfWeek, entry.routeZoneId]
+          );
+        }
+        await c.query("COMMIT");
+      } catch (e) {
+        await c.query("ROLLBACK");
+        throw e;
+      } finally {
+        c.release();
+      }
+
+      const { rows } = await query<{
+        day_of_week: number;
+        route_zone_id: number;
+        zone_name: string;
+      }>(
+        `SELECT rs.day_of_week, rs.route_zone_id, rz.name AS zone_name
+         FROM rep_route_schedule rs
+         JOIN route_zones rz ON rz.id = rs.route_zone_id
+         WHERE rs.representative_id = $1
+         ORDER BY rs.day_of_week ASC`,
+        [id]
+      );
+      const byDay = new Map(rows.map((r) => [r.day_of_week, r]));
+      res.json({
+        schedule: ARABIC_WEEKDAY_NAMES.map((dayName, dayOfWeek) => {
+          const hit = byDay.get(dayOfWeek);
+          return {
+            dayOfWeek,
+            dayName,
+            routeZoneId: hit?.route_zone_id ?? null,
+            routeZoneName: hit?.zone_name ?? null,
+          };
+        }),
+      });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
 const googlePlacesImportSchema = z.object({
   governorate: z.string().min(1).optional(),
   lat: z.coerce.number().min(-90).max(90).optional(),
@@ -2217,6 +2342,202 @@ router.post(
         [id, body.amount, body.note ?? null, req.admin!.id]
       );
       res.status(201).json({ payment: rows[0] });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+const routeZoneBodySchema = z.object({
+  name: z.string().trim().min(2).max(255),
+  notes: z.string().max(2000).nullable().optional(),
+  areaIds: z.array(z.number().int().positive()).min(1),
+  isActive: z.boolean().optional(),
+});
+
+router.get(
+  "/route-zones",
+  adminAuthMiddleware,
+  requireAdminPermission("areas.read"),
+  async (_req, res, next) => {
+    try {
+      const { rows: zones } = await query<{
+        id: number;
+        name: string;
+        notes: string | null;
+        is_active: boolean;
+        created_at: string;
+        updated_at: string;
+      }>(`SELECT * FROM route_zones ORDER BY name ASC`);
+
+      const { rows: links } = await query<{ route_zone_id: number; area_id: number; area_name: string }>(
+        `SELECT rza.route_zone_id, rza.area_id, a.name AS area_name
+         FROM route_zone_areas rza
+         JOIN areas a ON a.id = rza.area_id
+         ORDER BY a.name ASC`
+      );
+
+      const areasByZone = new Map<number, { id: number; name: string }[]>();
+      for (const l of links) {
+        if (!areasByZone.has(l.route_zone_id)) areasByZone.set(l.route_zone_id, []);
+        areasByZone.get(l.route_zone_id)!.push({ id: l.area_id, name: l.area_name });
+      }
+
+      res.json({
+        routeZones: zones.map((z) => ({
+          id: z.id,
+          name: z.name,
+          notes: z.notes,
+          isActive: z.is_active,
+          areas: areasByZone.get(z.id) ?? [],
+          createdAt: z.created_at,
+          updatedAt: z.updated_at,
+        })),
+      });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+router.post(
+  "/route-zones",
+  adminAuthMiddleware,
+  requireAdminPermission("areas.write"),
+  async (req, res, next) => {
+    try {
+      const body = routeZoneBodySchema.parse(req.body);
+      const { rows: areaCheck } = await query<{ id: number }>(
+        `SELECT id FROM areas WHERE id = ANY($1::int[])`,
+        [body.areaIds]
+      );
+      if (areaCheck.length !== body.areaIds.length) {
+        throw new HttpError(400, "بعض المناطق المختارة غير موجودة");
+      }
+
+      const c = await pool.connect();
+      try {
+        await c.query("BEGIN");
+        const ins = await c.query<{ id: number }>(
+          `INSERT INTO route_zones (name, notes) VALUES ($1, $2) RETURNING id`,
+          [body.name, body.notes ?? null]
+        );
+        const zoneId = ins.rows[0]!.id;
+        for (const aid of body.areaIds) {
+          await c.query(
+            `INSERT INTO route_zone_areas (route_zone_id, area_id) VALUES ($1, $2)`,
+            [zoneId, aid]
+          );
+        }
+        await c.query("COMMIT");
+        res.status(201).json({ id: zoneId });
+      } catch (e) {
+        await c.query("ROLLBACK");
+        if (e instanceof DatabaseError && e.code === "23505") {
+          throw new HttpError(409, "اسم منطقة المسار مستخدم مسبقاً");
+        }
+        throw e;
+      } finally {
+        c.release();
+      }
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+router.patch(
+  "/route-zones/:id",
+  adminAuthMiddleware,
+  requireAdminPermission("areas.write"),
+  async (req, res, next) => {
+    try {
+      const id = z.coerce.number().int().positive().parse(req.params.id);
+      const body = routeZoneBodySchema.partial().parse(req.body);
+
+      if (body.areaIds?.length) {
+        const { rows: areaCheck } = await query<{ id: number }>(
+          `SELECT id FROM areas WHERE id = ANY($1::int[])`,
+          [body.areaIds]
+        );
+        if (areaCheck.length !== body.areaIds.length) {
+          throw new HttpError(400, "بعض المناطق المختارة غير موجودة");
+        }
+      }
+
+      const c = await pool.connect();
+      try {
+        await c.query("BEGIN");
+        const sets: string[] = ["updated_at = now()"];
+        const vals: unknown[] = [];
+        let i = 1;
+        if (body.name !== undefined) {
+          sets.push(`name = $${i++}`);
+          vals.push(body.name);
+        }
+        if (body.notes !== undefined) {
+          sets.push(`notes = $${i++}`);
+          vals.push(body.notes);
+        }
+        if (body.isActive !== undefined) {
+          sets.push(`is_active = $${i++}`);
+          vals.push(body.isActive);
+        }
+        if (sets.length > 1) {
+          vals.push(id);
+          const { rowCount } = await c.query(
+            `UPDATE route_zones SET ${sets.join(", ")} WHERE id = $${i}`,
+            vals
+          );
+          if (!rowCount) throw new HttpError(404, "منطقة المسار غير موجودة");
+        }
+
+        if (body.areaIds !== undefined) {
+          await c.query(`DELETE FROM route_zone_areas WHERE route_zone_id = $1`, [id]);
+          for (const aid of body.areaIds) {
+            await c.query(
+              `INSERT INTO route_zone_areas (route_zone_id, area_id) VALUES ($1, $2)`,
+              [id, aid]
+            );
+          }
+        }
+        await c.query("COMMIT");
+      } catch (e) {
+        await c.query("ROLLBACK");
+        if (e instanceof DatabaseError && e.code === "23505") {
+          throw new HttpError(409, "اسم منطقة المسار مستخدم مسبقاً");
+        }
+        throw e;
+      } finally {
+        c.release();
+      }
+
+      const { rows: zones } = await query(`SELECT id FROM route_zones WHERE id = $1`, [id]);
+      if (!zones[0]) throw new HttpError(404, "منطقة المسار غير موجودة");
+      res.json({ ok: true });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+router.delete(
+  "/route-zones/:id",
+  adminAuthMiddleware,
+  requireAdminPermission("areas.write"),
+  async (req, res, next) => {
+    try {
+      const id = z.coerce.number().int().positive().parse(req.params.id);
+      const { rows: used } = await query<{ n: string }>(
+        `SELECT COUNT(*)::text AS n FROM rep_route_schedule WHERE route_zone_id = $1`,
+        [id]
+      );
+      if (parseInt(used[0]?.n ?? "0", 10) > 0) {
+        throw new HttpError(409, "لا يمكن حذف منطقة مسار مربوطة بجدول مندوب — عطّلها أو غيّر الجداول أولاً");
+      }
+      const { rowCount } = await query(`DELETE FROM route_zones WHERE id = $1`, [id]);
+      if (!rowCount) throw new HttpError(404, "منطقة المسار غير موجودة");
+      res.json({ ok: true });
     } catch (e) {
       next(e);
     }
