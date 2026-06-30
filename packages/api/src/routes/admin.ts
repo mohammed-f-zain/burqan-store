@@ -1237,7 +1237,6 @@ const repCreateSchema = z.object({
   phone: z.string().min(6),
   imageUrl: optionalStoredImagePathSchema,
   carPlate: z.string().optional(),
-  areaIds: z.array(z.number().int().positive()).min(1),
 });
 
 router.get(
@@ -1247,9 +1246,17 @@ router.get(
   async (_req, res, next) => {
     try {
       const { rows } = await query(`
-        SELECT r.*, COALESCE(json_agg(ra.area_id) FILTER (WHERE ra.area_id IS NOT NULL), '[]') AS area_ids
+        SELECT r.*,
+          COALESCE(
+            json_agg(
+              json_build_object('dayOfWeek', rs.day_of_week, 'zoneName', rz.name)
+              ORDER BY rs.day_of_week
+            ) FILTER (WHERE rs.day_of_week IS NOT NULL),
+            '[]'
+          ) AS route_schedule
         FROM representatives r
-        LEFT JOIN representative_areas ra ON ra.representative_id = r.id
+        LEFT JOIN rep_route_schedule rs ON rs.representative_id = r.id
+        LEFT JOIN route_zones rz ON rz.id = rs.route_zone_id
         GROUP BY r.id
         ORDER BY r.id DESC
       `);
@@ -1277,12 +1284,6 @@ router.post(
           [body.email, ph, body.fullName, body.phone, body.imageUrl || null, body.carPlate ?? null]
         );
         const id = ins.rows[0]!.id;
-        for (const aid of body.areaIds) {
-          await c.query(
-            `INSERT INTO representative_areas (representative_id, area_id) VALUES ($1,$2)`,
-            [id, aid]
-          );
-        }
         await c.query("COMMIT");
         res.status(201).json({ id });
       } catch (e) {
@@ -1385,7 +1386,6 @@ const repPatchSchema = z.object({
   imageUrl: optionalStoredImagePathNullableSchema,
   carPlate: z.string().nullable().optional(),
   isActive: z.boolean().optional(),
-  areaIds: z.array(z.number().int().positive()).min(1).optional(),
   newPassword: z.string().min(10).optional(),
 });
 
@@ -1404,7 +1404,6 @@ router.patch(
         body.imageUrl !== undefined ||
         body.carPlate !== undefined ||
         body.isActive !== undefined ||
-        body.areaIds !== undefined ||
         body.newPassword !== undefined;
       if (!hasAny) throw new HttpError(400, "لا توجد حقول للتحديث");
 
@@ -1440,13 +1439,6 @@ router.patch(
           await c.query(`UPDATE representatives SET ${sets} WHERE id = $${vals.length}`, vals);
         }
 
-        if (body.areaIds !== undefined) {
-          await c.query(`DELETE FROM representative_areas WHERE representative_id = $1`, [id]);
-          for (const aid of body.areaIds) {
-            await c.query(`INSERT INTO representative_areas (representative_id, area_id) VALUES ($1,$2)`, [id, aid]);
-          }
-        }
-
         await c.query("COMMIT");
       } catch (e) {
         try {
@@ -1461,9 +1453,17 @@ router.patch(
 
       const { rows } = await query(
         `
-          SELECT r.*, COALESCE(json_agg(ra.area_id) FILTER (WHERE ra.area_id IS NOT NULL), '[]') AS area_ids
+          SELECT r.*,
+            COALESCE(
+              json_agg(
+                json_build_object('dayOfWeek', rs.day_of_week, 'zoneName', rz.name)
+                ORDER BY rs.day_of_week
+              ) FILTER (WHERE rs.day_of_week IS NOT NULL),
+              '[]'
+            ) AS route_schedule
           FROM representatives r
-          LEFT JOIN representative_areas ra ON ra.representative_id = r.id
+          LEFT JOIN rep_route_schedule rs ON rs.representative_id = r.id
+          LEFT JOIN route_zones rz ON rz.id = rs.route_zone_id
           WHERE r.id = $1
           GROUP BY r.id
         `,

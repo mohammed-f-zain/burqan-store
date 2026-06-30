@@ -28,15 +28,11 @@ async function loadRep(repId: number): Promise<RepRequestUser | null> {
   }>(`SELECT id, email, full_name, is_active FROM representatives WHERE id = $1`, [repId]);
   const row = rows[0];
   if (!row || !row.is_active) return null;
-  const areas = await query<{ area_id: number }>(
-    `SELECT area_id FROM representative_areas WHERE representative_id = $1`,
-    [repId]
-  );
   return {
     id: row.id,
     email: row.email,
     fullName: row.full_name,
-    areaIds: areas.rows.map((r) => r.area_id),
+    areaIds: [],
   };
 }
 

@@ -2,8 +2,11 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { api } from "../api";
-import RepAreaMapPicker from "../components/RepAreaMapPicker";
 import RepRouteScheduleModal from "../components/RepRouteScheduleModal";
+import RepRouteScheduleFields, {
+  type RouteZoneOption,
+  type ScheduleRow,
+} from "../components/RepRouteScheduleFields";
 import { useAuth } from "../auth/AuthContext";
 import PaginationBar from "../components/PaginationBar";
 import TableFilterBar from "../components/TableFilterBar";
@@ -12,8 +15,10 @@ import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
 import { mediaUrl } from "../lib/mediaUrl";
 import { confirmDanger } from "../lib/swalConfirm";
-import { toastError, toastSuccess, toastWarning } from "../lib/toast";
+import { toastError, toastSuccess } from "../lib/toast";
 import { uploadAdminImage } from "../lib/uploadAdmin";
+
+type RouteScheduleEntry = { dayOfWeek: number; zoneName: string | null };
 
 type Rep = {
   id: number;
@@ -22,34 +27,38 @@ type Rep = {
   phone: string;
   car_plate: string | null;
   is_active: boolean;
-  area_ids: unknown;
+  route_schedule: unknown;
   image_url: string | null;
 };
-type Area = { id: number; name: string; governorate?: string | null };
-function normalizeAreaIds(raw: unknown): number[] {
-  if (Array.isArray(raw)) return raw.map((x) => Number(x)).filter((n) => Number.isFinite(n));
-  if (typeof raw === "string") {
-    try {
-      const p = JSON.parse(raw) as unknown;
-      if (Array.isArray(p)) return p.map((x) => Number(x)).filter((n) => Number.isFinite(n));
-    } catch {
-      /* ignore */
-    }
-  }
-  return [];
+
+const DAY_SHORT_AR = ["أحد", "إث", "ث", "ر", "خ", "ج", "س"];
+const DAY_SHORT_EN = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function normalizeSchedule(raw: unknown): RouteScheduleEntry[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((x) => {
+      if (!x || typeof x !== "object") return null;
+      const o = x as Record<string, unknown>;
+      const dayOfWeek = Number(o.dayOfWeek ?? o.day_of_week);
+      const zoneName = typeof o.zoneName === "string" ? o.zoneName : typeof o.zone_name === "string" ? o.zone_name : null;
+      if (!Number.isFinite(dayOfWeek)) return null;
+      return { dayOfWeek, zoneName };
+    })
+    .filter((x): x is RouteScheduleEntry => x != null)
+    .sort((a, b) => a.dayOfWeek - b.dayOfWeek);
 }
 
 export default function RepresentativesPage() {
   const { can } = useAuth();
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
+  const dayShort = locale === "ar" ? DAY_SHORT_AR : DAY_SHORT_EN;
   const [reps, setReps] = useState<Rep[]>([]);
-  const [areas, setAreas] = useState<Area[]>([]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [carPlate, setCarPlate] = useState("");
-  const [picked, setPicked] = useState<number[]>([]);
   const [imagePath, setImagePath] = useState("");
   const [uploading, setUploading] = useState(false);
 
@@ -58,27 +67,57 @@ export default function RepresentativesPage() {
   const [eFullName, setEFullName] = useState("");
   const [ePhone, setEPhone] = useState("");
   const [eCarPlate, setECarPlate] = useState("");
-  const [ePicked, setEPicked] = useState<number[]>([]);
   const [eImagePath, setEImagePath] = useState("");
   const [eIsActive, setEIsActive] = useState(true);
   const [eNewPassword, setENewPassword] = useState("");
   const [eUploading, setEUploading] = useState(false);
   const [scheduleRep, setScheduleRep] = useState<{ id: number; name: string } | null>(null);
+  const [routeZones, setRouteZones] = useState<RouteZoneOption[]>([]);
+  const [scheduleRows, setScheduleRows] = useState<ScheduleRow[]>([]);
+  const [scheduleLoading, setScheduleLoading] = useState(false);
   const canFillCar = can("fill_car.read") || can("reps.read");
 
-  const areaNameById = useMemo(() => {
-    const m = new Map<number, string>();
-    for (const a of areas) m.set(a.id, a.name);
-    return m;
-  }, [areas]);
+  async function loadRouteZones() {
+    const { data } = await api.get<{ routeZones: RouteZoneOption[] }>("/route-zones");
+    setRouteZones(data.routeZones.filter((x) => x.isActive));
+  }
+
+  async function loadRepSchedule(repId: number) {
+    setScheduleLoading(true);
+    try {
+      const { data } = await api.get<{ schedule: ScheduleRow[] }>(`/representatives/${repId}/route-schedule`);
+      setScheduleRows(data.schedule);
+    } catch (e) {
+      toastError(pickAxiosErrorMessage(e, t.repSchedule.loadFailed));
+      setScheduleRows([]);
+    } finally {
+      setScheduleLoading(false);
+    }
+  }
+
+  function setZoneForDay(dayOfWeek: number, routeZoneId: number | null) {
+    setScheduleRows((prev) =>
+      prev.map((r) =>
+        r.dayOfWeek === dayOfWeek
+          ? {
+              ...r,
+              routeZoneId,
+              routeZoneName: routeZones.find((z) => z.id === routeZoneId)?.name ?? null,
+            }
+          : r
+      )
+    );
+  }
+
+  async function saveRepSchedule(repId: number) {
+    await api.put(`/representatives/${repId}/route-schedule`, {
+      entries: scheduleRows.map((r) => ({ dayOfWeek: r.dayOfWeek, routeZoneId: r.routeZoneId })),
+    });
+  }
 
   async function load() {
-    const [r, a] = await Promise.all([
-      api.get<{ representatives: Rep[] }>("/representatives"),
-      api.get<{ areas: Area[] }>("/areas"),
-    ]);
+    const r = await api.get<{ representatives: Rep[] }>("/representatives");
     setReps(r.data.representatives);
-    setAreas(a.data.areas);
   }
 
   async function toggleRepActive(r: Rep) {
@@ -125,11 +164,6 @@ export default function RepresentativesPage() {
 
   async function onCreate(e: FormEvent) {
     e.preventDefault();
-    const areaIds = picked.length ? picked : areas.map((x) => x.id);
-    if (!areaIds.length) {
-      toastWarning(t.reps.loadFailed);
-      return;
-    }
     try {
       await api.post("/representatives", {
         email,
@@ -138,14 +172,12 @@ export default function RepresentativesPage() {
         phone,
         carPlate: carPlate || undefined,
         imageUrl: imagePath || undefined,
-        areaIds,
       });
       setEmail("");
       setPassword("");
       setFullName("");
       setPhone("");
       setCarPlate("");
-      setPicked([]);
       setImagePath("");
       await load();
       toastSuccess(t.reps.created);
@@ -160,24 +192,21 @@ export default function RepresentativesPage() {
     setEFullName(r.full_name);
     setEPhone(r.phone);
     setECarPlate(r.car_plate ?? "");
-    setEPicked(normalizeAreaIds(r.area_ids));
     setEImagePath(r.image_url ?? "");
     setEIsActive(r.is_active);
     setENewPassword("");
+    void loadRouteZones();
+    void loadRepSchedule(r.id);
   }
 
   function closeEdit() {
     setEditId(null);
     setENewPassword("");
+    setScheduleRows([]);
   }
 
   async function saveEdit() {
     if (editId == null) return;
-    const areaIds = ePicked.length ? ePicked : areas.map((x) => x.id);
-    if (!areaIds.length) {
-      toastWarning(t.reps.saveFailed);
-      return;
-    }
     try {
       await api.patch(`/representatives/${editId}`, {
         email: eEmail,
@@ -186,9 +215,9 @@ export default function RepresentativesPage() {
         carPlate: eCarPlate.trim() || null,
         imageUrl: eImagePath === "" ? null : eImagePath || undefined,
         isActive: eIsActive,
-        areaIds,
         newPassword: eNewPassword.trim().length >= 10 ? eNewPassword.trim() : undefined,
       });
+      await saveRepSchedule(editId);
       closeEdit();
       await load();
       toastSuccess(t.reps.updated);
@@ -215,9 +244,10 @@ export default function RepresentativesPage() {
     }
   }
 
-  function formatAreasCell(r: Rep) {
-    const ids = normalizeAreaIds(r.area_ids);
-    return ids.map((id) => areaNameById.get(id) ?? id).join(", ");
+  function formatScheduleCell(r: Rep) {
+    const entries = normalizeSchedule(r.route_schedule).filter((e) => e.zoneName);
+    if (!entries.length) return "";
+    return entries.map((e) => `${dayShort[e.dayOfWeek] ?? e.dayOfWeek}: ${e.zoneName}`).join(" · ");
   }
 
   const repFilterFields = useMemo(
@@ -226,10 +256,10 @@ export default function RepresentativesPage() {
       { id: "email", label: t.reps.colEmail, type: "text" as const, getValue: (r: Rep) => r.email },
       { id: "phone", label: t.reps.phone, type: "text" as const, getValue: (r: Rep) => r.phone },
       { id: "car", label: t.reps.colCar, type: "text" as const, getValue: (r: Rep) => r.car_plate },
-      { id: "areas", label: t.reps.colAreas, type: "text" as const, getValue: (r: Rep) => formatAreasCell(r) },
+      { id: "schedule", label: t.reps.colSchedule, type: "text" as const, getValue: (r: Rep) => formatScheduleCell(r) },
       { id: "active", label: t.reps.colActive, type: "boolean" as const, getValue: (r: Rep) => r.is_active },
     ],
-    [t.reps.colActive, t.reps.colAreas, t.reps.colCar, t.reps.colEmail, t.reps.colName, t.reps.phone]
+    [t.reps.colActive, t.reps.colCar, t.reps.colEmail, t.reps.colName, t.reps.colSchedule, t.reps.phone, dayShort]
   );
 
   const repTable = useTableFilters(reps, {
@@ -238,7 +268,7 @@ export default function RepresentativesPage() {
       "email",
       "phone",
       "car_plate",
-      (r) => formatAreasCell(r),
+      (r) => formatScheduleCell(r),
     ],
     fields: repFilterFields,
   });
@@ -252,6 +282,10 @@ export default function RepresentativesPage() {
       {write && (
         <div className="card">
           <h2>{t.reps.createTitle}</h2>
+          <p className="muted small">
+            {t.reps.scheduleHint}{" "}
+            <Link to="/app/route-zones">{t.nav.routeZones}</Link>
+          </p>
           <form onSubmit={onCreate} className="form">
             <label>
               {t.reps.email}
@@ -279,8 +313,6 @@ export default function RepresentativesPage() {
               <span className="muted small">{t.reps.pickPhoto}</span>
               {uploading && <p className="muted small">{t.reps.uploading}</p>}
             </div>
-            <div className="muted small">{t.reps.areas}</div>
-            <RepAreaMapPicker areas={areas} selectedIds={picked} onChange={setPicked} />
             <button className="primary" type="submit">
               {t.reps.createBtn}
             </button>
@@ -319,7 +351,7 @@ export default function RepresentativesPage() {
                 <th>{t.reps.colName}</th>
                 <th>{t.reps.colEmail}</th>
                 <th>{t.reps.colCar}</th>
-                <th>{t.reps.colAreas}</th>
+                <th>{t.reps.colSchedule}</th>
                 <th>{t.reps.colActive}</th>
                 {write && <th>{t.reps.colActions}</th>}
               </tr>
@@ -337,7 +369,7 @@ export default function RepresentativesPage() {
                   </td>
                   <td>{r.email}</td>
                   <td>{r.car_plate ?? "—"}</td>
-                  <td className="small">{formatAreasCell(r) || "—"}</td>
+                  <td className="small">{formatScheduleCell(r) || "—"}</td>
                   <td>
                     {write ? (
                       <button
@@ -427,8 +459,16 @@ export default function RepresentativesPage() {
                   </div>
                 )}
               </div>
-              <div className="muted small">{t.reps.areas}</div>
-              <RepAreaMapPicker areas={areas} selectedIds={ePicked} onChange={setEPicked} />
+              <div className="form-section">
+                <h4>{t.repSchedule.title}</h4>
+                <p className="muted small">{t.reps.scheduleHint}</p>
+                <RepRouteScheduleFields
+                  zones={routeZones}
+                  rows={scheduleRows}
+                  loading={scheduleLoading}
+                  onChange={setZoneForDay}
+                />
+              </div>
             </div>
             {canFillCar && (
               <p className="muted small" style={{ marginTop: 16 }}>
@@ -451,7 +491,10 @@ export default function RepresentativesPage() {
         <RepRouteScheduleModal
           repId={scheduleRep.id}
           repName={scheduleRep.name}
-          onClose={() => setScheduleRep(null)}
+          onClose={() => {
+            setScheduleRep(null);
+            void load();
+          }}
         />
       ) : null}
     </div>

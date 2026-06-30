@@ -29,6 +29,7 @@ import {
   ARABIC_WEEKDAY_NAMES,
   formatDistanceM,
   getRepRouteZoneForDay,
+  getRepTodayWorkAreaIds,
   sortStoresByDistance,
 } from "../utils/routeZones.js";
 import {
@@ -77,13 +78,7 @@ router.get("/me", repAuthMiddleware, async (req, res, next) => {
       car_plate: string | null;
     }>(`SELECT phone, image_url, car_plate FROM representatives WHERE id = $1`, [rep.id]);
     const profile = profileRows[0];
-    const { rows: areaRows } = await query<{ id: number; name: string }>(
-      `SELECT a.id, a.name FROM areas a
-       INNER JOIN representative_areas ra ON ra.area_id = a.id
-       WHERE ra.representative_id = $1
-       ORDER BY a.name ASC`,
-      [rep.id]
-    );
+    const today = await getRepTodayWorkAreaIds(rep.id);
     const { rows: invRows } = await query<{ sku_count: string; total_units: string }>(
       `SELECT COUNT(*)::text AS sku_count,
               COALESCE(SUM(quantity), 0)::text AS total_units
@@ -100,7 +95,21 @@ router.get("/me", repAuthMiddleware, async (req, res, next) => {
         phone: profile?.phone ?? "",
         imageUrl: profile?.image_url ?? null,
         carPlate: profile?.car_plate ?? null,
-        areas: areaRows,
+        areas: today.route
+          ? today.route.routeZone.areaNames.map((name, i) => ({
+              id: today.route!.routeZone.areaIds[i] ?? i,
+              name,
+            }))
+          : [],
+        routeToday: today.route
+          ? {
+              dayOfWeek: today.dayOfWeek,
+              dayName: today.dayName,
+              zoneId: today.route.routeZone.id,
+              zoneName: today.route.routeZone.name,
+              areas: today.route.routeZone.areaNames,
+            }
+          : null,
         inventory: {
           skuCount: parseInt(inv?.sku_count ?? "0", 10),
           totalUnits: parseInt(inv?.total_units ?? "0", 10),
@@ -130,12 +139,15 @@ router.post(
 router.get("/areas", repAuthMiddleware, async (req, res, next) => {
   try {
     const rep = req.rep!;
+    const today = await getRepTodayWorkAreaIds(rep.id);
+    if (!today.expandedAreaIds.length) {
+      return res.json({ areas: [] });
+    }
     const { rows } = await query(
       `SELECT a.id, a.name, a.center_lat, a.center_lng, a.radius_km FROM areas a
-       INNER JOIN representative_areas ra ON ra.area_id = a.id
-       WHERE ra.representative_id = $1
+       WHERE a.id = ANY($1::int[])
        ORDER BY a.name ASC`,
-      [rep.id]
+      [today.expandedAreaIds]
     );
     res.json({ areas: rows });
   } catch (e) {
@@ -149,12 +161,13 @@ router.get("/areas/resolve", repAuthMiddleware, async (req, res, next) => {
     const lng = z.coerce.number().parse(req.query.lng);
     const forRegister = req.query.forRegister === "1" || req.query.forRegister === "true";
     const rep = req.rep!;
+    const today = await getRepTodayWorkAreaIds(rep.id);
     const resolved = forRegister
       ? await resolveAreaIdFromAllAreas(lat, lng)
-      : await resolveAreaIdForRep(lat, lng, rep.areaIds);
+      : await resolveAreaIdForRep(lat, lng, today.expandedAreaIds);
     res.json({
       ...resolved,
-      assignedToRep: rep.areaIds.includes(resolved.areaId),
+      assignedToRep: today.expandedAreaIds.includes(resolved.areaId),
     });
   } catch (e) {
     next(e);
@@ -282,13 +295,8 @@ async function recordRepVisit(repId: number, storeId: number, note?: string | nu
   return rows[0];
 }
 
-function repCanAccessStore(
-  rep: { id: number; areaIds: number[] },
-  store: { area_id: number; registered_by_representative_id: number | null }
-): boolean {
-  return (
-    rep.areaIds.includes(store.area_id) || store.registered_by_representative_id === rep.id
-  );
+function repCanAccessStore(store: { area_id: number }, expandedAreaIds: number[]): boolean {
+  return expandedAreaIds.includes(store.area_id);
 }
 
 function formatAreaLabel(name: string, governorate: string | null): string {
@@ -296,7 +304,8 @@ function formatAreaLabel(name: string, governorate: string | null): string {
   return gov ? `${name} · ${gov}` : name;
 }
 
-async function loadStoreForRep(storeId: number, rep: { id: number; areaIds: number[] }) {
+async function loadStoreForRep(storeId: number, rep: { id: number }) {
+  const today = await getRepTodayWorkAreaIds(rep.id);
   const { rows } = await query<{
     id: number;
     name: string;
@@ -324,7 +333,9 @@ async function loadStoreForRep(storeId: number, rep: { id: number; areaIds: numb
   );
   const s = rows[0];
   if (!s) throw new HttpError(404, "المتجر غير موجود");
-  if (!repCanAccessStore(rep, s)) throw new HttpError(403, "المتجر ليس ضمن مناطقك");
+  if (!repCanAccessStore(s, today.expandedAreaIds)) {
+    throw new HttpError(403, "المتجر ليس ضمن مسار اليوم");
+  }
   const ownerPortalUrl = `${config.ownerPortalBaseUrl}/owner?t=${encodeURIComponent(s.owner_portal_token)}`;
   return {
     id: s.id,
@@ -402,10 +413,11 @@ router.post("/stores/register", repAuthMiddleware, async (req, res, next) => {
       );
       await c.query("COMMIT");
       const store = await loadStoreForRep(storeId, rep);
+      const today = await getRepTodayWorkAreaIds(rep.id);
       res.status(201).json({
         store,
         areaName: resolved.areaName,
-        assignedToRep: rep.areaIds.includes(areaId),
+        assignedToRep: today.expandedAreaIds.includes(areaId),
       });
     } catch (e) {
       await c.query("ROLLBACK");
@@ -465,11 +477,8 @@ function mapProspectRow(row: {
   };
 }
 
-async function loadProspectForRep(
-  prospectId: number,
-  rep: { id: number; areaIds: number[] }
-) {
-  const areaFilterIds = await expandRepAreaIds(rep.areaIds);
+async function loadProspectForRep(prospectId: number, rep: { id: number }) {
+  const today = await getRepTodayWorkAreaIds(rep.id);
   const { rows } = await query<{
     id: number;
     name: string;
@@ -495,16 +504,17 @@ async function loadProspectForRep(
   const p = rows[0];
   if (!p) throw new HttpError(404, "العميل المحتمل غير موجود");
   const canAccess =
-    p.created_by_representative_id === rep.id || areaFilterIds.includes(p.area_id);
-  if (!canAccess) throw new HttpError(403, "ليس ضمن مناطقك");
+    p.created_by_representative_id === rep.id || today.expandedAreaIds.includes(p.area_id);
+  if (!canAccess) throw new HttpError(403, "ليس ضمن مسار اليوم");
   return p;
 }
 
-/** Possible clients (no QR) — list open prospects in rep areas or created by rep. */
+/** Possible clients (no QR) — open prospects in today's route zone or created by rep. */
 router.get("/prospect-stores", repAuthMiddleware, async (req, res, next) => {
   try {
     const rep = req.rep!;
-    const areaFilterIds = await expandRepAreaIds(rep.areaIds);
+    const today = await getRepTodayWorkAreaIds(rep.id);
+    const areaFilterIds = today.expandedAreaIds;
     const { rows } = await query<{
       id: number;
       name: string;
@@ -579,10 +589,11 @@ router.post("/prospect-stores", repAuthMiddleware, async (req, res, next) => {
       [prospectId, rep.id, "Initial visit"]
     );
     const loaded = await loadProspectForRep(prospectId, rep);
+    const today = await getRepTodayWorkAreaIds(rep.id);
     res.status(201).json({
       prospect: mapProspectRow(loaded),
       areaName: resolved.areaName,
-      assignedToRep: rep.areaIds.includes(resolved.areaId),
+      assignedToRep: today.expandedAreaIds.includes(resolved.areaId),
     });
   } catch (e) {
     next(e);
@@ -827,14 +838,23 @@ router.get("/stores/route", repAuthMiddleware, async (req, res, next) => {
   }
 });
 
-/** Burqan stores in rep areas for the home tab (Google places use GET /google-places). */
+/** Burqan stores in today's route zone for the home tab. */
 router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
   try {
     const rep = req.rep!;
-    if (!rep.areaIds.length) {
-      return res.json({ stores: [], googlePlacesReady: false, googlePlacesTotal: 0 });
+    const today = await getRepTodayWorkAreaIds(rep.id);
+    if (!today.expandedAreaIds.length) {
+      return res.json({
+        stores: [],
+        googlePlacesReady: false,
+        googlePlacesTotal: 0,
+        routeToday: today.route
+          ? { dayName: today.dayName, zoneName: today.route.routeZone.name }
+          : null,
+        message: today.route ? "لا متاجر في مسار اليوم" : "لا يوجد مسار مجدول لهذا اليوم",
+      });
     }
-    const areaFilterIds = await expandRepAreaIds(rep.areaIds);
+    const areaFilterIds = today.expandedAreaIds;
     const { rows } = await query<{
       id: number;
       name: string;
@@ -902,6 +922,9 @@ router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
       })),
       googlePlacesReady,
       googlePlacesTotal,
+      routeToday: today.route
+        ? { dayName: today.dayName, zoneName: today.route.routeZone.name }
+        : null,
     });
   } catch (e) {
     next(e);
@@ -912,10 +935,11 @@ router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
 router.get("/google-places", repAuthMiddleware, async (req, res, next) => {
   try {
     const rep = req.rep!;
-    if (!rep.areaIds.length) {
+    const today = await getRepTodayWorkAreaIds(rep.id);
+    if (!today.expandedAreaIds.length) {
       return res.json({ places: [], areas: [], googlePlacesReady: false, total: 0 });
     }
-    const areaFilterIds = await expandRepAreaIds(rep.areaIds);
+    const areaFilterIds = today.expandedAreaIds;
     const summary = req.query.summary === "1" || req.query.summary === "true";
     const areaIdRaw = typeof req.query.areaId === "string" ? parseInt(req.query.areaId, 10) : NaN;
     const areaId = Number.isFinite(areaIdRaw) && areaIdRaw > 0 ? areaIdRaw : undefined;
@@ -1210,7 +1234,8 @@ const orderSchema = z.object({
   repLng: z.number().min(-180).max(180),
 });
 
-async function loadStoreRowForRep(storeId: number, rep: { id: number; areaIds: number[] }) {
+async function loadStoreRowForRep(storeId: number, rep: { id: number }) {
+  const today = await getRepTodayWorkAreaIds(rep.id);
   const { rows } = await query<{
     id: number;
     area_id: number;
@@ -1225,7 +1250,9 @@ async function loadStoreRowForRep(storeId: number, rep: { id: number; areaIds: n
   );
   const s = rows[0];
   if (!s) throw new HttpError(404, "المتجر غير موجود");
-  if (!repCanAccessStore(rep, s)) throw new HttpError(403, "المتجر ليس ضمن مناطقك");
+  if (!repCanAccessStore(s, today.expandedAreaIds)) {
+    throw new HttpError(403, "المتجر ليس ضمن مسار اليوم");
+  }
   return s;
 }
 

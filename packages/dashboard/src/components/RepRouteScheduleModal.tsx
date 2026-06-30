@@ -1,17 +1,10 @@
 import { useEffect, useState } from "react";
 
 import { api } from "../api";
+import RepRouteScheduleFields, { type RouteZoneOption, type ScheduleRow } from "./RepRouteScheduleFields";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
 import { toastError, toastSuccess } from "../lib/toast";
-
-type RouteZoneOption = { id: number; name: string; isActive: boolean };
-type ScheduleRow = {
-  dayOfWeek: number;
-  dayName: string;
-  routeZoneId: number | null;
-  routeZoneName: string | null;
-};
 
 type Props = {
   repId: number;
@@ -84,36 +77,12 @@ export default function RepRouteScheduleModal({ repId, repName, onClose }: Props
         <h3>{t.repSchedule.title}</h3>
         <p className="muted">{t.repSchedule.subtitle.replace("{name}", repName)}</p>
 
-        {loading ? (
-          <p className="muted">{t.repSchedule.loading}</p>
-        ) : zones.length === 0 ? (
-          <p className="muted">{t.repSchedule.noZones}</p>
-        ) : (
-          <div className="schedule-grid">
-            {rows.map((row) => (
-              <div key={row.dayOfWeek} className="schedule-row">
-                <div className="schedule-day">
-                  <strong>{row.dayName}</strong>
-                </div>
-                <select
-                  className="schedule-select"
-                  value={row.routeZoneId ?? ""}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setZoneForDay(row.dayOfWeek, v ? Number(v) : null);
-                  }}
-                >
-                  <option value="">{t.repSchedule.offDay}</option>
-                  {zones.map((z) => (
-                    <option key={z.id} value={z.id}>
-                      {z.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ))}
-          </div>
-        )}
+        <RepRouteScheduleFields
+          zones={zones}
+          rows={rows}
+          loading={loading}
+          onChange={setZoneForDay}
+        />
 
         <div className="row" style={{ gap: 8, marginTop: 16 }}>
           <button

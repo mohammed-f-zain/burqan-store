@@ -7,7 +7,7 @@ const EXACT: Record<string, string> = {
   "Failed to fetch": "تعذّر الاتصال بالخادم",
   "Unknown QR code": "رمز QR غير معروف",
   "Store not found": "المتجر غير موجود",
-  "Store not in your areas": "المتجر ليس ضمن مناطقك",
+  "Store not in your areas": "المتجر ليس ضمن مسار اليوم",
   "Area not assigned to you": "المنطقة غير مخصصة لك",
   "QR already used or invalid": "رمز QR مستخدم مسبقاً أو غير صالح",
   "Deferred payments not enabled for this store": "البيع الآجل غير مفعّل لهذا المتجر",

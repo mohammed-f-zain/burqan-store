@@ -107,6 +107,22 @@ export function sortStoresByDistance<
     .sort((a, b) => a.distance_m - b.distance_m);
 }
 
+export async function getRepTodayWorkAreaIds(repId: number): Promise<{
+  dayOfWeek: number;
+  dayName: string;
+  route: RepRouteZoneToday | null;
+  expandedAreaIds: number[];
+}> {
+  const dayOfWeek = await ammanDayOfWeek();
+  const route = await getRepRouteZoneForDay(repId, dayOfWeek);
+  return {
+    dayOfWeek,
+    dayName: arabicWeekdayName(dayOfWeek),
+    route,
+    expandedAreaIds: route?.expandedAreaIds ?? [],
+  };
+}
+
 export function formatDistanceM(m: number): string {
   if (m < 1000) return `${Math.round(m)} م`;
   const km = m / 1000;
