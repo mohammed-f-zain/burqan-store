@@ -12,25 +12,27 @@ export type LoyaltyExpiryData = {
 type Strings = {
   loyaltyBalance: string;
   loyaltyPoints: (n: number) => string;
-  loyaltyExpiryTitle: string;
-  loyaltyDaysLeft: (n: number) => string;
+  loyaltyDaysRemainingLabel: string;
+  loyaltyDaysFraction: (remaining: number, total: number) => string;
+  loyaltyExpiresOnDate: (date: string) => string;
   loyaltyExpiresToday: string;
-  loyaltyPeriodDays: (n: number) => string;
 };
 
 type Props = {
   data: LoyaltyExpiryData;
   strings: Strings;
+  formatDate: (iso: string) => string;
 };
 
-export default function OwnerLoyaltyExpiryCard({ data, strings: o }: Props) {
-  const { balance, expiryDays, daysRemaining, periodActive } = data;
+export default function OwnerLoyaltyExpiryCard({ data, strings: o, formatDate }: Props) {
+  const { balance, expiryDays, expiresAt, daysRemaining, periodActive } = data;
   const remainingPct =
     periodActive && daysRemaining != null && expiryDays > 0
       ? Math.min(100, Math.max(0, (daysRemaining / expiryDays) * 100))
       : 0;
   const urgent = daysRemaining != null && daysRemaining <= 14;
   const critical = daysRemaining != null && daysRemaining <= 7;
+  const showExpiry = periodActive && daysRemaining != null;
 
   return (
     <article
@@ -46,28 +48,34 @@ export default function OwnerLoyaltyExpiryCard({ data, strings: o }: Props) {
         </span>
       </div>
 
-      {periodActive && daysRemaining != null ? (
+      {showExpiry ? (
         <div className="owner-loyalty-progress">
-          <div className="owner-loyalty-progress-head">
-            <span className="owner-loyalty-progress-title">{o.loyaltyExpiryTitle}</span>
-            <span className="owner-loyalty-progress-badge">
-              {daysRemaining === 0 ? o.loyaltyExpiresToday : o.loyaltyDaysLeft(daysRemaining)}
+          <div className="owner-loyalty-countdown">
+            <span className="owner-loyalty-countdown-number">
+              {daysRemaining === 0 ? "0" : daysRemaining}
+            </span>
+            <span className="owner-loyalty-countdown-label">
+              {daysRemaining === 0 ? o.loyaltyExpiresToday : o.loyaltyDaysRemainingLabel}
             </span>
           </div>
+
           <div
             className="owner-loyalty-progress-track"
             role="progressbar"
             aria-valuenow={daysRemaining}
             aria-valuemin={0}
             aria-valuemax={expiryDays}
-            aria-label={o.loyaltyExpiryTitle}
+            aria-label={o.loyaltyDaysFraction(daysRemaining, expiryDays)}
           >
             <span className="owner-loyalty-progress-fill" style={{ width: `${remainingPct}%` }} />
           </div>
-          <div className="owner-loyalty-progress-foot">
-            <span>0</span>
-            <span>{o.loyaltyPeriodDays(expiryDays)}</span>
-          </div>
+          <p className="owner-loyalty-progress-fraction">
+            {o.loyaltyDaysFraction(daysRemaining, expiryDays)}
+          </p>
+
+          {expiresAt && daysRemaining > 0 ? (
+            <p className="owner-loyalty-expires-on">{o.loyaltyExpiresOnDate(formatDate(expiresAt))}</p>
+          ) : null}
         </div>
       ) : null}
     </article>
