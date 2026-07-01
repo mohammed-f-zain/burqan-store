@@ -396,11 +396,14 @@ router.get(
            FROM orders
            WHERE (created_at AT TIME ZONE 'Asia/Amman')::date = timezone('Asia/Amman', now())::date`
         ),
-        query<{ count: string }>(`SELECT COUNT(*)::text AS count FROM prospect_stores`),
+        query<{ count: string }>(
+          `SELECT COUNT(*)::text AS count FROM prospect_stores WHERE status = 'open'`
+        ),
         query<{ count: string }>(
           `SELECT COUNT(*)::text AS count
            FROM prospect_stores
-           WHERE (created_at AT TIME ZONE 'Asia/Amman')::date = timezone('Asia/Amman', now())::date`
+           WHERE status = 'open'
+             AND (created_at AT TIME ZONE 'Asia/Amman')::date = timezone('Asia/Amman', now())::date`
         ),
       ]);
 
@@ -442,7 +445,7 @@ router.get(
           newProspectClients: parseInt(prospectsToday[0]?.count ?? "0", 10),
         },
         prospects: {
-          total: parseInt(prospectTotals[0]?.count ?? "0", 10),
+          open: parseInt(prospectTotals[0]?.count ?? "0", 10),
         },
         yesterday: {
           revenue: yesterdayRevenue,
@@ -1911,17 +1914,20 @@ router.get(
   requireAdminPermission("stores.read"),
   async (_req, res, next) => {
     try {
-      const [{ rows: total }, { rows: today }] = await Promise.all([
-        query<{ count: string }>(`SELECT COUNT(*)::text AS count FROM prospect_stores`),
+      const [{ rows: openRows }, { rows: todayRows }] = await Promise.all([
+        query<{ count: string }>(
+          `SELECT COUNT(*)::text AS count FROM prospect_stores WHERE status = 'open'`
+        ),
         query<{ count: string }>(
           `SELECT COUNT(*)::text AS count
            FROM prospect_stores
-           WHERE (created_at AT TIME ZONE 'Asia/Amman')::date = timezone('Asia/Amman', now())::date`
+           WHERE status = 'open'
+             AND (created_at AT TIME ZONE 'Asia/Amman')::date = timezone('Asia/Amman', now())::date`
         ),
       ]);
       res.json({
-        total: parseInt(total[0]?.count ?? "0", 10),
-        today: parseInt(today[0]?.count ?? "0", 10),
+        open: parseInt(openRows[0]?.count ?? "0", 10),
+        today: parseInt(todayRows[0]?.count ?? "0", 10),
       });
     } catch (e) {
       next(e);

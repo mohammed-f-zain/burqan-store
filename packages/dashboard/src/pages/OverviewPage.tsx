@@ -50,7 +50,7 @@ type Analytics = {
     newProspectClients: number;
   };
   prospects: {
-    total: number;
+    open: number;
   };
   yesterday: {
     revenue: number;
@@ -203,8 +203,8 @@ export default function OverviewPage() {
         );
       if (can("stores.read"))
         tasks.push(
-          api.get<{ total: number }>("/prospect-stores/count").then((r) => {
-            if (!cancelled) setCounts((c) => ({ ...c, possibleClients: r.data.total }));
+          api.get<{ open: number }>("/prospect-stores/count").then((r) => {
+            if (!cancelled) setCounts((c) => ({ ...c, possibleClients: r.data.open }));
           })
         );
       try {
