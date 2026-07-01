@@ -1,6 +1,8 @@
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import type { ReceiptData } from "./receiptFormat";
+import { isTabletDevice } from "./deviceLayout";
 import { printOrderReceipt } from "./printReceipt";
 import { theme } from "./theme";
 
@@ -33,6 +35,10 @@ function money(n: number, currency: string): string {
 
 export default function OrderInvoiceModal(props: Props) {
   const { visible, receipt, labels, onClose, onNotice } = props;
+  const insets = useSafeAreaInsets();
+  const isTablet = isTabletDevice();
+  const bottomPad = Math.max(insets.bottom, isTablet ? 36 : 16) + 16;
+
   if (!receipt) return null;
 
   async function onPrint() {
@@ -46,7 +52,8 @@ export default function OrderInvoiceModal(props: Props) {
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.backdrop}>
-        <View style={styles.sheet}>
+        <View style={[styles.sheet, { paddingBottom: bottomPad }]}>
+          <View style={styles.handle} />
           <Text style={styles.title}>{labels.title}</Text>
           <Text style={styles.storeName}>{receipt.storeName}</Text>
           <Text style={styles.meta}>
@@ -76,11 +83,11 @@ export default function OrderInvoiceModal(props: Props) {
             <Text style={styles.totalValue}>{money(receipt.totalAmount, labels.currency)}</Text>
           </View>
 
-          <Pressable style={styles.primary} onPress={() => void onPrint()}>
-            <Text style={styles.primaryText}>{labels.print}</Text>
+          <Pressable style={styles.printBtn} onPress={() => void onPrint()}>
+            <Text style={styles.printText}>{labels.print}</Text>
           </Pressable>
-          <Pressable style={styles.ghost} onPress={onClose}>
-            <Text style={styles.ghostText}>{labels.close}</Text>
+          <Pressable style={styles.doneBtn} onPress={onClose}>
+            <Text style={styles.doneText}>{labels.close}</Text>
           </Pressable>
         </View>
       </View>
@@ -98,12 +105,20 @@ const styles = StyleSheet.create({
     backgroundColor: theme.card,
     borderTopLeftRadius: theme.radius.xl,
     borderTopRightRadius: theme.radius.xl,
-    padding: 20,
-    paddingBottom: 28,
+    paddingHorizontal: 20,
+    paddingTop: 10,
     maxHeight: "88%",
   },
-  title: { fontSize: 18, fontWeight: "800", color: theme.text, textAlign: "center", marginBottom: 4 },
-  storeName: { fontSize: 16, fontWeight: "700", color: theme.text, textAlign: "right" },
+  handle: {
+    alignSelf: "center",
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: theme.line,
+    marginBottom: 12,
+  },
+  title: { fontSize: 18, fontWeight: "900", color: theme.text, textAlign: "center", marginBottom: 4 },
+  storeName: { fontSize: 16, fontWeight: "800", color: theme.text, textAlign: "right" },
   meta: { color: theme.muted, fontSize: 13, textAlign: "right", marginTop: 4 },
   tableHead: {
     flexDirection: "row-reverse",
@@ -112,7 +127,7 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     marginTop: 16,
   },
-  th: { fontSize: 12, fontWeight: "700", color: theme.muted },
+  th: { fontSize: 12, fontWeight: "800", color: theme.muted },
   linesScroll: { maxHeight: 220, marginTop: 4 },
   lineRow: {
     flexDirection: "row-reverse",
@@ -123,8 +138,8 @@ const styles = StyleSheet.create({
   },
   td: { color: theme.text, fontSize: 14 },
   colName: { flex: 1, textAlign: "right", paddingLeft: 8 },
-  colQty: { width: 36, textAlign: "center", fontWeight: "700" },
-  colPrice: { width: 72, textAlign: "left", fontWeight: "700" },
+  colQty: { width: 36, textAlign: "center", fontWeight: "800" },
+  colPrice: { width: 72, textAlign: "left", fontWeight: "800" },
   totalRow: {
     flexDirection: "row-reverse",
     justifyContent: "space-between",
@@ -135,15 +150,26 @@ const styles = StyleSheet.create({
     borderTopColor: theme.text,
   },
   totalLabel: { fontSize: 16, fontWeight: "800", color: theme.text },
-  totalValue: { fontSize: 18, fontWeight: "800", color: theme.accentDark },
-  primary: {
+  totalValue: { fontSize: 18, fontWeight: "900", color: theme.accentDark },
+  printBtn: {
     marginTop: 16,
-    backgroundColor: theme.accent,
-    paddingVertical: 16,
-    borderRadius: theme.radius.md,
+    backgroundColor: "#f1f5f9",
+    paddingVertical: 14,
+    borderRadius: theme.radius.lg,
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: theme.line,
   },
-  primaryText: { color: theme.onAccent, fontWeight: "800", fontSize: 16 },
-  ghost: { marginTop: 10, paddingVertical: 12, alignItems: "center" },
-  ghostText: { color: theme.muted, fontWeight: "700", fontSize: 15 },
+  printText: { color: theme.text, fontWeight: "800", fontSize: 15 },
+  doneBtn: {
+    marginTop: 12,
+    backgroundColor: theme.accent,
+    paddingVertical: 18,
+    borderRadius: theme.radius.lg,
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: theme.accent2,
+    ...theme.shadow.card,
+  },
+  doneText: { color: theme.onAccent, fontWeight: "900", fontSize: 18 },
 });

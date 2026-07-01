@@ -119,10 +119,23 @@ export async function resolveAreaForRepRoute(
   lng: number,
   expandedAreaIds: number[]
 ): Promise<ResolvedArea & { assignedToRep: boolean }> {
-  if (expandedAreaIds.length) {
-    const resolved = await resolveAreaIdForRep(lat, lng, expandedAreaIds);
-    return { ...resolved, assignedToRep: true };
-  }
   const resolved = await resolveAreaIdFromAllAreas(lat, lng);
-  return { ...resolved, assignedToRep: false };
+
+  if (!expandedAreaIds.length) {
+    return { ...resolved, assignedToRep: false };
+  }
+
+  let assignedToRep = expandedAreaIds.includes(resolved.areaId);
+
+  // When Google geocode labels a neighbor outside the zone, re-check GPS/Voronoi only.
+  if (!assignedToRep) {
+    let nearby = await loadAreasNearPoint(lat, lng, NEARBY_AREA_RADIUS_KM);
+    if (!nearby.length) nearby = await loadAreasNearPoint(lat, lng, 90);
+    if (nearby.length) {
+      const gpsPick = pickAreaFromGps(lat, lng, nearby);
+      assignedToRep = expandedAreaIds.includes(gpsPick.areaId);
+    }
+  }
+
+  return { ...resolved, assignedToRep };
 }

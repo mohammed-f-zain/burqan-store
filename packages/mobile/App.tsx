@@ -113,6 +113,11 @@ const t = {
   invoicePrint: "طباعة (طابعة حرارية)",
   invoiceClose: "تم",
   invoicePrintFailed: "تعذّرت الطباعة — تحقق من اتصال الطابعة",
+  orderConfirmTitle: "تأكيد الطلب",
+  orderConfirmSubtitle: "راجع المنتجات قبل الإرسال",
+  orderConfirmStore: "المتجر",
+  orderConfirmSubmit: "تأكيد وإرسال",
+  orderConfirmCancel: "رجوع",
   startOrder: "بدء طلب جديد",
   tabRedeem: "الجوائز",
   redeemBalance: "رصيد نقاط المتجر",
@@ -331,6 +336,7 @@ import {
 import EndVisitModal from "./EndVisitModal";
 import EndVisitBar from "./EndVisitBar";
 import OrderInvoiceModal from "./OrderInvoiceModal";
+import OrderConfirmModal from "./OrderConfirmModal";
 import StoreCartPanel from "./StoreCartPanel";
 import StorePeekModal from "./StorePeekModal";
 import ProspectPeekModal from "./ProspectPeekModal";
@@ -495,6 +501,7 @@ export default function App() {
   const [visitHadOrder, setVisitHadOrder] = useState(false);
   const [orderReceipt, setOrderReceipt] = useState<ReceiptData | null>(null);
   const [orderReceiptOpen, setOrderReceiptOpen] = useState(false);
+  const [orderConfirmOpen, setOrderConfirmOpen] = useState(false);
   const [storeRefreshing, setStoreRefreshing] = useState(false);
   const [routeStores, setRouteStores] = useState<DailyStoreCard[]>([]);
   const [routeMeta, setRouteMeta] = useState<{
@@ -1324,8 +1331,8 @@ export default function App() {
       });
       setCart({});
       setVisitHadOrder(true);
+      setOrderConfirmOpen(false);
       setOrderReceiptOpen(true);
-      showToast(t.orderSaved, "success");
       await Promise.all([refreshStoreData(activeStore.id), loadInventory()]);
     } catch (e) {
       if (e instanceof LocationDeniedError) showToast(t.locationDenied, "error");
@@ -2058,7 +2065,7 @@ export default function App() {
                     qty: t.invoiceQty,
                   }}
                   onPaymentChange={setPaymentType}
-                  onSubmit={() => void submitOrder()}
+                  onSubmit={() => setOrderConfirmOpen(true)}
                 />
               ) : null}
             </View>
@@ -2381,6 +2388,31 @@ export default function App() {
         onClose={() => setSelectedProduct(null)}
         onMinus={() => selectedProduct && setQty(selectedProduct.id, -1)}
         onPlus={() => selectedProduct && setQty(selectedProduct.id, 1)}
+      />
+      <OrderConfirmModal
+        visible={orderConfirmOpen}
+        storeName={activeStore?.name ?? ""}
+        lines={cartLines}
+        paymentType={paymentType}
+        totalAmount={cartTotalAmount}
+        busy={busy}
+        labels={{
+          title: t.orderConfirmTitle,
+          subtitle: t.orderConfirmSubtitle,
+          store: t.orderConfirmStore,
+          product: t.invoiceProduct,
+          qty: t.invoiceQty,
+          lineTotal: t.invoiceLineTotal,
+          total: t.invoiceTotal,
+          payment: t.payment,
+          cash: t.cash,
+          deferredPay: t.deferredPay,
+          currency: t.currency,
+          cancel: t.orderConfirmCancel,
+          confirm: t.orderConfirmSubmit,
+        }}
+        onCancel={() => setOrderConfirmOpen(false)}
+        onConfirm={() => void submitOrder()}
       />
       <OrderInvoiceModal
         visible={orderReceiptOpen}
