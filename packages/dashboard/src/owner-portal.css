@@ -265,6 +265,7 @@ html[data-theme="light"] body:has(.owner-shell) {
   background: linear-gradient(160deg, #ffffff 0%, #f0fdfa 55%, #ecfdf5 100%);
   box-shadow: 0 8px 28px rgba(13, 148, 136, 0.08);
   overflow: hidden;
+  direction: rtl;
   text-align: right;
 }
 
@@ -282,11 +283,13 @@ html[data-theme="light"] body:has(.owner-shell) {
 
 .owner-loyalty-split {
   display: grid;
-  grid-template-columns: minmax(0, 0.36fr) minmax(0, 0.64fr);
+  grid-template-columns: minmax(0, 1fr) minmax(108px, 34%);
+  direction: ltr;
 }
 
 .owner-loyalty-card--solo .owner-loyalty-split {
   grid-template-columns: 1fr;
+  direction: rtl;
 }
 
 .owner-loyalty-pane {
@@ -297,34 +300,37 @@ html[data-theme="light"] body:has(.owner-shell) {
   padding: 12px 14px;
   min-width: 0;
   position: relative;
+  direction: rtl;
+  text-align: right;
 }
 
 .owner-loyalty-pane--balance {
   align-items: flex-start;
   gap: 8px;
-  padding: 10px 12px 10px 10px;
-  border-inline-end: 1px solid rgba(13, 148, 136, 0.16);
+  padding: 10px 12px;
+  border-left: 1px solid rgba(13, 148, 136, 0.16);
   overflow: hidden;
 }
 
 .owner-loyalty-card--urgent .owner-loyalty-pane--balance {
-  border-inline-end-color: rgba(234, 88, 12, 0.2);
+  border-left-color: rgba(234, 88, 12, 0.2);
 }
 
 .owner-loyalty-card--critical .owner-loyalty-pane--balance {
-  border-inline-end-color: rgba(220, 38, 38, 0.2);
+  border-left-color: rgba(220, 38, 38, 0.2);
 }
 
 .owner-loyalty-card--solo .owner-loyalty-pane--balance {
-  border-inline-end: none;
+  border-left: none;
 }
 
 .owner-loyalty-pane-deco {
   position: absolute;
-  inset-inline-end: -4px;
-  inset-block-start: -6px;
+  top: -4px;
+  right: -2px;
+  left: auto;
   color: var(--loyalty);
-  opacity: 0.14;
+  opacity: 0.16;
   pointer-events: none;
   line-height: 0;
 }
@@ -335,20 +341,21 @@ html[data-theme="light"] body:has(.owner-shell) {
   display: flex;
   flex-direction: row;
   align-items: center;
+  justify-content: flex-start;
   gap: 8px;
   width: 100%;
-  max-width: 100%;
 }
 
 .owner-loyalty-pane--timer {
   gap: 0;
-  padding: 12px 14px 12px 16px;
+  padding: 12px 16px 12px 14px;
 }
 
 .owner-loyalty-timer-row {
   display: flex;
   flex-direction: row;
   align-items: center;
+  justify-content: flex-start;
   gap: 12px;
   width: 100%;
 }
@@ -485,6 +492,7 @@ html[data-theme="light"] body:has(.owner-shell) {
   justify-content: flex-start;
   gap: 6px;
   flex-wrap: wrap;
+  width: 100%;
 }
 
 .owner-loyalty-countdown-number {
@@ -563,28 +571,25 @@ html[data-theme="light"] body:has(.owner-shell) {
 @media (max-width: 480px) {
   .owner-loyalty-split {
     grid-template-columns: 1fr;
+    direction: rtl;
   }
 
   .owner-loyalty-pane--balance {
-    border-inline-end: none;
-    border-bottom: 1px solid rgba(13, 148, 136, 0.16);
-    padding-bottom: 10px;
-  }
-
-  .owner-loyalty-card--urgent .owner-loyalty-pane--balance {
-    border-bottom-color: rgba(234, 88, 12, 0.2);
-  }
-
-  .owner-loyalty-card--critical .owner-loyalty-pane--balance {
-    border-bottom-color: rgba(220, 38, 38, 0.2);
-  }
-
-  .owner-loyalty-pane--timer {
+    border-left: none;
+    border-top: 1px solid rgba(13, 148, 136, 0.16);
     padding-top: 10px;
   }
 
-  .owner-loyalty-timer-row {
-    align-items: flex-start;
+  .owner-loyalty-card--urgent .owner-loyalty-pane--balance {
+    border-top-color: rgba(234, 88, 12, 0.2);
+  }
+
+  .owner-loyalty-card--critical .owner-loyalty-pane--balance {
+    border-top-color: rgba(220, 38, 38, 0.2);
+  }
+
+  .owner-loyalty-pane--timer {
+    padding-bottom: 10px;
   }
 }
 

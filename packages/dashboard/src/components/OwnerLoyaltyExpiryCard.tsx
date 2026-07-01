@@ -43,34 +43,9 @@ export default function OwnerLoyaltyExpiryCard({ data, strings: o, formatDate }:
       aria-label={o.loyaltyBalance}
     >
       <div className="owner-loyalty-split">
-        <section className="owner-loyalty-pane owner-loyalty-pane--balance">
-          <div className="owner-loyalty-pane-deco" aria-hidden>
-            <LoyaltyIcon kind="star" size={64} />
-          </div>
-          <div className="owner-loyalty-balance-head">
-            <div className="owner-loyalty-pane-balance-text">
-              <span className="owner-loyalty-pane-kicker">{o.loyaltyBalance}</span>
-              <p className="owner-loyalty-pane-value">{o.loyaltyPoints(balance)}</p>
-            </div>
-            <span className="owner-loyalty-pane-icon" aria-hidden>
-              <LoyaltyIcon kind="balance" size={22} />
-            </span>
-          </div>
-          {showExpiry ? (
-            <span className="owner-loyalty-period-chip">{o.loyaltyPeriodChip(expiryDays)}</span>
-          ) : null}
-        </section>
-
         {showExpiry ? (
           <section className="owner-loyalty-pane owner-loyalty-pane--timer" aria-label={o.loyaltyDaysRemainingLabel}>
             <div className="owner-loyalty-timer-row">
-              <div
-                className="owner-loyalty-ring"
-                style={{ "--loyalty-pct": `${remainingPct}%` }}
-                aria-hidden
-              >
-                <span className="owner-loyalty-ring-label">{percentLabel}</span>
-              </div>
               <div className="owner-loyalty-timer-body">
                 <div className="owner-loyalty-countdown">
                   <span className="owner-loyalty-countdown-number">
@@ -97,9 +72,34 @@ export default function OwnerLoyaltyExpiryCard({ data, strings: o, formatDate }:
                   <p className="owner-loyalty-expires-on">{o.loyaltyExpiresOnDate(formatDate(expiresAt))}</p>
                 ) : null}
               </div>
+              <div
+                className="owner-loyalty-ring"
+                style={{ "--loyalty-pct": `${remainingPct}%` }}
+                aria-hidden
+              >
+                <span className="owner-loyalty-ring-label">{percentLabel}</span>
+              </div>
             </div>
           </section>
         ) : null}
+
+        <section className="owner-loyalty-pane owner-loyalty-pane--balance">
+          <div className="owner-loyalty-pane-deco" aria-hidden>
+            <LoyaltyIcon kind="star" size={56} />
+          </div>
+          <div className="owner-loyalty-balance-head">
+            <div className="owner-loyalty-pane-balance-text">
+              <span className="owner-loyalty-pane-kicker">{o.loyaltyBalance}</span>
+              <p className="owner-loyalty-pane-value">{o.loyaltyPoints(balance)}</p>
+            </div>
+            <span className="owner-loyalty-pane-icon" aria-hidden>
+              <LoyaltyIcon kind="balance" size={22} />
+            </span>
+          </div>
+          {showExpiry ? (
+            <span className="owner-loyalty-period-chip">{o.loyaltyPeriodChip(expiryDays)}</span>
+          ) : null}
+        </section>
       </div>
     </article>
   );
