@@ -194,6 +194,11 @@ router.get(
         { rows: noBuyByReasonRows },
         { rows: noBuyMonthCount },
         { rows: recentNoBuyVisits },
+        { rows: todayStats },
+        { rows: yesterdayStats },
+        { rows: dailySalesRows },
+        { rows: monthPaymentMix },
+        { rows: activeRepsToday },
       ] = await Promise.all([
         query<{
           order_count: string;
@@ -345,6 +350,49 @@ router.get(
            LIMIT 15`,
           [NO_BUY_REASONS]
         ),
+        query<{ revenue: string; order_count: string; visit_count: string }>(
+          `SELECT
+             COALESCE(SUM(o.total_amount), 0)::text AS revenue,
+             COUNT(o.id)::text AS order_count,
+             (SELECT COUNT(*)::text FROM visits v
+              WHERE (v.visited_at AT TIME ZONE 'Asia/Amman')::date = timezone('Asia/Amman', now())::date) AS visit_count
+           FROM orders o
+           WHERE (o.created_at AT TIME ZONE 'Asia/Amman')::date = timezone('Asia/Amman', now())::date`
+        ),
+        query<{ revenue: string; order_count: string }>(
+          `SELECT
+             COALESCE(SUM(o.total_amount), 0)::text AS revenue,
+             COUNT(o.id)::text AS order_count
+           FROM orders o
+           WHERE (o.created_at AT TIME ZONE 'Asia/Amman')::date = timezone('Asia/Amman', now())::date - 1`
+        ),
+        query<{ day: string; revenue: string; order_count: string; visit_count: string }>(
+          `WITH days AS (
+             SELECT (timezone('Asia/Amman', now())::date - offs) AS day
+             FROM generate_series(13, 0, -1) AS offs
+           )
+           SELECT d.day::text AS day,
+                  COALESCE(SUM(o.total_amount), 0)::text AS revenue,
+                  COUNT(o.id)::text AS order_count,
+                  (SELECT COUNT(*)::text FROM visits v
+                   WHERE (v.visited_at AT TIME ZONE 'Asia/Amman')::date = d.day) AS visit_count
+           FROM days d
+           LEFT JOIN orders o ON (o.created_at AT TIME ZONE 'Asia/Amman')::date = d.day
+           GROUP BY d.day
+           ORDER BY d.day ASC`
+        ),
+        query<{ cash_revenue: string; deferred_revenue: string }>(
+          `SELECT
+             COALESCE(SUM(CASE WHEN payment_type = 'cash' THEN total_amount ELSE 0 END), 0)::text AS cash_revenue,
+             COALESCE(SUM(CASE WHEN payment_type = 'deferred' THEN total_amount ELSE 0 END), 0)::text AS deferred_revenue
+           FROM orders
+           WHERE created_at >= ${monthStart}`
+        ),
+        query<{ count: string }>(
+          `SELECT COUNT(DISTINCT representative_id)::text AS count
+           FROM orders
+           WHERE (created_at AT TIME ZONE 'Asia/Amman')::date = timezone('Asia/Amman', now())::date`
+        ),
       ]);
 
       const noBuyCountByNote = new Map(noBuyByReasonRows.map((r) => [r.note, parseInt(r.count, 10)]));
@@ -353,6 +401,11 @@ router.get(
       const p = period[0];
       const deferredRevenue = parseFloat(t?.deferred_revenue ?? "0");
       const paymentsRecorded = parseFloat(t?.payments_recorded ?? "0");
+      const todayRevenue = parseFloat(todayStats[0]?.revenue ?? "0");
+      const todayOrderCount = parseInt(todayStats[0]?.order_count ?? "0", 10);
+      const todayVisitCount = parseInt(todayStats[0]?.visit_count ?? "0", 10);
+      const yesterdayRevenue = parseFloat(yesterdayStats[0]?.revenue ?? "0");
+      const yesterdayOrderCount = parseInt(yesterdayStats[0]?.order_count ?? "0", 10);
 
       res.json({
         totals: {
@@ -369,6 +422,28 @@ router.get(
           monthRevenue: parseFloat(p?.month_revenue ?? "0"),
           monthVisitCount: parseInt(p?.month_visits ?? "0", 10),
           weekOrderCount: parseInt(p?.week_orders ?? "0", 10),
+        },
+        today: {
+          revenue: todayRevenue,
+          orderCount: todayOrderCount,
+          visitCount: todayVisitCount,
+          activeReps: parseInt(activeRepsToday[0]?.count ?? "0", 10),
+          avgOrderValue: todayOrderCount > 0 ? todayRevenue / todayOrderCount : 0,
+          conversionRate: todayVisitCount > 0 ? todayOrderCount / todayVisitCount : 0,
+        },
+        yesterday: {
+          revenue: yesterdayRevenue,
+          orderCount: yesterdayOrderCount,
+        },
+        dailySales: dailySalesRows.map((row) => ({
+          date: row.day,
+          revenue: parseFloat(row.revenue),
+          orderCount: parseInt(row.order_count, 10),
+          visitCount: parseInt(row.visit_count, 10),
+        })),
+        paymentMixMonth: {
+          cash: parseFloat(monthPaymentMix[0]?.cash_revenue ?? "0"),
+          deferred: parseFloat(monthPaymentMix[0]?.deferred_revenue ?? "0"),
         },
         topProducts: topProducts.map((row) => ({
           productId: row.product_id,

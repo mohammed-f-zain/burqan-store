@@ -2,7 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { api } from "../api";
+import DailySalesChart from "../components/DailySalesChart";
+import DashActionLink from "../components/DashActionLink";
 import LoyaltyIcon from "../components/LoyaltyIcon";
+import PaymentMixChart from "../components/PaymentMixChart";
 import SectionTitleWithIcon from "../components/SectionTitleWithIcon";
 import { useAuth } from "../auth/AuthContext";
 import { useLocale } from "../i18n/LocaleContext";
@@ -35,6 +38,28 @@ type Analytics = {
     monthRevenue: number;
     monthVisitCount: number;
     weekOrderCount: number;
+  };
+  today: {
+    revenue: number;
+    orderCount: number;
+    visitCount: number;
+    activeReps: number;
+    avgOrderValue: number;
+    conversionRate: number;
+  };
+  yesterday: {
+    revenue: number;
+    orderCount: number;
+  };
+  dailySales: {
+    date: string;
+    revenue: number;
+    orderCount: number;
+    visitCount: number;
+  }[];
+  paymentMixMonth: {
+    cash: number;
+    deferred: number;
   };
   topProducts: {
     productId: number;
@@ -120,6 +145,22 @@ export default function OverviewPage() {
       }).format(new Date()),
     [locale]
   );
+
+  const formatDayLabel = (date: string) =>
+    new Intl.DateTimeFormat(locale === "ar" ? "ar-JO" : "en-GB", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      timeZone: "Asia/Amman",
+    }).format(new Date(`${date}T12:00:00`));
+
+  function formatDelta(current: number, previous: number): { text: string; up: boolean } | null {
+    if (previous <= 0 && current <= 0) return null;
+    if (previous <= 0) return { text: "+100%", up: true };
+    const pct = ((current - previous) / previous) * 100;
+    const up = pct >= 0;
+    return { text: `${up ? "+" : ""}${pct.toFixed(0)}%`, up };
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -234,8 +275,13 @@ export default function OverviewPage() {
               {t.nav.loyaltyStores}
             </Link>
             {can("orders.read") && (
-              <Link to="/app/orders" className="overview-quick-link">
+              <Link to="/app/orders" className="overview-quick-link overview-quick-link--primary">
                 {t.nav.orders}
+              </Link>
+            )}
+            {can("reps.read") && (can("fill_car.read") || can("reps.read")) && (
+              <Link to="/app/fill-car" className="overview-quick-link">
+                {t.overview.fillCarLink}
               </Link>
             )}
           </div>
@@ -273,6 +319,92 @@ export default function OverviewPage() {
 
           {!analyticsLoading && analytics && (
             <>
+              <section className="overview-today-strip">
+                <div className="overview-today-main card-inner">
+                  <div className="overview-today-label">{t.overview.todaySales}</div>
+                  <div className="overview-today-value">{money(analytics.today.revenue)}</div>
+                  {(() => {
+                    const delta = formatDelta(analytics.today.revenue, analytics.yesterday.revenue);
+                    return delta ? (
+                      <div className={`overview-delta${delta.up ? " overview-delta--up" : " overview-delta--down"}`}>
+                        {delta.text} {t.overview.vsYesterday}
+                      </div>
+                    ) : null;
+                  })()}
+                </div>
+                <div className="overview-today-grid">
+                  <div className="dash-kpi dash-kpi--compact">
+                    <div className="dash-kpi-label">{t.overview.todayOrders}</div>
+                    <div className="dash-kpi-value dash-kpi-value--sm">{analytics.today.orderCount}</div>
+                  </div>
+                  <div className="dash-kpi dash-kpi--compact">
+                    <div className="dash-kpi-label">{t.overview.todayVisits}</div>
+                    <div className="dash-kpi-value dash-kpi-value--sm">{analytics.today.visitCount}</div>
+                  </div>
+                  <div className="dash-kpi dash-kpi--compact">
+                    <div className="dash-kpi-label">{t.overview.todayActiveReps}</div>
+                    <div className="dash-kpi-value dash-kpi-value--sm">{analytics.today.activeReps}</div>
+                  </div>
+                  <div className="dash-kpi dash-kpi--compact">
+                    <div className="dash-kpi-label">{t.overview.todayAvgOrder}</div>
+                    <div className="dash-kpi-value dash-kpi-value--sm">{money(analytics.today.avgOrderValue)}</div>
+                  </div>
+                </div>
+              </section>
+
+              <div className="overview-charts-grid">
+                <section className="overview-panel overview-panel--chart">
+                  <div className="dash-section-head">
+                    <div>
+                      <h4 className="dash-section-title">{t.overview.dailySalesChart}</h4>
+                      <p className="muted small">{t.overview.dailySalesHint}</p>
+                    </div>
+                    <DashActionLink to="/app/orders">{t.overview.viewAllOrders}</DashActionLink>
+                  </div>
+                  <DailySalesChart
+                    days={analytics.dailySales}
+                    formatMoney={money}
+                    formatDayLabel={formatDayLabel}
+                    revenueLabel={t.overview.chartRevenue}
+                    ordersLabel={t.overview.todayOrders}
+                    todayLabel={t.overview.chartToday}
+                  />
+                </section>
+
+                <section className="overview-panel">
+                  <h4 className="dash-section-title">{t.overview.paymentMixTitle}</h4>
+                  <PaymentMixChart
+                    cash={analytics.paymentMixMonth.cash}
+                    deferred={analytics.paymentMixMonth.deferred}
+                    formatMoney={money}
+                    cashLabel={t.overview.payCash}
+                    deferredLabel={t.overview.payDeferred}
+                    title={t.overview.paymentMixTitle}
+                  />
+                  <div className="overview-monitor-block">
+                    <h5 className="overview-monitor-title">{t.overview.monitorTitle}</h5>
+                    <div className="overview-monitor-grid">
+                      <div className="overview-monitor-item">
+                        <span className="muted small">{t.overview.todayConversion}</span>
+                        <strong>{(analytics.today.conversionRate * 100).toFixed(0)}%</strong>
+                      </div>
+                      <div className="overview-monitor-item">
+                        <span className="muted small">{t.overview.deferredOutstanding}</span>
+                        <strong className="text-danger">{money(analytics.totals.deferredOutstanding)}</strong>
+                      </div>
+                      <div className="overview-monitor-item">
+                        <span className="muted small">{t.overview.monthRevenue}</span>
+                        <strong>{money(analytics.period.monthRevenue)}</strong>
+                      </div>
+                      <div className="overview-monitor-item">
+                        <span className="muted small">{t.overview.weekOrders}</span>
+                        <strong>{analytics.period.weekOrderCount}</strong>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              </div>
+
               <div className="overview-kpi-row">
                 <div className="dash-kpi dash-kpi--accent overview-kpi-main">
                   <div className="dash-kpi-label">{t.overview.monthRevenue}</div>
@@ -327,9 +459,9 @@ export default function OverviewPage() {
                       {t.overview.loyaltyTitle}
                     </SectionTitleWithIcon>
                     {can("stores.read") && (
-                      <Link to="/app/loyalty-stores" className="linkish small">
+                      <DashActionLink to="/app/loyalty-stores" variant="accent">
                         {t.overview.loyaltyViewAll}
-                      </Link>
+                      </DashActionLink>
                     )}
                   </div>
                   <div className="dash-kpi-grid dash-kpi-grid--loyalty">
@@ -377,9 +509,7 @@ export default function OverviewPage() {
                   <section className="overview-panel">
                     <div className="dash-section-head">
                       <h4 className="dash-section-title">{t.overview.recentOrders}</h4>
-                      <Link to="/app/orders" className="linkish small">
-                        {t.overview.viewAllOrders}
-                      </Link>
+                      <DashActionLink to="/app/orders">{t.overview.viewAllOrders}</DashActionLink>
                     </div>
                     <ul className="dash-recent-list">
                       {analytics.recentOrders.slice(0, 6).map((o) => (
@@ -407,9 +537,7 @@ export default function OverviewPage() {
                 <section className="dash-section dash-section--no-buy overview-panel--full">
                   <div className="dash-section-head">
                     <h4 className="dash-section-title">{t.overview.noBuyTitle}</h4>
-                    <Link to="/app/visits" className="linkish small">
-                      {t.overview.noBuyViewAll}
-                    </Link>
+                    <DashActionLink to="/app/visits">{t.overview.noBuyViewAll}</DashActionLink>
                   </div>
                   <p className="muted small">{t.overview.noBuyHint}</p>
                   <div className="dash-kpi-grid dash-kpi-grid--sub" style={{ marginBottom: 12 }}>
