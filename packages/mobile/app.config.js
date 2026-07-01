@@ -10,6 +10,7 @@ module.exports = () => {
   expo.extra = {
     ...(expo.extra ?? {}),
     apiUrl,
+    ...(googleMapsApiKey ? { googleMapsApiKey } : {}),
   };
 
   if (googleMapsApiKey) {

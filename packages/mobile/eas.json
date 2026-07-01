@@ -6,7 +6,8 @@
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.burqan.store"
+        "EXPO_PUBLIC_API_URL": "https://api.burqan.store",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyBQNB889iL_HI5jdZaXKGhc5gouPClwnQc"
       },
       "android": {
         "buildType": "apk"
@@ -14,7 +15,8 @@
     },
     "production": {
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.burqan.store"
+        "EXPO_PUBLIC_API_URL": "https://api.burqan.store",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyBQNB889iL_HI5jdZaXKGhc5gouPClwnQc"
       }
     }
   }
