@@ -259,67 +259,70 @@ html[data-theme="light"] body:has(.owner-shell) {
   grid-template-columns: 1fr;
 }
 
-.owner-loyalty-card-wrap {
-  margin-bottom: 0;
-}
-
-.owner-loyalty-panel {
-  position: relative;
-  padding: 14px 16px;
+.owner-loyalty-card {
   border-radius: 20px;
-  background: var(--card);
-  border: 1px solid var(--line);
-  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.05);
+  border: 1px solid rgba(13, 148, 136, 0.22);
+  background: linear-gradient(160deg, #ffffff 0%, #f0fdfa 55%, #ecfdf5 100%);
+  box-shadow: 0 8px 28px rgba(13, 148, 136, 0.08);
   overflow: hidden;
   text-align: right;
 }
 
-.owner-loyalty-panel::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: 0;
-  height: 3px;
-  background: linear-gradient(90deg, var(--accent2), var(--accent));
+.owner-loyalty-card--urgent {
+  border-color: rgba(234, 88, 12, 0.32);
+  background: linear-gradient(160deg, #ffffff 0%, #fff7ed 55%, #ffedd5 100%);
+  box-shadow: 0 8px 28px rgba(234, 88, 12, 0.08);
 }
 
-.owner-loyalty-panel--urgent::before {
-  background: linear-gradient(90deg, #fb923c, #ea580c);
+.owner-loyalty-card--critical {
+  border-color: rgba(220, 38, 38, 0.32);
+  background: linear-gradient(160deg, #ffffff 0%, #fef2f2 55%, #fee2e2 100%);
+  box-shadow: 0 8px 28px rgba(220, 38, 38, 0.08);
 }
 
-.owner-loyalty-panel--critical::before {
-  background: linear-gradient(90deg, #f87171, #dc2626);
+.owner-loyalty-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
 }
 
-.owner-loyalty-panel__main {
+.owner-loyalty-card--solo .owner-loyalty-split {
+  grid-template-columns: 1fr;
+}
+
+.owner-loyalty-pane {
   display: flex;
-  flex-direction: row;
-  align-items: stretch;
-  gap: 14px;
-}
-
-.owner-loyalty-panel__main--solo {
-  align-items: center;
-}
-
-.owner-loyalty-panel__balance {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 12px;
-  flex: 0 0 auto;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px 14px;
   min-width: 0;
-  text-align: right;
 }
 
-.owner-loyalty-panel__main--solo .owner-loyalty-panel__balance {
-  flex: 1;
-  width: 100%;
+.owner-loyalty-pane--balance {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  border-inline-end: 1px solid rgba(13, 148, 136, 0.14);
+  background: rgba(255, 255, 255, 0.4);
 }
 
-.owner-loyalty-panel__icon {
+.owner-loyalty-card--urgent .owner-loyalty-pane--balance {
+  border-inline-end-color: rgba(234, 88, 12, 0.16);
+}
+
+.owner-loyalty-card--critical .owner-loyalty-pane--balance {
+  border-inline-end-color: rgba(220, 38, 38, 0.16);
+}
+
+.owner-loyalty-card--solo .owner-loyalty-pane--balance {
+  border-inline-end: none;
+}
+
+.owner-loyalty-pane--timer {
+  gap: 8px;
+}
+
+.owner-loyalty-pane-icon {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -331,50 +334,29 @@ html[data-theme="light"] body:has(.owner-shell) {
   color: var(--loyalty);
 }
 
-.owner-loyalty-panel__balance-text {
-  min-width: 0;
+.owner-loyalty-pane-balance-text {
   flex: 1;
-  text-align: right;
+  min-width: 0;
 }
 
-.owner-loyalty-panel__kicker {
+.owner-loyalty-pane-kicker {
   display: block;
-  text-align: right;
   font-size: 0.74rem;
   font-weight: 700;
   color: var(--muted);
   line-height: 1.25;
 }
 
-.owner-loyalty-panel__value {
+.owner-loyalty-pane-value {
   margin: 2px 0 0;
-  text-align: right;
-  font-size: clamp(1.35rem, 4.5vw, 1.65rem);
+  font-size: clamp(1.35rem, 4.8vw, 1.75rem);
   font-weight: 800;
   line-height: 1.15;
   letter-spacing: -0.02em;
   color: var(--loyalty);
 }
 
-.owner-loyalty-panel__divider {
-  width: 1px;
-  align-self: stretch;
-  background: var(--line);
-  flex-shrink: 0;
-}
-
-.owner-loyalty-panel__expiry {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: stretch;
-  gap: 6px;
-  text-align: right;
-}
-
-.owner-loyalty-panel__days {
+.owner-loyalty-countdown {
   display: flex;
   flex-direction: row;
   align-items: baseline;
@@ -383,39 +365,40 @@ html[data-theme="light"] body:has(.owner-shell) {
   flex-wrap: wrap;
 }
 
-.owner-loyalty-panel__days-num {
-  font-size: 1.35rem;
+.owner-loyalty-countdown-number {
+  font-size: clamp(1.75rem, 7vw, 2.25rem);
   font-weight: 900;
   line-height: 1;
-  color: var(--loyalty);
+  letter-spacing: -0.03em;
+  color: #0f766e;
 }
 
-.owner-loyalty-panel--urgent .owner-loyalty-panel__days-num {
+.owner-loyalty-card--urgent .owner-loyalty-countdown-number {
   color: #c2410c;
 }
 
-.owner-loyalty-panel--critical .owner-loyalty-panel__days-num {
+.owner-loyalty-card--critical .owner-loyalty-countdown-number {
   color: #b91c1c;
 }
 
-.owner-loyalty-panel__days-label {
-  font-size: 0.78rem;
-  font-weight: 700;
+.owner-loyalty-countdown-label {
+  font-size: 0.82rem;
+  font-weight: 800;
   color: var(--text);
   line-height: 1.3;
 }
 
-.owner-loyalty-panel__track {
+.owner-loyalty-progress-track {
   width: 100%;
-  height: 8px;
+  height: 10px;
   border-radius: 999px;
-  background: var(--surface);
-  border: 1px solid var(--line);
+  background: rgba(13, 148, 136, 0.12);
   overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.06);
   direction: ltr;
 }
 
-.owner-loyalty-panel__fill {
+.owner-loyalty-progress-fill {
   display: block;
   height: 100%;
   border-radius: inherit;
@@ -423,40 +406,59 @@ html[data-theme="light"] body:has(.owner-shell) {
   transition: width 0.4s ease;
 }
 
-.owner-loyalty-panel--urgent .owner-loyalty-panel__fill {
+.owner-loyalty-card--urgent .owner-loyalty-progress-fill {
   background: linear-gradient(90deg, #fdba74, #ea580c);
 }
 
-.owner-loyalty-panel--critical .owner-loyalty-panel__fill {
+.owner-loyalty-card--critical .owner-loyalty-progress-fill {
   background: linear-gradient(90deg, #fca5a5, #dc2626);
 }
 
-.owner-loyalty-panel__caption {
+.owner-loyalty-progress-fraction {
   margin: 0;
-  text-align: right;
-  font-size: 0.72rem;
-  font-weight: 600;
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: #0f766e;
+  line-height: 1.3;
+}
+
+.owner-loyalty-card--urgent .owner-loyalty-progress-fraction {
+  color: #c2410c;
+}
+
+.owner-loyalty-card--critical .owner-loyalty-progress-fraction {
+  color: #b91c1c;
+}
+
+.owner-loyalty-expires-on {
+  margin: 0;
+  font-size: 0.74rem;
+  font-weight: 700;
   color: var(--muted);
   line-height: 1.35;
 }
 
-@media (max-width: 520px) {
-  .owner-loyalty-panel__main:not(.owner-loyalty-panel__main--solo) {
-    flex-direction: column;
-    gap: 10px;
+@media (max-width: 480px) {
+  .owner-loyalty-split {
+    grid-template-columns: 1fr;
   }
 
-  .owner-loyalty-panel__divider {
-    width: 100%;
-    height: 1px;
+  .owner-loyalty-pane--balance {
+    border-inline-end: none;
+    border-bottom: 1px solid rgba(13, 148, 136, 0.14);
+    padding-bottom: 10px;
   }
 
-  .owner-loyalty-panel__balance {
-    width: 100%;
+  .owner-loyalty-card--urgent .owner-loyalty-pane--balance {
+    border-bottom-color: rgba(234, 88, 12, 0.16);
   }
 
-  .owner-loyalty-panel__expiry {
-    width: 100%;
+  .owner-loyalty-card--critical .owner-loyalty-pane--balance {
+    border-bottom-color: rgba(220, 38, 38, 0.16);
+  }
+
+  .owner-loyalty-pane--timer {
+    padding-top: 10px;
   }
 }
 
