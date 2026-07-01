@@ -259,7 +259,7 @@ html[data-theme="light"] body:has(.owner-shell) {
   grid-template-columns: 1fr;
 }
 
-.owner-loyalty-card {
+.owner-loyalty-expiry-card {
   border-radius: 20px;
   border: 1px solid rgba(13, 148, 136, 0.22);
   background: linear-gradient(160deg, #ffffff 0%, #f0fdfa 55%, #ecfdf5 100%);
@@ -269,30 +269,29 @@ html[data-theme="light"] body:has(.owner-shell) {
   text-align: right;
 }
 
-.owner-loyalty-card--urgent {
+.owner-loyalty-expiry-card--urgent {
   border-color: rgba(234, 88, 12, 0.32);
   background: linear-gradient(160deg, #ffffff 0%, #fff7ed 55%, #ffedd5 100%);
   box-shadow: 0 8px 28px rgba(234, 88, 12, 0.08);
 }
 
-.owner-loyalty-card--critical {
+.owner-loyalty-expiry-card--critical {
   border-color: rgba(220, 38, 38, 0.32);
   background: linear-gradient(160deg, #ffffff 0%, #fef2f2 55%, #fee2e2 100%);
   box-shadow: 0 8px 28px rgba(220, 38, 38, 0.08);
 }
 
-.owner-loyalty-split {
+.owner-loyalty-expiry-split {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(108px, 34%);
-  direction: ltr;
-}
-
-.owner-loyalty-card--solo .owner-loyalty-split {
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(100px, 30%) minmax(0, 1fr);
   direction: rtl;
 }
 
-.owner-loyalty-pane {
+.owner-loyalty-expiry-card--solo .owner-loyalty-expiry-split {
+  grid-template-columns: 1fr;
+}
+
+.owner-loyalty-expiry-pane {
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -304,54 +303,53 @@ html[data-theme="light"] body:has(.owner-shell) {
   text-align: right;
 }
 
-.owner-loyalty-pane--balance {
+.owner-loyalty-expiry-pane--balance {
   align-items: flex-start;
-  gap: 8px;
-  padding: 10px 12px;
-  border-left: 1px solid rgba(13, 148, 136, 0.16);
+  gap: 6px;
+  padding: 10px 12px 10px 10px;
+  border-inline-end: 1px solid rgba(13, 148, 136, 0.16);
   overflow: hidden;
 }
 
-.owner-loyalty-card--urgent .owner-loyalty-pane--balance {
-  border-left-color: rgba(234, 88, 12, 0.2);
+.owner-loyalty-expiry-card--urgent .owner-loyalty-expiry-pane--balance {
+  border-inline-end-color: rgba(234, 88, 12, 0.2);
 }
 
-.owner-loyalty-card--critical .owner-loyalty-pane--balance {
-  border-left-color: rgba(220, 38, 38, 0.2);
+.owner-loyalty-expiry-card--critical .owner-loyalty-expiry-pane--balance {
+  border-inline-end-color: rgba(220, 38, 38, 0.2);
 }
 
-.owner-loyalty-card--solo .owner-loyalty-pane--balance {
-  border-left: none;
+.owner-loyalty-expiry-card--solo .owner-loyalty-expiry-pane--balance {
+  border-inline-end: none;
 }
 
-.owner-loyalty-pane-deco {
+.owner-loyalty-expiry-pane-deco {
   position: absolute;
   top: -4px;
-  right: -2px;
-  left: auto;
+  inset-inline-end: -2px;
   color: var(--loyalty);
   opacity: 0.16;
   pointer-events: none;
   line-height: 0;
 }
 
-.owner-loyalty-balance-head {
+.owner-loyalty-expiry-balance-head {
   position: relative;
   z-index: 1;
   display: flex;
   flex-direction: row;
-  align-items: center;
+  align-items: flex-start;
   justify-content: flex-start;
   gap: 8px;
   width: 100%;
 }
 
-.owner-loyalty-pane--timer {
+.owner-loyalty-expiry-pane--timer {
   gap: 0;
-  padding: 12px 16px 12px 14px;
+  padding: 12px 14px 12px 16px;
 }
 
-.owner-loyalty-timer-row {
+.owner-loyalty-expiry-timer-row {
   display: flex;
   flex-direction: row;
   align-items: center;
@@ -360,15 +358,16 @@ html[data-theme="light"] body:has(.owner-shell) {
   width: 100%;
 }
 
-.owner-loyalty-timer-body {
+.owner-loyalty-expiry-timer-body {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   gap: 8px;
 }
 
-.owner-loyalty-ring {
+.owner-loyalty-expiry-ring {
   --loyalty-pct: 0%;
   position: relative;
   flex-shrink: 0;
@@ -381,7 +380,7 @@ html[data-theme="light"] body:has(.owner-shell) {
   justify-content: center;
 }
 
-.owner-loyalty-ring::before {
+.owner-loyalty-expiry-ring::before {
   content: "";
   position: absolute;
   inset: 5px;
@@ -389,23 +388,23 @@ html[data-theme="light"] body:has(.owner-shell) {
   background: #ecfdf5;
 }
 
-.owner-loyalty-card--urgent .owner-loyalty-ring {
+.owner-loyalty-expiry-card--urgent .owner-loyalty-expiry-ring {
   background: conic-gradient(#ea580c var(--loyalty-pct), rgba(234, 88, 12, 0.14) 0);
 }
 
-.owner-loyalty-card--urgent .owner-loyalty-ring::before {
+.owner-loyalty-expiry-card--urgent .owner-loyalty-expiry-ring::before {
   background: #fff7ed;
 }
 
-.owner-loyalty-card--critical .owner-loyalty-ring {
+.owner-loyalty-expiry-card--critical .owner-loyalty-expiry-ring {
   background: conic-gradient(#dc2626 var(--loyalty-pct), rgba(220, 38, 38, 0.14) 0);
 }
 
-.owner-loyalty-card--critical .owner-loyalty-ring::before {
+.owner-loyalty-expiry-card--critical .owner-loyalty-expiry-ring::before {
   background: #fef2f2;
 }
 
-.owner-loyalty-ring-label {
+.owner-loyalty-expiry-ring-label {
   position: relative;
   z-index: 1;
   font-size: 0.72rem;
@@ -414,15 +413,15 @@ html[data-theme="light"] body:has(.owner-shell) {
   line-height: 1;
 }
 
-.owner-loyalty-card--urgent .owner-loyalty-ring-label {
+.owner-loyalty-expiry-card--urgent .owner-loyalty-expiry-ring-label {
   color: #c2410c;
 }
 
-.owner-loyalty-card--critical .owner-loyalty-ring-label {
+.owner-loyalty-expiry-card--critical .owner-loyalty-expiry-ring-label {
   color: #b91c1c;
 }
 
-.owner-loyalty-period-chip {
+.owner-loyalty-expiry-period-chip {
   position: relative;
   z-index: 1;
   align-self: flex-start;
@@ -435,19 +434,19 @@ html[data-theme="light"] body:has(.owner-shell) {
   border: 1px solid rgba(13, 148, 136, 0.18);
 }
 
-.owner-loyalty-card--urgent .owner-loyalty-period-chip {
+.owner-loyalty-expiry-card--urgent .owner-loyalty-expiry-period-chip {
   color: #c2410c;
   background: rgba(234, 88, 12, 0.1);
   border-color: rgba(234, 88, 12, 0.2);
 }
 
-.owner-loyalty-card--critical .owner-loyalty-period-chip {
+.owner-loyalty-expiry-card--critical .owner-loyalty-expiry-period-chip {
   color: #b91c1c;
   background: rgba(220, 38, 38, 0.1);
   border-color: rgba(220, 38, 38, 0.2);
 }
 
-.owner-loyalty-pane-icon {
+.owner-loyalty-expiry-pane-icon {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -460,13 +459,13 @@ html[data-theme="light"] body:has(.owner-shell) {
   box-shadow: 0 4px 14px rgba(13, 148, 136, 0.12);
 }
 
-.owner-loyalty-pane-balance-text {
+.owner-loyalty-expiry-pane-balance-text {
   flex: 1;
   min-width: 0;
   text-align: right;
 }
 
-.owner-loyalty-pane-kicker {
+.owner-loyalty-expiry-pane-kicker {
   display: block;
   text-align: right;
   font-size: 0.72rem;
@@ -475,17 +474,17 @@ html[data-theme="light"] body:has(.owner-shell) {
   line-height: 1.25;
 }
 
-.owner-loyalty-pane-value {
+.owner-loyalty-expiry-pane-value {
   margin: 2px 0 0;
   text-align: right;
-  font-size: clamp(1.25rem, 4.2vw, 1.55rem);
+  font-size: clamp(1.2rem, 4vw, 1.5rem);
   font-weight: 800;
   line-height: 1.15;
   letter-spacing: -0.02em;
   color: var(--loyalty);
 }
 
-.owner-loyalty-countdown {
+.owner-loyalty-expiry-countdown {
   display: flex;
   flex-direction: row;
   align-items: baseline;
@@ -495,7 +494,7 @@ html[data-theme="light"] body:has(.owner-shell) {
   width: 100%;
 }
 
-.owner-loyalty-countdown-number {
+.owner-loyalty-expiry-countdown-number {
   font-size: clamp(1.75rem, 7vw, 2.25rem);
   font-weight: 900;
   line-height: 1;
@@ -503,22 +502,22 @@ html[data-theme="light"] body:has(.owner-shell) {
   color: #0f766e;
 }
 
-.owner-loyalty-card--urgent .owner-loyalty-countdown-number {
+.owner-loyalty-expiry-card--urgent .owner-loyalty-expiry-countdown-number {
   color: #c2410c;
 }
 
-.owner-loyalty-card--critical .owner-loyalty-countdown-number {
+.owner-loyalty-expiry-card--critical .owner-loyalty-expiry-countdown-number {
   color: #b91c1c;
 }
 
-.owner-loyalty-countdown-label {
+.owner-loyalty-expiry-countdown-label {
   font-size: 0.82rem;
   font-weight: 800;
   color: var(--text);
   line-height: 1.3;
 }
 
-.owner-loyalty-progress-track {
+.owner-loyalty-expiry-progress-track {
   width: 100%;
   height: 10px;
   border-radius: 999px;
@@ -528,7 +527,7 @@ html[data-theme="light"] body:has(.owner-shell) {
   direction: ltr;
 }
 
-.owner-loyalty-progress-fill {
+.owner-loyalty-expiry-progress-fill {
   display: block;
   height: 100%;
   border-radius: inherit;
@@ -536,15 +535,15 @@ html[data-theme="light"] body:has(.owner-shell) {
   transition: width 0.4s ease;
 }
 
-.owner-loyalty-card--urgent .owner-loyalty-progress-fill {
+.owner-loyalty-expiry-card--urgent .owner-loyalty-expiry-progress-fill {
   background: linear-gradient(90deg, #fdba74, #ea580c);
 }
 
-.owner-loyalty-card--critical .owner-loyalty-progress-fill {
+.owner-loyalty-expiry-card--critical .owner-loyalty-expiry-progress-fill {
   background: linear-gradient(90deg, #fca5a5, #dc2626);
 }
 
-.owner-loyalty-progress-fraction {
+.owner-loyalty-expiry-progress-fraction {
   margin: 0;
   font-size: 0.8rem;
   font-weight: 800;
@@ -552,15 +551,15 @@ html[data-theme="light"] body:has(.owner-shell) {
   line-height: 1.3;
 }
 
-.owner-loyalty-card--urgent .owner-loyalty-progress-fraction {
+.owner-loyalty-expiry-card--urgent .owner-loyalty-expiry-progress-fraction {
   color: #c2410c;
 }
 
-.owner-loyalty-card--critical .owner-loyalty-progress-fraction {
+.owner-loyalty-expiry-card--critical .owner-loyalty-expiry-progress-fraction {
   color: #b91c1c;
 }
 
-.owner-loyalty-expires-on {
+.owner-loyalty-expiry-expires-on {
   margin: 0;
   font-size: 0.74rem;
   font-weight: 700;
@@ -569,27 +568,26 @@ html[data-theme="light"] body:has(.owner-shell) {
 }
 
 @media (max-width: 480px) {
-  .owner-loyalty-split {
+  .owner-loyalty-expiry-split {
     grid-template-columns: 1fr;
-    direction: rtl;
   }
 
-  .owner-loyalty-pane--balance {
-    border-left: none;
-    border-top: 1px solid rgba(13, 148, 136, 0.16);
-    padding-top: 10px;
-  }
-
-  .owner-loyalty-card--urgent .owner-loyalty-pane--balance {
-    border-top-color: rgba(234, 88, 12, 0.2);
-  }
-
-  .owner-loyalty-card--critical .owner-loyalty-pane--balance {
-    border-top-color: rgba(220, 38, 38, 0.2);
-  }
-
-  .owner-loyalty-pane--timer {
+  .owner-loyalty-expiry-pane--balance {
+    border-inline-end: none;
+    border-block-end: 1px solid rgba(13, 148, 136, 0.16);
     padding-bottom: 10px;
+  }
+
+  .owner-loyalty-expiry-card--urgent .owner-loyalty-expiry-pane--balance {
+    border-block-end-color: rgba(234, 88, 12, 0.2);
+  }
+
+  .owner-loyalty-expiry-card--critical .owner-loyalty-expiry-pane--balance {
+    border-block-end-color: rgba(220, 38, 38, 0.2);
+  }
+
+  .owner-loyalty-expiry-pane--timer {
+    padding-top: 10px;
   }
 }
 
@@ -1700,74 +1698,6 @@ html[data-theme="light"] body:has(.owner-shell) {
   margin-top: 12px;
 }
 
-.owner-loyalty-card {
-  display: flex;
-  flex-direction: row-reverse;
-  align-items: center;
-  gap: 14px;
-  padding: 18px 16px;
-  border-radius: 18px;
-  border: 1px solid var(--line);
-  box-shadow: var(--shadow-card);
-  min-width: 0;
-}
-
-.owner-loyalty-card--balance {
-  background: linear-gradient(135deg, #f0fdfa 0%, #ffffff 55%);
-  border-color: rgba(13, 148, 136, 0.35);
-}
-
-@media (min-width: 480px) {
-  .owner-loyalty-card--balance {
-    flex-direction: row-reverse;
-    padding: 20px 18px;
-  }
-}
-
-.owner-loyalty-card-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 52px;
-  height: 52px;
-  border-radius: 16px;
-  background: var(--loyalty-soft);
-  color: var(--loyalty);
-  flex-shrink: 0;
-}
-
-.owner-loyalty-card--balance .owner-loyalty-card-icon {
-  width: 56px;
-  height: 56px;
-  box-shadow: 0 8px 20px var(--loyalty-glow);
-}
-
-.owner-loyalty-card-body {
-  flex: 1;
-  min-width: 0;
-  text-align: right;
-}
-
-.owner-loyalty-card-label {
-  margin: 0;
-  font-size: 0.8rem;
-  font-weight: 700;
-  color: var(--muted);
-}
-
-.owner-loyalty-card-value {
-  margin: 4px 0 0;
-  font-size: clamp(1.35rem, 5vw, 1.85rem);
-  font-weight: 800;
-  color: var(--loyalty);
-  line-height: 1.2;
-  word-break: break-word;
-}
-
-.owner-loyalty-card-value--sm {
-  font-size: clamp(1.15rem, 4.5vw, 1.45rem);
-}
-
 .owner-loyalty-list {
   list-style: none;
   margin: 0;
@@ -2123,10 +2053,6 @@ html[data-theme="light"] body:has(.owner-shell) {
     font-size: 0.82rem;
   }
 
-  .owner-loyalty-card-icon {
-    width: 46px;
-    height: 46px;
-  }
 }
 
 .owner-empty {
