@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { query } from "../db/pool.js";
 import { HttpError } from "../utils/errors.js";
+import { getStoreLoyaltyState } from "../utils/loyaltyExpiry.js";
 
 const router = Router();
 
@@ -53,6 +54,8 @@ router.get("/owner/summary", async (req, res, next) => {
     if (!store) {
       return res.status(404).json({ error: "غير موجود" });
     }
+
+    const loyaltyState = await getStoreLoyaltyState(store.id);
 
     const [
       { rows: orderAgg },
@@ -188,11 +191,16 @@ router.get("/owner/summary", async (req, res, next) => {
         phone: store.phone,
         imageUrl: store.image_url,
         deferredPaymentEnabled: store.deferred_payment_enabled,
-        loyaltyPointsBalance: store.loyalty_points_balance,
+        loyaltyPointsBalance: loyaltyState.balance,
       },
       loyalty: {
-        balance: store.loyalty_points_balance,
+        balance: loyaltyState.balance,
         monthPointsEarned: parseInt(monthLoyalty[0]?.month_points ?? "0", 10),
+        expiryDays: loyaltyState.expiryDays,
+        periodStartedAt: loyaltyState.periodStartedAt,
+        expiresAt: loyaltyState.expiresAt,
+        daysRemaining: loyaltyState.daysRemaining,
+        periodActive: loyaltyState.periodActive,
       },
       totals: {
         deferredPurchases: deferredTotal,
@@ -330,6 +338,7 @@ router.get("/owner/prizes", async (req, res, next) => {
     if (!store) {
       return res.status(404).json({ error: "غير موجود" });
     }
+    const loyaltyState = await getStoreLoyaltyState(store.id);
     const { rows } = await query<{
       id: number;
       name: string;
@@ -346,7 +355,11 @@ router.get("/owner/prizes", async (req, res, next) => {
        ORDER BY name ASC`
     );
     res.json({
-      loyaltyPointsBalance: store.loyalty_points_balance,
+      loyaltyPointsBalance: loyaltyState.balance,
+      loyaltyExpiryDays: loyaltyState.expiryDays,
+      loyaltyPeriodStartedAt: loyaltyState.periodStartedAt,
+      loyaltyExpiresAt: loyaltyState.expiresAt,
+      loyaltyDaysRemaining: loyaltyState.daysRemaining,
       viewOnly: true,
       products: rows.map((p) => ({
         id: p.id,

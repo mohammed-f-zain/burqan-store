@@ -1,13 +1,21 @@
-import LoyaltyBadge from "./LoyaltyBadge";
+import OwnerLoyaltyExpiryCard from "./OwnerLoyaltyExpiryCard";
 import LoyaltyIcon from "./LoyaltyIcon";
+import LoyaltyBadge from "./LoyaltyBadge";
 import SectionTitleWithIcon from "./SectionTitleWithIcon";
 import type { ar } from "../i18n/ar";
 import { mediaUrl } from "../lib/mediaUrl";
 import { ownerFormatMoney } from "../owner/ownerFormat";
-import { formatMarketDateTime } from "../utils/formatMarketDateTime";
+import { formatMarketDate, formatMarketDateTime } from "../utils/formatMarketDateTime";
 
 type OverviewData = {
-  loyalty: { balance: number };
+  loyalty: {
+    balance: number;
+    expiryDays: number;
+    periodStartedAt: string | null;
+    expiresAt: string | null;
+    daysRemaining: number | null;
+    periodActive: boolean;
+  };
   totals: {
     deferredPurchases: number;
     cashPurchases: number;
@@ -60,15 +68,11 @@ export default function OwnerOverviewTab({ data, strings: o }: Props) {
   return (
     <div className="owner-dashboard">
       <div className="owner-dash-hero owner-dash-hero--single">
-        <article className="owner-dash-hero-card owner-dash-hero-card--loyalty">
-          <div className="owner-dash-hero-card-top">
-            <span className="owner-dash-hero-kicker">{o.loyaltyBalance}</span>
-            <span className="owner-dash-hero-icon owner-dash-hero-icon--loyalty" aria-hidden>
-              <LoyaltyIcon kind="balance" size={22} />
-            </span>
-          </div>
-          <p className="owner-dash-hero-value">{o.loyaltyPoints(data.loyalty.balance)}</p>
-        </article>
+        <OwnerLoyaltyExpiryCard
+          data={data.loyalty}
+          strings={o}
+          formatDate={(iso) => formatMarketDate(iso, "ar")}
+        />
       </div>
 
       <section className="owner-dash-panel" aria-labelledby="owner-dash-activity">

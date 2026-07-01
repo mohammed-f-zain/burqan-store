@@ -31,6 +31,7 @@ import { ARABIC_WEEKDAY_NAMES } from "../utils/routeZones.js";
 import { importGooglePlaces } from "../utils/importGooglePlaces.js";
 import { isGooglePlacesEnabled } from "../utils/googlePlaces.js";
 import { GOVERNORATE_AREA_SUFFIX } from "../utils/matchAreaFromGoogle.js";
+import { getLoyaltyExpiryDays, getLoyaltyPeriodAudit, syncLoyaltyPeriodsFromFirstPurchase } from "../utils/loyaltyExpiry.js";
 
 const router = Router();
 
@@ -1950,6 +1951,71 @@ router.patch(
       );
       if (!rows[0]) throw new HttpError(404, "العميل المحتمل غير موجود أو تم تحويله");
       res.json({ ok: true });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+router.get(
+  "/loyalty/settings",
+  adminAuthMiddleware,
+  requireAdminPermission("stores.read"),
+  async (_req, res, next) => {
+    try {
+      const expiryDays = await getLoyaltyExpiryDays();
+      res.json({ expiryDays });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+const patchLoyaltySettingsSchema = z.object({
+  expiryDays: z.number().int().min(1).max(3650),
+});
+
+router.patch(
+  "/loyalty/settings",
+  adminAuthMiddleware,
+  requireAdminPermission("stores.write"),
+  async (req, res, next) => {
+    try {
+      const body = patchLoyaltySettingsSchema.parse(req.body);
+      await query(
+        `UPDATE loyalty_settings SET expiry_days = $1, updated_at = now() WHERE id = 1`,
+        [body.expiryDays]
+      );
+      res.json({ expiryDays: body.expiryDays });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+router.get(
+  "/loyalty/period-audit",
+  adminAuthMiddleware,
+  requireAdminPermission("stores.read"),
+  async (_req, res, next) => {
+    try {
+      const audit = await getLoyaltyPeriodAudit();
+      res.json(audit);
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+router.post(
+  "/loyalty/sync-periods",
+  adminAuthMiddleware,
+  requireAdminPermission("stores.write"),
+  async (_req, res, next) => {
+    try {
+      const result = await syncLoyaltyPeriodsFromFirstPurchase();
+      const audit = await getLoyaltyPeriodAudit();
+      res.json({ ...result, audit });
     } catch (e) {
       next(e);
     }

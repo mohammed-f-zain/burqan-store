@@ -23,6 +23,7 @@ const FILES = [
   "011_rep_inventory_price.sql",
   "012_route_zones.sql",
   "013_clear_rep_area_assignments.sql",
+  "014_loyalty_expiry.sql",
 ] as const;
 
 async function main() {

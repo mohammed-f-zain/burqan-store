@@ -25,6 +25,11 @@ import { parseQrPublicToken } from "../utils/qrToken.js";
 import { buildJordanVoronoiPayload } from "../utils/buildJordanVoronoiPayload.js";
 import { expandRepAreaIds } from "../utils/expandRepAreaIds.js";
 import {
+  awardLoyaltyPoints,
+  expireStoreLoyaltyIfNeeded,
+  getStoreLoyaltyState,
+} from "../utils/loyaltyExpiry.js";
+import {
   ammanDayOfWeek,
   ARABIC_WEEKDAY_NAMES,
   formatDistanceM,
@@ -242,7 +247,7 @@ router.get("/products", repAuthMiddleware, async (_req, res, next) => {
     res.json({ products: rows });
   } catch (e) {
     next(e);
-  }
+  } 
 });
 
 const qrQuerySchema = z.object({
@@ -1277,11 +1282,7 @@ router.get("/stores/:id/prizes", repAuthMiddleware, async (req, res, next) => {
     const storeId = z.coerce.number().int().positive().parse(req.params.id);
     const rep = req.rep!;
     await loadStoreForRep(storeId, rep);
-    const { rows: storeRows } = await query<{ loyalty_points_balance: number }>(
-      `SELECT loyalty_points_balance FROM stores WHERE id = $1`,
-      [storeId]
-    );
-    const balance = storeRows[0]?.loyalty_points_balance ?? 0;
+    const loyalty = await getStoreLoyaltyState(storeId);
     const { rows: products } = await query<{
       id: number;
       name: string;
@@ -1298,7 +1299,11 @@ router.get("/stores/:id/prizes", repAuthMiddleware, async (req, res, next) => {
        ORDER BY name ASC`
     );
     res.json({
-      loyaltyPointsBalance: balance,
+      loyaltyPointsBalance: loyalty.balance,
+      loyaltyExpiryDays: loyalty.expiryDays,
+      loyaltyPeriodStartedAt: loyalty.periodStartedAt,
+      loyaltyExpiresAt: loyalty.expiresAt,
+      loyaltyDaysRemaining: loyalty.daysRemaining,
       products: products.map((p) => ({
         id: p.id,
         name: p.name,
@@ -1367,6 +1372,7 @@ router.post("/prize-redemptions", repAuthMiddleware, async (req, res, next) => {
     const c = await pool.connect();
     try {
       await c.query("BEGIN");
+      await expireStoreLoyaltyIfNeeded(body.storeId, c);
       const balRes = await c.query<{ loyalty_points_balance: number }>(
         `SELECT loyalty_points_balance FROM stores WHERE id = $1 FOR UPDATE`,
         [body.storeId]
@@ -1533,11 +1539,7 @@ router.post("/orders", repAuthMiddleware, async (req, res, next) => {
         );
       }
       if (orderLoyaltyTotal > 0) {
-        await c.query(
-          `UPDATE stores SET loyalty_points_balance = loyalty_points_balance + $1, updated_at = now()
-           WHERE id = $2`,
-          [orderLoyaltyTotal, body.storeId]
-        );
+        await awardLoyaltyPoints(body.storeId, orderLoyaltyTotal, c);
       }
       await c.query("COMMIT");
       res.status(201).json({

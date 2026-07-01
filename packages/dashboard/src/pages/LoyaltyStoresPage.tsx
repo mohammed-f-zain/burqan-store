@@ -8,7 +8,8 @@ import TableFilterBar from "../components/TableFilterBar";
 import { useTableFilters } from "../hooks/useTableFilters";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
-import { toastError } from "../lib/toast";
+import { toastError, toastSuccess } from "../lib/toast";
+import { formatMarketDate } from "../utils/formatMarketDateTime";
 
 type LoyaltyStore = {
   id: number;
@@ -17,14 +18,24 @@ type LoyaltyStore = {
   owner_name: string;
   area_name: string;
   loyalty_points_balance: number;
+  first_loyalty_purchase_at: string | null;
+  loyalty_period_started_at: string | null;
+  days_remaining: number | null;
+  would_expire_now: boolean;
+  period_mismatch: boolean;
 };
 
-type SortKey = "balance" | "name" | "owner" | "phone" | "area";
+type SortKey = "balance" | "name" | "owner" | "phone" | "area" | "daysLeft" | "firstPurchase";
 
 export default function LoyaltyStoresPage() {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const navigate = useNavigate();
   const [stores, setStores] = useState<LoyaltyStore[]>([]);
+  const [expiryDays, setExpiryDays] = useState(120);
+  const [expiryDraft, setExpiryDraft] = useState("120");
+  const [wouldExpireCount, setWouldExpireCount] = useState(0);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>("balance");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
@@ -32,18 +43,42 @@ export default function LoyaltyStoresPage() {
   async function load() {
     setLoading(true);
     try {
-      const { data } = await api.get<{ stores: Record<string, unknown>[] }>("/stores");
+      const { data } = await api.get<{
+        expiryDays: number;
+        stores: {
+          storeId: number;
+          storeName: string;
+          ownerName: string;
+          phone: string;
+          areaName: string;
+          balance: number;
+          firstLoyaltyPurchaseAt: string | null;
+          periodStartedAt: string | null;
+          daysRemaining: number | null;
+          wouldExpireNow: boolean;
+          periodMismatch: boolean;
+        }[];
+      }>("/loyalty/period-audit");
+      const days = data.expiryDays ?? 120;
+      setExpiryDays(days);
+      setExpiryDraft(String(days));
       const rows = (data.stores ?? [])
+        .filter((s) => s.balance > 0)
         .map((s) => ({
-          id: Number(s.id),
-          name: String(s.name ?? ""),
-          phone: String(s.phone ?? ""),
-          owner_name: String(s.owner_name ?? ""),
-          area_name: String(s.area_name ?? ""),
-          loyalty_points_balance: Number(s.loyalty_points_balance ?? 0),
-        }))
-        .filter((s) => s.loyalty_points_balance > 0);
+          id: s.storeId,
+          name: s.storeName,
+          phone: s.phone,
+          owner_name: s.ownerName,
+          area_name: s.areaName,
+          loyalty_points_balance: s.balance,
+          first_loyalty_purchase_at: s.firstLoyaltyPurchaseAt,
+          loyalty_period_started_at: s.periodStartedAt,
+          days_remaining: s.daysRemaining,
+          would_expire_now: s.wouldExpireNow,
+          period_mismatch: s.periodMismatch,
+        }));
       setStores(rows);
+      setWouldExpireCount(rows.filter((s) => s.would_expire_now).length);
     } catch (e) {
       toastError(pickAxiosErrorMessage(e, t.loyaltyStores.loadFailed));
     } finally {
@@ -55,6 +90,40 @@ export default function LoyaltyStoresPage() {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- initial load
   }, []);
+
+  async function saveSettings(e: React.FormEvent) {
+    e.preventDefault();
+    const n = parseInt(expiryDraft, 10);
+    if (!Number.isFinite(n) || n < 1 || n > 3650) {
+      toastError(t.loyaltyStores.settingsInvalid);
+      return;
+    }
+    setSettingsSaving(true);
+    try {
+      const { data } = await api.patch<{ expiryDays: number }>("/loyalty/settings", { expiryDays: n });
+      setExpiryDays(data.expiryDays);
+      setExpiryDraft(String(data.expiryDays));
+      toastSuccess(t.loyaltyStores.settingsSaved);
+      await load();
+    } catch (err) {
+      toastError(pickAxiosErrorMessage(err, t.loyaltyStores.settingsSaveFailed));
+    } finally {
+      setSettingsSaving(false);
+    }
+  }
+
+  async function syncPeriods() {
+    setSyncing(true);
+    try {
+      const { data } = await api.post<{ updated: number }>("/loyalty/sync-periods");
+      toastSuccess(t.loyaltyStores.syncPeriodsDone(data.updated ?? 0));
+      await load();
+    } catch (err) {
+      toastError(pickAxiosErrorMessage(err, t.loyaltyStores.syncPeriodsFailed));
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   const areaFilterOptions = useMemo(() => {
     const names = new Set<string>();
@@ -96,6 +165,16 @@ export default function LoyaltyStoresPage() {
       switch (sortKey) {
         case "balance":
           return (a.loyalty_points_balance - b.loyalty_points_balance) * dir;
+        case "daysLeft": {
+          const da = a.days_remaining ?? 9999;
+          const db = b.days_remaining ?? 9999;
+          return (da - db) * dir;
+        }
+        case "firstPurchase": {
+          const da = a.first_loyalty_purchase_at ? new Date(a.first_loyalty_purchase_at).getTime() : 0;
+          const db = b.first_loyalty_purchase_at ? new Date(b.first_loyalty_purchase_at).getTime() : 0;
+          return (da - db) * dir;
+        }
         case "name":
           return a.name.localeCompare(b.name, "ar") * dir;
         case "owner":
@@ -127,13 +206,18 @@ export default function LoyaltyStoresPage() {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     } else {
       setSortKey(key);
-      setSortDir(key === "balance" ? "desc" : "asc");
+      setSortDir(key === "balance" || key === "daysLeft" ? "desc" : "asc");
     }
   }
 
   function sortIndicator(key: SortKey) {
     if (sortKey !== key) return null;
     return sortDir === "asc" ? " ↑" : " ↓";
+  }
+
+  function formatDate(iso: string | null) {
+    if (!iso) return "—";
+    return formatMarketDate(iso, locale);
   }
 
   return (
@@ -149,6 +233,39 @@ export default function LoyaltyStoresPage() {
           </div>
         </div>
 
+        <section className="loyalty-settings-card" aria-labelledby="loyalty-settings-title">
+          <div className="loyalty-settings-card-head">
+            <h3 id="loyalty-settings-title" className="loyalty-settings-title">
+              <LoyaltyIcon kind="star" size={20} />
+              {t.loyaltyStores.settingsTitle}
+            </h3>
+            <p className="muted loyalty-settings-hint">{t.loyaltyStores.settingsHint}</p>
+          </div>
+          <form className="loyalty-settings-form" onSubmit={(e) => void saveSettings(e)}>
+            <label className="loyalty-settings-field">
+              <span className="loyalty-settings-label">{t.loyaltyStores.settingsDaysLabel}</span>
+              <span className="loyalty-settings-input-wrap">
+                <input
+                  type="number"
+                  min={1}
+                  max={3650}
+                  className="loyalty-settings-input"
+                  value={expiryDraft}
+                  onChange={(e) => setExpiryDraft(e.target.value)}
+                  disabled={settingsSaving || syncing}
+                />
+                <span className="loyalty-settings-unit">{t.loyaltyStores.settingsDaysUnit}</span>
+              </span>
+            </label>
+            <button type="submit" className="btn btn-primary" disabled={settingsSaving || syncing}>
+              {settingsSaving ? t.common.loading : t.loyaltyStores.settingsSave}
+            </button>
+            <button type="button" className="btn btn-secondary" disabled={syncing || settingsSaving} onClick={() => void syncPeriods()}>
+              {syncing ? t.common.loading : t.loyaltyStores.syncPeriods}
+            </button>
+          </form>
+        </section>
+
         <div className="dash-kpi-grid dash-kpi-grid--loyalty" style={{ marginBottom: 16 }}>
           <div className="dash-kpi dash-kpi--accent dash-kpi--loyalty">
             <div className="dash-kpi-label">{t.loyaltyStores.statStores}</div>
@@ -161,6 +278,18 @@ export default function LoyaltyStoresPage() {
             </div>
             <div className="dash-kpi-value">{t.overview.loyaltyPoints(totalPoints)}</div>
           </div>
+          <div className="dash-kpi dash-kpi--loyalty">
+            <div className="dash-kpi-label">{t.loyaltyStores.statExpiryDays}</div>
+            <div className="dash-kpi-value">
+              {expiryDays} {t.loyaltyStores.settingsDaysUnit}
+            </div>
+          </div>
+          {wouldExpireCount > 0 && (
+            <div className="dash-kpi dash-kpi--loyalty loyalty-kpi--danger">
+              <div className="dash-kpi-label">{t.loyaltyStores.statWouldExpire}</div>
+              <div className="dash-kpi-value">{wouldExpireCount}</div>
+            </div>
+          )}
         </div>
 
         {loading ? (
@@ -221,9 +350,22 @@ export default function LoyaltyStoresPage() {
                       </button>
                     </th>
                     <th>
+                      <button type="button" className="th-sort" onClick={() => toggleSort("firstPurchase")}>
+                        {t.loyaltyStores.colFirstPurchase}
+                        {sortIndicator("firstPurchase")}
+                      </button>
+                    </th>
+                    <th>{t.loyaltyStores.colPeriodStart}</th>
+                    <th>
                       <button type="button" className="th-sort" onClick={() => toggleSort("balance")}>
                         {t.loyaltyStores.colBalance}
                         {sortIndicator("balance")}
+                      </button>
+                    </th>
+                    <th>
+                      <button type="button" className="th-sort" onClick={() => toggleSort("daysLeft")}>
+                        {t.loyaltyStores.colDaysLeft}
+                        {sortIndicator("daysLeft")}
                       </button>
                     </th>
                   </tr>
@@ -249,11 +391,31 @@ export default function LoyaltyStoresPage() {
                         {s.phone || "—"}
                       </td>
                       <td>{s.area_name}</td>
+                      <td className="small">{formatDate(s.first_loyalty_purchase_at)}</td>
+                      <td className="small">
+                        {formatDate(s.loyalty_period_started_at)}
+                        {s.period_mismatch ? (
+                          <span className="loyalty-mismatch-pill">{t.loyaltyStores.periodMismatch}</span>
+                        ) : null}
+                      </td>
                       <td>
                         <span className="dash-loyalty-inline">
                           <LoyaltyIcon kind="star" size={16} />
                           {t.overview.loyaltyPoints(s.loyalty_points_balance)}
                         </span>
+                      </td>
+                      <td>
+                        {s.days_remaining != null ? (
+                          <span
+                            className={`loyalty-days-pill${
+                              s.would_expire_now || s.days_remaining <= 14 ? " loyalty-days-pill--warn" : ""
+                            }`}
+                          >
+                            {s.would_expire_now ? t.loyaltyStores.wouldExpireBadge : t.loyaltyStores.daysLeft(s.days_remaining)}
+                          </span>
+                        ) : (
+                          "—"
+                        )}
                       </td>
                     </tr>
                   ))}

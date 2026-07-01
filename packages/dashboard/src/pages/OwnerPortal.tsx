@@ -2,12 +2,13 @@ import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import LoyaltyBadge from "../components/LoyaltyBadge";
+import OwnerLoyaltyExpiryCard from "../components/OwnerLoyaltyExpiryCard";
 import OwnerOverviewTab from "../components/OwnerOverviewTab";
 import OwnerProductDetailSheet, { type OwnerCatalogProduct } from "../components/OwnerProductDetailSheet";
 import { mediaUrl } from "../lib/mediaUrl";
 import { ownerFormatMoney } from "../owner/ownerFormat";
 import { useOwnerArabic } from "../owner/useOwnerArabic";
-import { formatMarketDateTime } from "../utils/formatMarketDateTime";
+import { formatMarketDate, formatMarketDateTime } from "../utils/formatMarketDateTime";
 import { publicApi } from "../publicApi";
 
 type Tab = "overview" | "products" | "prizes" | "visits";
@@ -34,6 +35,11 @@ type OwnerSummary = {
   loyalty: {
     balance: number;
     monthPointsEarned: number;
+    expiryDays: number;
+    periodStartedAt: string | null;
+    expiresAt: string | null;
+    daysRemaining: number | null;
+    periodActive: boolean;
   };
   totals: {
     deferredPurchases: number;
@@ -275,9 +281,12 @@ export default function OwnerPortal() {
             <p className="owner-muted" style={{ marginBottom: 12 }}>
               {t.owner.prizesViewOnly}
             </p>
-            <div className="owner-dash-hero-card owner-dash-hero-card--loyalty" style={{ marginBottom: 16 }}>
-              <span className="owner-dash-hero-kicker">{t.owner.loyaltyBalance}</span>
-              <p className="owner-dash-hero-value">{t.owner.loyaltyPoints(prizesBalance)}</p>
+            <div style={{ marginBottom: 16, maxWidth: 420 }}>
+              <OwnerLoyaltyExpiryCard
+                data={data.loyalty}
+                strings={t.owner}
+                formatDate={(iso) => formatMarketDate(iso, "ar")}
+              />
             </div>
             {prizesLoading ? (
               <p className="owner-muted">{t.common.loading}</p>
