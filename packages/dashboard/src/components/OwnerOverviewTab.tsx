@@ -67,13 +67,11 @@ export default function OwnerOverviewTab({ data, strings: o }: Props) {
 
   return (
     <div className="owner-dashboard">
-      <div className="owner-dash-hero owner-dash-hero--single">
-        <OwnerLoyaltyExpiryCard
-          data={data.loyalty}
-          strings={o}
-          formatDate={(iso) => formatMarketDate(iso, "ar")}
-        />
-      </div>
+      <OwnerLoyaltyExpiryCard
+        data={data.loyalty}
+        strings={o}
+        formatDate={(iso) => formatMarketDate(iso, "ar")}
+      />
 
       <section className="owner-dash-panel" aria-labelledby="owner-dash-activity">
         <h2 id="owner-dash-activity" className="owner-dash-panel-title">
