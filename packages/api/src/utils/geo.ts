@@ -4,7 +4,7 @@ import { config } from "../config.js";
 import { HttpError } from "./errors.js";
 import { haversineMeters } from "./geoDistance.js";
 
-export { resolveAreaIdForRep, resolveAreaIdFromAllAreas, type ResolvedArea } from "./geoResolve.js";
+export { resolveAreaIdForRep, resolveAreaIdFromAllAreas, resolveAreaForRepRoute, type ResolvedArea } from "./geoResolve.js";
 export { haversineMeters } from "./geoDistance.js";
 
 export const repLocationSchema = z.object({

@@ -32,6 +32,7 @@ export type DailyStoresLabels = {
   collapseAll: string;
   noSearchResults: string;
   visitQr: string;
+  nearestFirst?: string;
 };
 
 type AreaGroup = { areaName: string; stores: DailyStoreCard[] };
@@ -63,6 +64,24 @@ function parseAreaName(raw: string, unknownLabel: string): { title: string; subt
     if (GOVERNORATES.has(left)) return { title: right, subtitle: left };
   }
   return { title: t };
+}
+
+function sortZoneStores(stores: DailyStoreCard[], nearestFirst: boolean): DailyStoreCard[] {
+  return [...stores].sort((x, y) => {
+    if (nearestFirst && x.distanceM != null && y.distanceM != null) {
+      return x.distanceM - y.distanceM;
+    }
+    if (x.visitedToday !== y.visitedToday) return x.visitedToday ? 1 : -1;
+    return x.name.localeCompare(y.name, "ar");
+  });
+}
+
+function groupStoresByZone(
+  stores: DailyStoreCard[],
+  zoneName: string,
+  nearestFirst: boolean
+): AreaGroup[] {
+  return [{ areaName: zoneName, stores: sortZoneStores(stores, nearestFirst) }];
 }
 
 function groupStoresByArea(stores: DailyStoreCard[], repAreaNames: string[]): AreaGroup[] {
@@ -132,6 +151,9 @@ type Props = {
   loading: boolean;
   labels: DailyStoresLabels;
   title: string;
+  zoneName?: string | null;
+  dayName?: string | null;
+  nearestFirst?: boolean;
   onSelectStore: (store: DailyStoreCard) => void;
 };
 
@@ -141,6 +163,9 @@ export default function DailyStoresByArea({
   loading,
   labels,
   title,
+  zoneName,
+  dayName,
+  nearestFirst = false,
   onSelectStore,
 }: Props) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -156,18 +181,23 @@ export default function DailyStoresByArea({
     });
   }, [stores, search, filter]);
 
-  const groups = useMemo(
-    () => sortGroupsPendingFirst(groupStoresByArea(filteredStores, repAreaNames)),
-    [filteredStores, repAreaNames]
-  );
+  const groups = useMemo(() => {
+    if (zoneName?.trim()) {
+      return groupStoresByZone(filteredStores, zoneName.trim(), nearestFirst);
+    }
+    return sortGroupsPendingFirst(groupStoresByArea(filteredStores, repAreaNames));
+  }, [filteredStores, repAreaNames, zoneName, nearestFirst]);
 
   useEffect(() => {
     if (!stores.length) {
       setExpanded({});
       return;
     }
-    setExpanded(defaultExpanded(sortGroupsPendingFirst(groupStoresByArea(stores, repAreaNames))));
-  }, [stores, repAreaNames]);
+    const baseGroups = zoneName?.trim()
+      ? groupStoresByZone(stores, zoneName.trim(), nearestFirst)
+      : sortGroupsPendingFirst(groupStoresByArea(stores, repAreaNames));
+    setExpanded(defaultExpanded(baseGroups));
+  }, [stores, repAreaNames, zoneName, nearestFirst]);
 
   const areaKey = (name: string) => name || "__unknown__";
 
@@ -207,6 +237,10 @@ export default function DailyStoresByArea({
       ) : (
         <Text style={styles.hint}>{labels.hint}</Text>
       )}
+
+      {!loading && stores.length > 0 && nearestFirst && labels.nearestFirst ? (
+        <Text style={styles.nearestHint}>{labels.nearestFirst}</Text>
+      ) : null}
 
       {!loading && stores.length > 0 ? (
         <>
@@ -287,7 +321,10 @@ export default function DailyStoresByArea({
             const visited = group.stores.filter((s) => s.visitedToday).length;
             const pending = group.stores.length - visited;
             const areaProgress = group.stores.length > 0 ? visited / group.stores.length : 0;
-            const areaDisplay = parseAreaName(group.areaName, labels.unknownArea);
+            const isZoneGroup = Boolean(zoneName?.trim() && group.areaName === zoneName.trim());
+            const areaDisplay = isZoneGroup
+              ? { title: group.areaName, subtitle: dayName ?? undefined }
+              : parseAreaName(group.areaName, labels.unknownArea);
             const allDone = group.stores.length > 0 && pending === 0;
 
             return (
@@ -303,7 +340,7 @@ export default function DailyStoresByArea({
                 >
                   <View style={[styles.areaIconWrap, allDone && styles.areaIconWrapDone]}>
                     <Ionicons
-                      name={allDone ? "checkmark-circle" : "location"}
+                      name={allDone ? "checkmark-circle" : isZoneGroup ? "navigate" : "location"}
                       size={20}
                       color={allDone ? "#16a34a" : accent}
                     />
@@ -340,6 +377,7 @@ export default function DailyStoresByArea({
                         key={s.id}
                         store={s}
                         isLast={idx === group.stores.length - 1}
+                        rank={nearestFirst && isZoneGroup ? idx + 1 : undefined}
                         visitedLabel={labels.visited}
                         visitQrLabel={labels.visitQr}
                         onPress={() => onSelectStore(s)}
@@ -358,12 +396,14 @@ export default function DailyStoresByArea({
 function StoreRow({
   store,
   isLast,
+  rank,
   visitedLabel,
   visitQrLabel,
   onPress,
 }: {
   store: DailyStoreCard;
   isLast: boolean;
+  rank?: number;
   visitedLabel: string;
   visitQrLabel: string;
   onPress: () => void;
@@ -379,16 +419,30 @@ function StoreRow({
       ]}
       onPress={onPress}
     >
-      <View
-        style={[
-          styles.storeStatusDot,
-          done ? styles.storeStatusDone : styles.storeStatusPending,
-        ]}
-      />
+      {rank != null ? (
+        <View style={styles.rankBadge}>
+          <Text style={styles.rankText}>{rank}</Text>
+        </View>
+      ) : (
+        <View
+          style={[
+            styles.storeStatusDot,
+            done ? styles.storeStatusDone : styles.storeStatusPending,
+          ]}
+        />
+      )}
       <View style={styles.storeBody}>
-        <Text style={styles.storeName} numberOfLines={1}>
-          {store.name}
-        </Text>
+        <View style={styles.storeTopRow}>
+          <Text style={styles.storeName} numberOfLines={1}>
+            {store.name}
+          </Text>
+          {store.distanceLabel ? (
+            <View style={styles.distBadge}>
+              <Ionicons name="location-sharp" size={11} color={accent} />
+              <Text style={styles.distText}>{store.distanceLabel}</Text>
+            </View>
+          ) : null}
+        </View>
         <Text style={styles.storeMeta} numberOfLines={1}>
           {store.ownerName}
         </Text>
@@ -436,6 +490,13 @@ const styles = StyleSheet.create({
   },
   headerBadgeText: { color: accent, fontSize: 12, fontWeight: "800" },
   hint: { color: muted, fontSize: 13, marginTop: 8, textAlign: "right", lineHeight: 20 },
+  nearestHint: {
+    color: accent,
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 8,
+    textAlign: "right",
+  },
   progressBlock: { marginTop: 14 },
   progressLabels: {
     flexDirection: "row-reverse",
@@ -586,7 +647,32 @@ const styles = StyleSheet.create({
   storeStatusPending: { backgroundColor: "#f59e0b" },
   storeStatusDone: { backgroundColor: "#16a34a" },
   storeBody: { flex: 1, minWidth: 0 },
-  storeName: { color: text, fontSize: 15, fontWeight: "800", textAlign: "right" },
+  storeTopRow: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  storeName: { color: text, fontSize: 15, fontWeight: "800", textAlign: "right", flex: 1 },
+  distBadge: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: accentSoft,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+  },
+  distText: { color: accent, fontSize: 11, fontWeight: "800" },
+  rankBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: accentSoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  rankText: { color: accent, fontSize: 12, fontWeight: "800" },
   storeMeta: { color: muted, fontSize: 13, marginTop: 3, textAlign: "right" },
   storeNote: { color: muted, fontSize: 12, marginTop: 6, textAlign: "right", fontStyle: "italic" },
   visitedPill: {

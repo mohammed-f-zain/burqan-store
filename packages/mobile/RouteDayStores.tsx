@@ -20,6 +20,8 @@ export type RouteDayLabels = {
   today: (day: string, zone: string) => string;
   areasIncluded: string;
   storesCount: (n: number) => string;
+  possibleCount: (n: number) => string;
+  possiblePill: string;
   nearestFirst: string;
   empty: string;
   noSchedule: string;
@@ -78,6 +80,8 @@ export default function RouteDayStores(props: Props) {
   }, [stores, search, filter]);
 
   const visitedCount = stores.filter((s) => s.visitedToday).length;
+  const possibleCount = stores.filter((s) => s.source === "prospect").length;
+  const isPossible = (s: DailyStoreCard) => s.source === "prospect";
 
   if (loading && !meta) {
     return (
@@ -116,15 +120,11 @@ export default function RouteDayStores(props: Props) {
             <Text style={styles.heroSub}>{labels.today(dayName, zoneName)}</Text>
           </View>
         </View>
-        {meta.routeZone?.areas?.length ? (
-          <Text style={styles.heroAreas} numberOfLines={3}>
-            {labels.areasIncluded}: {meta.routeZone.areas.join("، ")}
-          </Text>
-        ) : null}
         <View style={styles.heroStats}>
           <Text style={styles.heroStat}>{labels.storesCount(stores.length)}</Text>
           <Text style={styles.heroStatMuted}>
             {visitedCount} {labels.visited} · {stores.length - visitedCount} {labels.pending}
+            {possibleCount > 0 ? ` · ${labels.possibleCount(possibleCount)}` : ""}
           </Text>
         </View>
         <Text style={styles.nearestHint}>{labels.nearestFirst}</Text>
@@ -165,12 +165,18 @@ export default function RouteDayStores(props: Props) {
         ) : (
           filtered.map((s, index) => (
             <Pressable
-              key={s.id}
-              style={[styles.storeCard, s.visitedToday && styles.storeCardDone]}
+              key={`${s.source ?? "burqan"}-${s.id}`}
+              style={[
+                styles.storeCard,
+                s.visitedToday && styles.storeCardDone,
+                isPossible(s) && styles.storeCardPossible,
+              ]}
               onPress={() => props.onSelectStore(s)}
             >
-              <View style={styles.rankBadge}>
-                <Text style={styles.rankText}>{index + 1}</Text>
+              <View style={[styles.rankBadge, isPossible(s) && styles.rankBadgePossible]}>
+                <Text style={[styles.rankText, isPossible(s) && styles.rankTextPossible]}>
+                  {index + 1}
+                </Text>
               </View>
               <View style={styles.storeBody}>
                 <View style={styles.storeTopRow}>
@@ -184,10 +190,16 @@ export default function RouteDayStores(props: Props) {
                     </View>
                   ) : null}
                 </View>
-                <Text style={styles.storeMeta} numberOfLines={1}>
-                  {s.ownerName}
-                  {s.areaName ? ` · ${s.areaName}` : ""}
-                </Text>
+                <View style={styles.storeMetaRow}>
+                  {isPossible(s) ? (
+                    <View style={styles.possiblePill}>
+                      <Text style={styles.possiblePillText}>{labels.possiblePill}</Text>
+                    </View>
+                  ) : null}
+                  <Text style={styles.storeMeta} numberOfLines={1}>
+                    {s.ownerName?.trim() || s.addressText?.trim() || "—"}
+                  </Text>
+                </View>
                 {s.visitedToday ? (
                   <View style={styles.donePill}>
                     <Text style={styles.donePillText}>{labels.visited}</Text>
@@ -310,6 +322,7 @@ const styles = StyleSheet.create({
     ...theme.shadow.card,
   },
   storeCardDone: { backgroundColor: "#f0fdf4", borderColor: "rgba(22, 163, 74, 0.35)" },
+  storeCardPossible: { backgroundColor: "#fffbeb", borderColor: "rgba(245, 158, 11, 0.35)" },
   rankBadge: {
     width: 32,
     height: 32,
@@ -319,8 +332,26 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   rankText: { color: theme.accentDark, fontWeight: "800", fontSize: 14 },
+  rankBadgePossible: { backgroundColor: "#fef3c7" },
+  rankTextPossible: { color: "#b45309" },
   storeBody: { flex: 1, minWidth: 0 },
   storeTopRow: { flexDirection: "row-reverse", alignItems: "center", gap: 8 },
+  storeMetaRow: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 4,
+    flexWrap: "wrap",
+  },
+  possiblePill: {
+    backgroundColor: "#fef3c7",
+    borderColor: "#f59e0b",
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: theme.radius.pill,
+  },
+  possiblePillText: { color: "#b45309", fontSize: 10, fontWeight: "800" },
   storeName: { flex: 1, color: theme.text, fontSize: 16, fontWeight: "800", textAlign: "right" },
   distBadge: {
     flexDirection: "row-reverse",
@@ -332,7 +363,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.pill,
   },
   distText: { color: theme.accentDark, fontSize: 11, fontWeight: "800" },
-  storeMeta: { color: theme.muted, fontSize: 13, marginTop: 4, textAlign: "right" },
+  storeMeta: { color: theme.muted, fontSize: 13, textAlign: "right", flex: 1 },
   donePill: {
     alignSelf: "flex-end",
     marginTop: 8,

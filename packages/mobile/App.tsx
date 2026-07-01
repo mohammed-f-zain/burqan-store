@@ -178,10 +178,12 @@ const t = {
   navHome: "الرئيسية",
   navRoute: "مسار اليوم",
   routeDayTitle: "مسار اليوم",
-  routeDaySubtitle: "متاجر منطقتك المجدولة — الأقرب أولاً",
+  routeDaySubtitle: "متاجر مسار اليوم وعملاء محتملون — الأقرب أولاً",
   routeDayToday: (day: string, zone: string) => `${day} · ${zone}`,
   routeDayAreas: "المناطق",
-  routeDayStoresCount: (n: number) => `${n} متجر`,
+  routeDayStoresCount: (n: number) => `${n} موقع`,
+  routeDayPossibleCount: (n: number) => `${n} محتمل`,
+  routeDayPossiblePill: "محتمل",
   routeDayNearest: "مرتّبة حسب المسافة من موقعك الحالي",
   routeDayEmpty: "لا متاجر في مسار اليوم.",
   routeDayNoSchedule: "لا يوجد مسار مجدول لهذا اليوم — راجع الإدارة.",
@@ -207,9 +209,10 @@ const t = {
   sessionExpired: "انتهت الجلسة — سجّل الدخول مرة أخرى",
   welcome: (name: string) => `مرحباً، ${name}`,
   homeSubtitle: "امسح رمز المتجر لبدء الزيارة والبيع",
-  dailyStoresTitle: "متاجر مناطقي اليوم",
+  dailyStoresTitle: "مسار اليوم",
   dailyStoresHint: "بعد الزيارة يظهر ✓ تمت زيارته — تبقى في القائمة حتى اليوم التالي",
-  dailyStoresEmpty: "لا متاجر في مناطقك",
+  dailyStoresEmpty: "لا متاجر في مسار اليوم",
+  dailyStoresNearestFirst: "ترتيب من الأقرب لموقعك",
   dailyStoresAllVisited: "تمت زيارة كل المتاجر اليوم — أحسنت!",
   dailyStoresCount: (visited: number, total: number) => `${visited} / ${total} تمت زيارته`,
   dailyStoresVisited: "تمت زيارته",
@@ -331,9 +334,11 @@ import OrderInvoiceModal from "./OrderInvoiceModal";
 import StoreCartPanel from "./StoreCartPanel";
 import StorePeekModal from "./StorePeekModal";
 import ProspectPeekModal from "./ProspectPeekModal";
+import RegisterErrorBoundary from "./RegisterErrorBoundary";
 import type { ReceiptData } from "./receiptFormat";
 import type { DailyStoreCard, PrizeProduct, ProspectCard, StoreBrief } from "./storeTypes";
 import { normalizeStoreBrief } from "./storeTypes";
+import { sortDailyStoreCardsByDistance } from "./geoDistance";
 export type { StoreBrief } from "./storeTypes";
 
 type BottomTab = "home" | "route" | "google" | "inventory" | "store" | "profile";
@@ -467,6 +472,12 @@ export default function App() {
   const [convertingProspectId, setConvertingProspectId] = useState<number | null>(null);
   const [googlePlacesReady, setGooglePlacesReady] = useState(true);
   const [dailyStoresLoading, setDailyStoresLoading] = useState(false);
+  const [dailyMeta, setDailyMeta] = useState<{
+    zoneName?: string;
+    dayName?: string;
+    message?: string;
+    nearestFirst?: boolean;
+  } | null>(null);
   const [googlePlacesLoading, setGooglePlacesLoading] = useState(false);
   const [googlePlacesTotal, setGooglePlacesTotal] = useState(0);
   const [googleAreaSummaries, setGoogleAreaSummaries] = useState<GooglePlaceAreaSummary[]>([]);
@@ -697,14 +708,40 @@ export default function App() {
     if (!token) return;
     setDailyStoresLoading(true);
     try {
-      const data = await apiGet("/api/v1/rep/stores/daily");
-      const burqan = (data.stores ?? []) as DailyStoreCard[];
+      let nearestFirst = false;
+      let repLat = 0;
+      let repLng = 0;
+      try {
+        const pos = await getRepPosition({ timeoutMs: 12_000 });
+        repLat = pos.lat;
+        repLng = pos.lng;
+        nearestFirst = true;
+      } catch {
+        // load without nearest-first sort
+      }
+      const data = (await apiGet("/api/v1/rep/stores/daily")) as {
+        stores?: DailyStoreCard[];
+        googlePlacesReady?: boolean;
+        routeToday?: { dayName?: string; zoneName?: string } | null;
+        message?: string;
+      };
+      let burqan = (data.stores ?? []) as DailyStoreCard[];
+      if (nearestFirst && burqan.length > 0) {
+        burqan = sortDailyStoreCardsByDistance(burqan, repLat, repLng);
+      }
       setDailyStores(burqan);
+      setDailyMeta({
+        zoneName: data.routeToday?.zoneName,
+        dayName: data.routeToday?.dayName,
+        message: data.message,
+        nearestFirst,
+      });
       if (typeof data.googlePlacesReady === "boolean") {
         setGooglePlacesReady(data.googlePlacesReady);
       }
     } catch {
       setDailyStores([]);
+      setDailyMeta(null);
     } finally {
       setDailyStoresLoading(false);
     }
@@ -717,22 +754,47 @@ export default function App() {
     try {
       const pos = await getRepPosition({ timeoutMs: 20_000 });
       setRouteLocating(false);
-      const data = (await apiGet(
-        `/api/v1/rep/stores/route?lat=${pos.lat}&lng=${pos.lng}`
-      )) as {
-        active?: boolean;
-        dayName?: string;
-        routeZone?: { id: number; name: string; notes?: string | null; areas?: string[] };
-        message?: string;
-        stores?: DailyStoreCard[];
-      };
+      const [routeData, prospectData] = await Promise.all([
+        apiGet(`/api/v1/rep/stores/route?lat=${pos.lat}&lng=${pos.lng}`) as Promise<{
+          active?: boolean;
+          dayName?: string;
+          routeZone?: { id: number; name: string; notes?: string | null; areas?: string[] };
+          message?: string;
+          stores?: DailyStoreCard[];
+        }>,
+        apiGet("/api/v1/rep/prospect-stores") as Promise<{
+          prospects?: Array<{
+            id: number;
+            name: string;
+            phone: string;
+            ownerName: string;
+            location: { lat: number; lng: number };
+            addressText?: string | null;
+            areaName?: string | null;
+            visitedToday?: boolean;
+          }>;
+        }>,
+      ]);
       setRouteMeta({
-        active: Boolean(data.active),
-        dayName: data.dayName,
-        routeZone: data.routeZone,
-        message: data.message,
+        active: Boolean(routeData.active),
+        dayName: routeData.dayName,
+        routeZone: routeData.routeZone,
+        message: routeData.message,
       });
-      setRouteStores(Array.isArray(data.stores) ? data.stores : []);
+      const burqan = Array.isArray(routeData.stores) ? routeData.stores : [];
+      const prospects: DailyStoreCard[] = (prospectData.prospects ?? []).map((p) => ({
+        id: p.id,
+        source: "prospect" as const,
+        name: p.name,
+        phone: p.phone,
+        ownerName: p.ownerName,
+        location: p.location,
+        addressText: p.addressText ?? null,
+        areaName: p.areaName ?? null,
+        deferredPaymentEnabled: false,
+        visitedToday: p.visitedToday,
+      }));
+      setRouteStores(sortDailyStoreCardsByDistance([...burqan, ...prospects], pos.lat, pos.lng));
     } catch (e) {
       setRouteStores([]);
       setRouteMeta({
@@ -1692,10 +1754,13 @@ export default function App() {
             stores={dailyStores}
             repAreaNames={repAreaNames}
             loading={dailyStoresLoading}
-            title={t.dailyStoresTitle}
+            title={dailyMeta?.zoneName ?? t.dailyStoresTitle}
+            zoneName={dailyMeta?.zoneName}
+            dayName={dailyMeta?.dayName}
+            nearestFirst={dailyMeta?.nearestFirst}
             labels={{
-              hint: t.dailyStoresHint,
-              empty: t.dailyStoresEmpty,
+              hint: dailyMeta?.message ?? t.dailyStoresHint,
+              empty: dailyMeta?.message ?? t.dailyStoresEmpty,
               allVisited: t.dailyStoresAllVisited,
               count: t.dailyStoresCount,
               visited: t.dailyStoresVisited,
@@ -1711,6 +1776,7 @@ export default function App() {
               collapseAll: t.dailyStoresCollapseAll,
               noSearchResults: t.dailyStoresNoSearchResults,
               visitQr: t.dailyStoresVisitQr,
+              nearestFirst: t.dailyStoresNearestFirst,
             }}
             onSelectStore={setPeekStore}
           />
@@ -1730,6 +1796,8 @@ export default function App() {
             today: t.routeDayToday,
             areasIncluded: t.routeDayAreas,
             storesCount: t.routeDayStoresCount,
+            possibleCount: t.routeDayPossibleCount,
+            possiblePill: t.routeDayPossiblePill,
             nearestFirst: t.routeDayNearest,
             empty: t.routeDayEmpty,
             noSchedule: t.routeDayNoSchedule,
@@ -1750,7 +1818,22 @@ export default function App() {
             setRouteRefreshing(true);
             void loadRouteStores();
           }}
-          onSelectStore={setPeekStore}
+          onSelectStore={(s) => {
+            if (s.source === "prospect") {
+              setPeekProspect({
+                id: s.id,
+                name: s.name,
+                phone: s.phone,
+                ownerName: s.ownerName,
+                location: s.location,
+                addressText: s.addressText,
+                areaName: s.areaName,
+                visitedToday: s.visitedToday,
+              });
+              return;
+            }
+            setPeekStore(s);
+          }}
         />
       )}
 

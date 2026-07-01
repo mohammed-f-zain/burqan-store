@@ -112,3 +112,17 @@ export async function resolveAreaIdFromAllAreas(lat: number, lng: number): Promi
 
   return resolveWithGoogleThenCircles(lat, lng, rows);
 }
+
+/** Prefer today's route zone; fall back to all Jordan when no schedule. */
+export async function resolveAreaForRepRoute(
+  lat: number,
+  lng: number,
+  expandedAreaIds: number[]
+): Promise<ResolvedArea & { assignedToRep: boolean }> {
+  if (expandedAreaIds.length) {
+    const resolved = await resolveAreaIdForRep(lat, lng, expandedAreaIds);
+    return { ...resolved, assignedToRep: true };
+  }
+  const resolved = await resolveAreaIdFromAllAreas(lat, lng);
+  return { ...resolved, assignedToRep: false };
+}

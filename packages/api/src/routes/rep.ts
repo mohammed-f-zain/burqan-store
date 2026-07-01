@@ -19,7 +19,7 @@ import {
   assertWithinScanDistance,
   repLocationSchema,
   resolveAreaIdForRep,
-  resolveAreaIdFromAllAreas,
+  resolveAreaForRepRoute,
 } from "../utils/geo.js";
 import { parseQrPublicToken } from "../utils/qrToken.js";
 import { buildJordanVoronoiPayload } from "../utils/buildJordanVoronoiPayload.js";
@@ -162,9 +162,11 @@ router.get("/areas/resolve", repAuthMiddleware, async (req, res, next) => {
     const forRegister = req.query.forRegister === "1" || req.query.forRegister === "true";
     const rep = req.rep!;
     const today = await getRepTodayWorkAreaIds(rep.id);
-    const resolved = forRegister
-      ? await resolveAreaIdFromAllAreas(lat, lng)
-      : await resolveAreaIdForRep(lat, lng, today.expandedAreaIds);
+    if (forRegister) {
+      const resolved = await resolveAreaForRepRoute(lat, lng, today.expandedAreaIds);
+      return res.json(resolved);
+    }
+    const resolved = await resolveAreaIdForRep(lat, lng, today.expandedAreaIds);
     res.json({
       ...resolved,
       assignedToRep: today.expandedAreaIds.includes(resolved.areaId),
@@ -370,7 +372,12 @@ router.post("/stores/register", repAuthMiddleware, async (req, res, next) => {
   try {
     const body = registerStoreSchema.parse(req.body);
     const rep = req.rep!;
-    const resolved = await resolveAreaIdFromAllAreas(body.locationLat, body.locationLng);
+    const today = await getRepTodayWorkAreaIds(rep.id);
+    const resolved = await resolveAreaForRepRoute(
+      body.locationLat,
+      body.locationLng,
+      today.expandedAreaIds
+    );
     const areaId = resolved.areaId;
 
     const c = await pool.connect();
@@ -413,11 +420,10 @@ router.post("/stores/register", repAuthMiddleware, async (req, res, next) => {
       );
       await c.query("COMMIT");
       const store = await loadStoreForRep(storeId, rep);
-      const today = await getRepTodayWorkAreaIds(rep.id);
       res.status(201).json({
         store,
         areaName: resolved.areaName,
-        assignedToRep: today.expandedAreaIds.includes(areaId),
+        assignedToRep: resolved.assignedToRep,
       });
     } catch (e) {
       await c.query("ROLLBACK");
@@ -563,7 +569,12 @@ router.post("/prospect-stores", repAuthMiddleware, async (req, res, next) => {
   try {
     const body = prospectStoreSchema.parse(req.body);
     const rep = req.rep!;
-    const resolved = await resolveAreaIdFromAllAreas(body.locationLat, body.locationLng);
+    const today = await getRepTodayWorkAreaIds(rep.id);
+    const resolved = await resolveAreaForRepRoute(
+      body.locationLat,
+      body.locationLng,
+      today.expandedAreaIds
+    );
     const { rows } = await query<{ id: number }>(
       `INSERT INTO prospect_stores (
          name, phone, owner_name, location_lat, location_lng, address_text, image_url,
@@ -589,11 +600,10 @@ router.post("/prospect-stores", repAuthMiddleware, async (req, res, next) => {
       [prospectId, rep.id, "Initial visit"]
     );
     const loaded = await loadProspectForRep(prospectId, rep);
-    const today = await getRepTodayWorkAreaIds(rep.id);
     res.status(201).json({
       prospect: mapProspectRow(loaded),
       areaName: resolved.areaName,
-      assignedToRep: today.expandedAreaIds.includes(resolved.areaId),
+      assignedToRep: resolved.assignedToRep,
     });
   } catch (e) {
     next(e);
@@ -1141,7 +1151,12 @@ router.patch("/stores/:id", repAuthMiddleware, async (req, res, next) => {
       vals.push(body.imageUrl);
     }
     if (body.locationLat !== undefined && body.locationLng !== undefined) {
-      const resolved = await resolveAreaIdFromAllAreas(body.locationLat, body.locationLng);
+      const today = await getRepTodayWorkAreaIds(rep.id);
+      const resolved = await resolveAreaForRepRoute(
+        body.locationLat,
+        body.locationLng,
+        today.expandedAreaIds
+      );
       sets.push(`location_lat = $${i++}`);
       vals.push(body.locationLat);
       sets.push(`location_lng = $${i++}`);

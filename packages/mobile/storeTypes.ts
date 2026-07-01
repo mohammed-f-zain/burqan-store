@@ -11,8 +11,8 @@ export type ProspectCard = {
 
 export type DailyStoreCard = {
   id: number;
-  /** burqan = registered with QR; google = prospect from Google Maps */
-  source?: "burqan" | "google";
+  /** burqan = registered with QR; google = prospect from Google Maps; prospect = manual possible client */
+  source?: "burqan" | "google" | "prospect";
   name: string;
   phone: string;
   ownerName: string;
