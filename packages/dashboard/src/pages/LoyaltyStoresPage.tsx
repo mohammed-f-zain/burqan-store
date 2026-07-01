@@ -59,31 +59,77 @@ export default function LoyaltyStoresPage() {
           periodMismatch: boolean;
         }[];
       }>("/loyalty/period-audit");
-      const days = data.expiryDays ?? 120;
-      setExpiryDays(days);
-      setExpiryDraft(String(days));
-      const rows = (data.stores ?? [])
-        .filter((s) => s.balance > 0)
-        .map((s) => ({
-          id: s.storeId,
-          name: s.storeName,
-          phone: s.phone,
-          owner_name: s.ownerName,
-          area_name: s.areaName,
-          loyalty_points_balance: s.balance,
-          first_loyalty_purchase_at: s.firstLoyaltyPurchaseAt,
-          loyalty_period_started_at: s.periodStartedAt,
-          days_remaining: s.daysRemaining,
-          would_expire_now: s.wouldExpireNow,
-          period_mismatch: s.periodMismatch,
-        }));
-      setStores(rows);
-      setWouldExpireCount(rows.filter((s) => s.would_expire_now).length);
+      applyAudit(data);
     } catch (e) {
-      toastError(pickAxiosErrorMessage(e, t.loyaltyStores.loadFailed));
+      try {
+        const [storesRes, settingsRes] = await Promise.all([
+          api.get<{ stores: Record<string, unknown>[] }>("/stores"),
+          api.get<{ expiryDays: number }>("/loyalty/settings"),
+        ]);
+        const days = settingsRes.data.expiryDays ?? 120;
+        setExpiryDays(days);
+        setExpiryDraft(String(days));
+        const rows = (storesRes.data.stores ?? [])
+          .filter((s) => Number(s.loyalty_points_balance ?? 0) > 0)
+          .map((s) => ({
+            id: Number(s.id),
+            name: String(s.name ?? ""),
+            phone: String(s.phone ?? ""),
+            owner_name: String(s.owner_name ?? ""),
+            area_name: String(s.area_name ?? ""),
+            loyalty_points_balance: Number(s.loyalty_points_balance ?? 0),
+            first_loyalty_purchase_at: null,
+            loyalty_period_started_at: s.loyalty_period_started_at ? String(s.loyalty_period_started_at) : null,
+            days_remaining: null,
+            would_expire_now: false,
+            period_mismatch: false,
+          }));
+        setStores(rows);
+        setWouldExpireCount(0);
+      } catch {
+        toastError(pickAxiosErrorMessage(e, t.loyaltyStores.loadFailed));
+      }
     } finally {
       setLoading(false);
     }
+  }
+
+  function applyAudit(data: {
+    expiryDays: number;
+    stores: {
+      storeId: number;
+      storeName: string;
+      ownerName: string;
+      phone: string;
+      areaName: string;
+      balance: number;
+      firstLoyaltyPurchaseAt: string | null;
+      periodStartedAt: string | null;
+      daysRemaining: number | null;
+      wouldExpireNow: boolean;
+      periodMismatch: boolean;
+    }[];
+  }) {
+    const days = data.expiryDays ?? 120;
+    setExpiryDays(days);
+    setExpiryDraft(String(days));
+    const rows = (data.stores ?? [])
+      .filter((s) => s.balance > 0)
+      .map((s) => ({
+        id: s.storeId,
+        name: s.storeName,
+        phone: s.phone,
+        owner_name: s.ownerName,
+        area_name: s.areaName,
+        loyalty_points_balance: s.balance,
+        first_loyalty_purchase_at: s.firstLoyaltyPurchaseAt,
+        loyalty_period_started_at: s.periodStartedAt,
+        days_remaining: s.daysRemaining,
+        would_expire_now: s.wouldExpireNow,
+        period_mismatch: s.periodMismatch,
+      }));
+    setStores(rows);
+    setWouldExpireCount(rows.filter((s) => s.would_expire_now).length);
   }
 
   useEffect(() => {

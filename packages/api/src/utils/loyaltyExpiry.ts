@@ -118,7 +118,7 @@ export async function awardLoyaltyPoints(
 }
 
 const FIRST_LOYALTY_PURCHASE_SQL = `
-  SELECT o.store_id, MIN(o.created_at) AS first_at
+  SELECT o.store_id, MIN(o.created_at) AS first_loyalty_at
   FROM orders o
   JOIN order_lines ol ON ol.order_id = o.id
   WHERE ol.loyalty_points_earned > 0
@@ -129,12 +129,12 @@ const FIRST_LOYALTY_PURCHASE_SQL = `
 export async function syncLoyaltyPeriodsFromFirstPurchase(): Promise<{ updated: number }> {
   const { rowCount } = await query(
     `UPDATE stores s
-     SET loyalty_period_started_at = sub.first_at,
+     SET loyalty_period_started_at = sub.first_loyalty_at,
          updated_at = now()
      FROM (${FIRST_LOYALTY_PURCHASE_SQL}) sub
      WHERE s.id = sub.store_id
        AND (s.loyalty_period_started_at IS NULL
-            OR s.loyalty_period_started_at IS DISTINCT FROM sub.first_at)`
+            OR s.loyalty_period_started_at IS DISTINCT FROM sub.first_loyalty_at)`
   );
   const { rowCount: manualCount } = await query(
     `UPDATE stores
