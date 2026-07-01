@@ -693,6 +693,8 @@ export const en: Messages = {
     loyaltyDaysFraction: (remaining: number, total: number) => `${remaining} of ${total} days`,
     loyaltyExpiresOnDate: (date: string) => `Points expire on: ${date}`,
     loyaltyExpiresToday: "Your points expire today",
+    loyaltyPeriodChip: (days: number) => `${days}-day validity period`,
+    loyaltyPercentRemaining: (n: number) => `${n}%`,
     loyaltyRecentTitle: "Recent points earned",
     loyaltyPerUnit: (n: number) => `${n} pts / unit`,
     loyaltyLinePoints: (n: number) => `+${n} pts`,

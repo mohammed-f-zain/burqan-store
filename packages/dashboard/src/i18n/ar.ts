@@ -691,6 +691,8 @@ export const ar = {
     loyaltyDaysFraction: (remaining: number, total: number) => `${remaining} من ${total} يوم`,
     loyaltyExpiresOnDate: (date: string) => `تنتهي النقاط في: ${date}`,
     loyaltyExpiresToday: "تنتهي نقاطك اليوم",
+    loyaltyPeriodChip: (days: number) => `مدة الصلاحية ${days} يوم`,
+    loyaltyPercentRemaining: (n: number) => `${n}%`,
     loyaltyRecentTitle: "آخر نقاط مكتسبة",
     loyaltyPerUnit: (n: number) => `${n} نقطة / وحدة`,
     loyaltyLinePoints: (n: number) => `+${n} نقطة`,
