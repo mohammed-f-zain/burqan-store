@@ -5,7 +5,7 @@ import SectionTitleWithIcon from "./SectionTitleWithIcon";
 import type { ar } from "../i18n/ar";
 import { mediaUrl } from "../lib/mediaUrl";
 import { ownerFormatMoney } from "../owner/ownerFormat";
-import { formatMarketDate, formatMarketDateTime } from "../utils/formatMarketDateTime";
+import { formatMarketDateTime } from "../utils/formatMarketDateTime";
 
 type OverviewData = {
   loyalty: {
@@ -68,11 +68,7 @@ export default function OwnerOverviewTab({ data, strings: o }: Props) {
   return (
     <div className="owner-dashboard">
       <div className="owner-dash-hero owner-dash-hero--single">
-        <OwnerLoyaltyExpiryCard
-          data={data.loyalty}
-          strings={o}
-          formatDate={(iso) => formatMarketDate(iso, "ar")}
-        />
+        <OwnerLoyaltyExpiryCard data={data.loyalty} strings={o} />
       </div>
 
       <section className="owner-dash-panel" aria-labelledby="owner-dash-activity">

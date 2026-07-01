@@ -8,7 +8,7 @@ import OwnerProductDetailSheet, { type OwnerCatalogProduct } from "../components
 import { mediaUrl } from "../lib/mediaUrl";
 import { ownerFormatMoney } from "../owner/ownerFormat";
 import { useOwnerArabic } from "../owner/useOwnerArabic";
-import { formatMarketDate, formatMarketDateTime } from "../utils/formatMarketDateTime";
+import { formatMarketDateTime } from "../utils/formatMarketDateTime";
 import { publicApi } from "../publicApi";
 
 type Tab = "overview" | "products" | "prizes" | "visits";
@@ -281,12 +281,8 @@ export default function OwnerPortal() {
             <p className="owner-muted" style={{ marginBottom: 12 }}>
               {t.owner.prizesViewOnly}
             </p>
-            <div style={{ marginBottom: 16, maxWidth: 420 }}>
-              <OwnerLoyaltyExpiryCard
-                data={data.loyalty}
-                strings={t.owner}
-                formatDate={(iso) => formatMarketDate(iso, "ar")}
-              />
+            <div className="owner-loyalty-card-wrap">
+              <OwnerLoyaltyExpiryCard data={data.loyalty} strings={t.owner} />
             </div>
             {prizesLoading ? (
               <p className="owner-muted">{t.common.loading}</p>
