@@ -282,7 +282,7 @@ html[data-theme="light"] body:has(.owner-shell) {
 
 .owner-loyalty-split {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 0.36fr) minmax(0, 0.64fr);
 }
 
 .owner-loyalty-card--solo .owner-loyalty-split {
@@ -300,8 +300,9 @@ html[data-theme="light"] body:has(.owner-shell) {
 }
 
 .owner-loyalty-pane--balance {
-  align-items: stretch;
-  gap: 10px;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px 10px 10px;
   border-inline-end: 1px solid rgba(13, 148, 136, 0.16);
   overflow: hidden;
 }
@@ -320,10 +321,10 @@ html[data-theme="light"] body:has(.owner-shell) {
 
 .owner-loyalty-pane-deco {
   position: absolute;
-  inset-inline-end: -10px;
-  inset-block-end: -16px;
+  inset-inline-end: -4px;
+  inset-block-start: -6px;
   color: var(--loyalty);
-  opacity: 0.1;
+  opacity: 0.14;
   pointer-events: none;
   line-height: 0;
 }
@@ -334,12 +335,14 @@ html[data-theme="light"] body:has(.owner-shell) {
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   width: 100%;
+  max-width: 100%;
 }
 
 .owner-loyalty-pane--timer {
   gap: 0;
+  padding: 12px 14px 12px 16px;
 }
 
 .owner-loyalty-timer-row {
@@ -416,9 +419,9 @@ html[data-theme="light"] body:has(.owner-shell) {
   position: relative;
   z-index: 1;
   align-self: flex-start;
-  padding: 5px 10px;
+  padding: 4px 8px;
   border-radius: 999px;
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 800;
   color: #0f766e;
   background: rgba(13, 148, 136, 0.12);
@@ -442,9 +445,9 @@ html[data-theme="light"] body:has(.owner-shell) {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 48px;
-  height: 48px;
-  border-radius: 14px;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.72);
   color: var(--loyalty);
   box-shadow: 0 4px 14px rgba(13, 148, 136, 0.12);
@@ -453,11 +456,13 @@ html[data-theme="light"] body:has(.owner-shell) {
 .owner-loyalty-pane-balance-text {
   flex: 1;
   min-width: 0;
+  text-align: right;
 }
 
 .owner-loyalty-pane-kicker {
   display: block;
-  font-size: 0.74rem;
+  text-align: right;
+  font-size: 0.72rem;
   font-weight: 700;
   color: var(--muted);
   line-height: 1.25;
@@ -465,7 +470,8 @@ html[data-theme="light"] body:has(.owner-shell) {
 
 .owner-loyalty-pane-value {
   margin: 2px 0 0;
-  font-size: clamp(1.45rem, 5vw, 1.85rem);
+  text-align: right;
+  font-size: clamp(1.25rem, 4.2vw, 1.55rem);
   font-weight: 800;
   line-height: 1.15;
   letter-spacing: -0.02em;

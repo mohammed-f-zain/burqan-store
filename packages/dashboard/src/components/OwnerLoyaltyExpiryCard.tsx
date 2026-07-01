@@ -45,16 +45,16 @@ export default function OwnerLoyaltyExpiryCard({ data, strings: o, formatDate }:
       <div className="owner-loyalty-split">
         <section className="owner-loyalty-pane owner-loyalty-pane--balance">
           <div className="owner-loyalty-pane-deco" aria-hidden>
-            <LoyaltyIcon kind="star" size={88} />
+            <LoyaltyIcon kind="star" size={64} />
           </div>
           <div className="owner-loyalty-balance-head">
-            <span className="owner-loyalty-pane-icon" aria-hidden>
-              <LoyaltyIcon kind="balance" size={26} />
-            </span>
             <div className="owner-loyalty-pane-balance-text">
               <span className="owner-loyalty-pane-kicker">{o.loyaltyBalance}</span>
               <p className="owner-loyalty-pane-value">{o.loyaltyPoints(balance)}</p>
             </div>
+            <span className="owner-loyalty-pane-icon" aria-hidden>
+              <LoyaltyIcon kind="balance" size={22} />
+            </span>
           </div>
           {showExpiry ? (
             <span className="owner-loyalty-period-chip">{o.loyaltyPeriodChip(expiryDays)}</span>
