@@ -186,7 +186,7 @@ export default function FillCarPage() {
     if (!ok) return;
     setSaving(true);
     try {
-      await api.put(`/representatives/${repId}/inventory`, {
+      const { data } = await api.put<{ salesReset?: boolean }>(`/representatives/${repId}/inventory`, {
         items: inventory.map((row) => ({
           productId: row.product_id,
           quantity: row.quantity,
@@ -194,7 +194,8 @@ export default function FillCarPage() {
         })),
       });
       setBaselineQty(Object.fromEntries(inventory.map((row) => [row.product_id, row.quantity])));
-      toastSuccess(t.fillCar.saved);
+      await loadSales();
+      toastSuccess(data.salesReset ? t.fillCar.savedWithSalesReset : t.fillCar.saved);
     } catch (e) {
       toastError(pickAxiosErrorMessage(e, t.fillCar.saveFailed));
     } finally {

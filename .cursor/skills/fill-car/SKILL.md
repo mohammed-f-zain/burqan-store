@@ -21,9 +21,9 @@ Admin dashboard page for daily rep sales and van inventory.
 
 ## API
 
-- `GET /representatives/sales-daily?date=YYYY-MM-DD` — all reps, order count, total sales, `lines[]` per product sold that day (Asia/Amman date).
+- `GET /representatives/sales-daily?date=YYYY-MM-DD` — all reps, order count, total sales, `lines[]` per product sold since each rep’s last van fill on that calendar day (Asia/Amman).
 - `GET /representatives/:id/inventory` — products with `quantity` on car.
-- `PUT /representatives/:id/inventory` — `{ items: [{ productId, quantity }] }`.
+- `PUT /representatives/:id/inventory` — `{ items: [{ productId, quantity }] }`. If any quantity increases vs DB, sets `representatives.car_fill_at = now()` and returns `{ salesReset: true }` so fill-car sales counters restart.
 
 Permissions: `fill_car.read` / `fill_car.write` (or `reps.read` / `reps.write`).
 

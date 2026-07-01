@@ -1411,6 +1411,7 @@ router.get(
          FROM representatives r
          LEFT JOIN orders o ON o.representative_id = r.id
            AND (o.created_at AT TIME ZONE 'Asia/Amman')::date = $1::date
+           AND (r.car_fill_at IS NULL OR o.created_at >= r.car_fill_at)
          GROUP BY r.id
          ORDER BY COALESCE(SUM(o.total_amount), 0) DESC NULLS LAST, r.full_name ASC`,
         [date]
@@ -1427,9 +1428,11 @@ router.get(
                 SUM(ol.quantity)::int AS quantity,
                 COALESCE(SUM(ol.line_total), 0)::text AS line_total
          FROM orders o
+         INNER JOIN representatives r ON r.id = o.representative_id
          INNER JOIN order_lines ol ON ol.order_id = o.id
          INNER JOIN products p ON p.id = ol.product_id
          WHERE (o.created_at AT TIME ZONE 'Asia/Amman')::date = $1::date
+           AND (r.car_fill_at IS NULL OR o.created_at >= r.car_fill_at)
          GROUP BY o.representative_id, p.id, p.name
          ORDER BY o.representative_id, p.name`,
         [date]
@@ -1645,8 +1648,15 @@ router.put(
       if (!repCheck.rows[0]) throw new HttpError(404, "المندوب غير موجود");
 
       const c = await pool.connect();
+      let salesReset = false;
       try {
         await c.query("BEGIN");
+        const { rows: beforeRows } = await c.query<{ product_id: number; quantity: number }>(
+          `SELECT product_id, quantity FROM representative_inventory WHERE representative_id = $1`,
+          [id]
+        );
+        const beforeQty = new Map(beforeRows.map((row) => [row.product_id, row.quantity]));
+
         for (const item of body.items) {
           const repPrice =
             item.price === undefined ? null : item.price === null ? null : item.price.toFixed(2);
@@ -1664,6 +1674,12 @@ router.put(
             [id, item.productId, item.quantity, repPrice, item.price !== undefined]
           );
         }
+
+        salesReset = body.items.some((item) => item.quantity > (beforeQty.get(item.productId) ?? 0));
+        if (salesReset) {
+          await c.query(`UPDATE representatives SET car_fill_at = now() WHERE id = $1`, [id]);
+        }
+
         await c.query("COMMIT");
       } catch (e) {
         await c.query("ROLLBACK");
@@ -1675,7 +1691,7 @@ router.put(
         `SELECT product_id, quantity FROM representative_inventory WHERE representative_id = $1`,
         [id]
       );
-      res.json({ inventory: rows });
+      res.json({ inventory: rows, salesReset });
     } catch (e) {
       next(e);
     }
