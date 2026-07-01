@@ -687,7 +687,7 @@ export const ar = {
     balanceClearHint: "لا يوجد مبلغ متبقي",
     loyaltyBalance: "رصيد نقاط الولاء",
     loyaltyPoints: (n: number) => `${n} نقطة`,
-    loyaltyDaysRemainingLabel: "يوم متبقي لاستخدام النقاط",
+    loyaltyDaysRemainingLabel: "يوم متبقي",
     loyaltyDaysFraction: (remaining: number, total: number) => `${remaining} من ${total} يوم`,
     loyaltyExpiresOnDate: (date: string) => `تنتهي النقاط في: ${date}`,
     loyaltyExpiresToday: "تنتهي نقاطك اليوم",

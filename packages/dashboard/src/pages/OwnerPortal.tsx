@@ -281,13 +281,11 @@ export default function OwnerPortal() {
             <p className="owner-muted" style={{ marginBottom: 12 }}>
               {t.owner.prizesViewOnly}
             </p>
-            <div className="owner-loyalty-card-wrap">
-              <OwnerLoyaltyExpiryCard
-                data={data.loyalty}
-                strings={t.owner}
-                formatDate={(iso) => formatMarketDate(iso, "ar")}
-              />
-            </div>
+            <OwnerLoyaltyExpiryCard
+              data={data.loyalty}
+              strings={t.owner}
+              formatDate={(iso) => formatMarketDate(iso, "ar")}
+            />
             {prizesLoading ? (
               <p className="owner-muted">{t.common.loading}</p>
             ) : prizes.length === 0 ? (
