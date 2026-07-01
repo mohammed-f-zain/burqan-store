@@ -21,6 +21,7 @@ type Counts = {
   orders?: number;
   areas?: number;
   qrUnassigned?: number;
+  possibleClients?: number;
 };
 
 type Analytics = {
@@ -46,6 +47,10 @@ type Analytics = {
     activeReps: number;
     avgOrderValue: number;
     conversionRate: number;
+    newProspectClients: number;
+  };
+  prospects: {
+    total: number;
   };
   yesterday: {
     revenue: number;
@@ -196,6 +201,12 @@ export default function OverviewPage() {
             if (!cancelled) setCounts((c) => ({ ...c, qrUnassigned: r.data.unassignedCount }));
           })
         );
+      if (can("stores.read"))
+        tasks.push(
+          api.get<{ total: number }>("/prospect-stores/count").then((r) => {
+            if (!cancelled) setCounts((c) => ({ ...c, possibleClients: r.data.total }));
+          })
+        );
       try {
         await Promise.all(tasks);
       } catch {
@@ -248,6 +259,12 @@ export default function OverviewPage() {
     { key: "reps", value: counts.reps, label: t.overview.reps, to: can("reps.read") ? "/app/representatives" : undefined },
     { key: "products", value: counts.products, label: t.overview.products, to: can("products.read") ? "/app/products" : undefined },
     { key: "areas", value: counts.areas, label: t.overview.areas, to: can("areas.read") ? "/app/areas" : undefined },
+    {
+      key: "possibleClients",
+      value: counts.possibleClients,
+      label: t.overview.possibleClients,
+      to: can("stores.read") ? "/app/possible-clients" : undefined,
+    },
     { key: "qrUnassigned", value: counts.qrUnassigned, label: t.overview.qrUnassigned, to: can("qr_pool.read") ? "/app/qr-pool" : undefined },
   ].filter((s) => s.value !== undefined);
 
@@ -352,6 +369,12 @@ export default function OverviewPage() {
                     <div className="dash-kpi-label">{t.overview.todayAvgOrder}</div>
                     <div className="dash-kpi-value dash-kpi-value--sm">{money(analytics.today.avgOrderValue)}</div>
                   </div>
+                  {can("stores.read") && (
+                    <div className="dash-kpi dash-kpi--compact">
+                      <div className="dash-kpi-label">{t.overview.todayNewProspects}</div>
+                      <div className="dash-kpi-value dash-kpi-value--sm">{analytics.today.newProspectClients}</div>
+                    </div>
+                  )}
                 </div>
               </section>
 

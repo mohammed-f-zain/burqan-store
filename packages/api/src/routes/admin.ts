@@ -200,6 +200,8 @@ router.get(
         { rows: dailySalesRows },
         { rows: monthPaymentMix },
         { rows: activeRepsToday },
+        { rows: prospectTotals },
+        { rows: prospectsToday },
       ] = await Promise.all([
         query<{
           order_count: string;
@@ -394,6 +396,12 @@ router.get(
            FROM orders
            WHERE (created_at AT TIME ZONE 'Asia/Amman')::date = timezone('Asia/Amman', now())::date`
         ),
+        query<{ count: string }>(`SELECT COUNT(*)::text AS count FROM prospect_stores`),
+        query<{ count: string }>(
+          `SELECT COUNT(*)::text AS count
+           FROM prospect_stores
+           WHERE (created_at AT TIME ZONE 'Asia/Amman')::date = timezone('Asia/Amman', now())::date`
+        ),
       ]);
 
       const noBuyCountByNote = new Map(noBuyByReasonRows.map((r) => [r.note, parseInt(r.count, 10)]));
@@ -431,6 +439,10 @@ router.get(
           activeReps: parseInt(activeRepsToday[0]?.count ?? "0", 10),
           avgOrderValue: todayOrderCount > 0 ? todayRevenue / todayOrderCount : 0,
           conversionRate: todayVisitCount > 0 ? todayOrderCount / todayVisitCount : 0,
+          newProspectClients: parseInt(prospectsToday[0]?.count ?? "0", 10),
+        },
+        prospects: {
+          total: parseInt(prospectTotals[0]?.count ?? "0", 10),
         },
         yesterday: {
           revenue: yesterdayRevenue,
@@ -1892,6 +1904,30 @@ router.post(
 );
 
 const prospectStatusSchema = z.enum(["open", "converted", "dismissed"]).optional();
+
+router.get(
+  "/prospect-stores/count",
+  adminAuthMiddleware,
+  requireAdminPermission("stores.read"),
+  async (_req, res, next) => {
+    try {
+      const [{ rows: total }, { rows: today }] = await Promise.all([
+        query<{ count: string }>(`SELECT COUNT(*)::text AS count FROM prospect_stores`),
+        query<{ count: string }>(
+          `SELECT COUNT(*)::text AS count
+           FROM prospect_stores
+           WHERE (created_at AT TIME ZONE 'Asia/Amman')::date = timezone('Asia/Amman', now())::date`
+        ),
+      ]);
+      res.json({
+        total: parseInt(total[0]?.count ?? "0", 10),
+        today: parseInt(today[0]?.count ?? "0", 10),
+      });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
 
 router.get(
   "/prospect-stores",
