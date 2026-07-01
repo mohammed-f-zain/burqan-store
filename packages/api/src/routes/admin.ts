@@ -2274,26 +2274,67 @@ router.get(
   async (req, res, next) => {
     try {
       const storeId = req.query.storeId ? z.coerce.number().int().positive().parse(req.query.storeId) : null;
-      const { rows } = await query(
+      const monthStart = `date_trunc('month', timezone('Asia/Amman', now()))`;
+
+      const [ordersResult, summaryResult] = await Promise.all([
+        query(
+          storeId
+            ? `SELECT o.id, o.representative_id, o.store_id, o.payment_type, o.total_amount, o.created_at,
+                      s.name AS store_name, r.full_name AS rep_name
+               FROM orders o
+               INNER JOIN stores s ON s.id = o.store_id
+               INNER JOIN representatives r ON r.id = o.representative_id
+               WHERE o.store_id = $1
+               ORDER BY o.id DESC`
+            : `SELECT o.id, o.representative_id, o.store_id, o.payment_type, o.total_amount, o.created_at,
+                      s.name AS store_name, r.full_name AS rep_name
+               FROM orders o
+               INNER JOIN stores s ON s.id = o.store_id
+               INNER JOIN representatives r ON r.id = o.representative_id
+               ORDER BY o.id DESC`,
+          storeId ? [storeId] : []
+        ),
         storeId
-          ? `SELECT o.id, o.representative_id, o.store_id, o.payment_type, o.total_amount, o.created_at,
-                    s.name AS store_name, r.full_name AS rep_name
-             FROM orders o
-             INNER JOIN stores s ON s.id = o.store_id
-             INNER JOIN representatives r ON r.id = o.representative_id
-             WHERE o.store_id = $1
-             ORDER BY o.id DESC
-             LIMIT 200`
-          : `SELECT o.id, o.representative_id, o.store_id, o.payment_type, o.total_amount, o.created_at,
-                    s.name AS store_name, r.full_name AS rep_name
-             FROM orders o
-             INNER JOIN stores s ON s.id = o.store_id
-             INNER JOIN representatives r ON r.id = o.representative_id
-             ORDER BY o.id DESC
-             LIMIT 200`,
-        storeId ? [storeId] : []
-      );
-      res.json({ orders: rows });
+          ? query<{
+              total_count: number;
+              total_revenue: string;
+              month_count: number;
+              month_revenue: string;
+            }>(
+              `SELECT
+                 COUNT(*)::int AS total_count,
+                 COALESCE(SUM(o.total_amount), 0)::text AS total_revenue,
+                 COUNT(*) FILTER (WHERE o.created_at >= ${monthStart})::int AS month_count,
+                 COALESCE(SUM(o.total_amount) FILTER (WHERE o.created_at >= ${monthStart}), 0)::text AS month_revenue
+               FROM orders o
+               WHERE o.store_id = $1`,
+              [storeId]
+            )
+          : query<{
+              total_count: number;
+              total_revenue: string;
+              month_count: number;
+              month_revenue: string;
+            }>(
+              `SELECT
+                 COUNT(*)::int AS total_count,
+                 COALESCE(SUM(total_amount), 0)::text AS total_revenue,
+                 COUNT(*) FILTER (WHERE created_at >= ${monthStart})::int AS month_count,
+                 COALESCE(SUM(total_amount) FILTER (WHERE created_at >= ${monthStart}), 0)::text AS month_revenue
+               FROM orders`
+            ),
+      ]);
+
+      const s = summaryResult.rows[0];
+      res.json({
+        orders: ordersResult.rows,
+        summary: {
+          totalCount: s?.total_count ?? 0,
+          totalRevenue: parseFloat(s?.total_revenue ?? "0"),
+          monthOrderCount: s?.month_count ?? 0,
+          monthRevenue: parseFloat(s?.month_revenue ?? "0"),
+        },
+      });
     } catch (e) {
       next(e);
     }

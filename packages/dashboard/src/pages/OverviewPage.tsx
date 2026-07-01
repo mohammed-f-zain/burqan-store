@@ -184,12 +184,6 @@ export default function OverviewPage() {
             if (!cancelled) setCounts((c) => ({ ...c, reps: r.data.representatives?.length ?? 0 }));
           })
         );
-      if (can("orders.read"))
-        tasks.push(
-          api.get("/orders").then((r) => {
-            if (!cancelled) setCounts((c) => ({ ...c, orders: r.data.orders?.length ?? 0 }));
-          })
-        );
       if (can("areas.read"))
         tasks.push(
           api.get("/areas").then((r) => {
@@ -224,7 +218,10 @@ export default function OverviewPage() {
     (async () => {
       try {
         const { data } = await api.get<Analytics>("/analytics/overview");
-        if (!cancelled) setAnalytics(data);
+        if (!cancelled) {
+          setAnalytics(data);
+          setCounts((c) => ({ ...c, orders: data.totals.orderCount }));
+        }
       } catch {
         if (!cancelled) {
           setAnalytics(null);
@@ -241,7 +238,13 @@ export default function OverviewPage() {
 
   const statTiles: StatTile[] = [
     { key: "stores", value: counts.stores, label: t.overview.stores, to: can("stores.read") ? "/app/stores" : undefined },
-    { key: "orders", value: counts.orders, label: t.overview.orders, to: can("orders.read") ? "/app/orders" : undefined, accent: true },
+    {
+      key: "orders",
+      value: counts.orders,
+      label: t.overview.orders,
+      to: can("orders.read") ? "/app/orders" : undefined,
+      accent: true,
+    },
     { key: "reps", value: counts.reps, label: t.overview.reps, to: can("reps.read") ? "/app/representatives" : undefined },
     { key: "products", value: counts.products, label: t.overview.products, to: can("products.read") ? "/app/products" : undefined },
     { key: "areas", value: counts.areas, label: t.overview.areas, to: can("areas.read") ? "/app/areas" : undefined },

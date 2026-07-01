@@ -24,11 +24,19 @@ type OrderRow = {
   created_at: string;
 };
 
+type OrderSummary = {
+  totalCount: number;
+  totalRevenue: number;
+  monthOrderCount: number;
+  monthRevenue: number;
+};
+
 export default function OrdersPage() {
   const navigate = useNavigate();
   const { can } = useAuth();
   const { t } = useLocale();
   const [orders, setOrders] = useState<OrderRow[]>([]);
+  const [summary, setSummary] = useState<OrderSummary | null>(null);
   const canDelete = can("orders.delete");
 
   const repFilterOptions = useMemo(() => {
@@ -113,8 +121,7 @@ export default function OrdersPage() {
     [orderTable.filtered]
   );
 
-  const formatMoney = (n: number) =>
-    ownerFormatMoney(n, t.overview.currency);
+  const formatMoney = (n: number) => ownerFormatMoney(n, t.overview.currency);
 
   function paymentTypeLabel(type: string): string {
     if (type === "cash") return t.overview.payCash;
@@ -123,8 +130,9 @@ export default function OrdersPage() {
   }
 
   async function load() {
-    const { data } = await api.get<{ orders: OrderRow[] }>("/orders");
+    const { data } = await api.get<{ orders: OrderRow[]; summary: OrderSummary }>("/orders");
     setOrders(data.orders);
+    setSummary(data.summary);
   }
 
   useEffect(() => {
@@ -154,6 +162,8 @@ export default function OrdersPage() {
     }
   }
 
+  const showingFiltered = orderTable.hasActiveFilters;
+
   return (
     <div className="grid">
       <div className="card">
@@ -168,21 +178,32 @@ export default function OrdersPage() {
           pinnedFieldIds={["dateFrom", "dateTo", "type", "rep"]}
           labels={t.tableFilters}
         />
-        {orders.length > 0 && (
+        {summary && (
           <div className="orders-filter-totals stat-row">
             <div className="stat-pill">
-              <span className="muted small">{t.orders.filteredOrders}</span>
-              <strong>{orderTable.filteredCount}</strong>
+              <span className="muted small">
+                {showingFiltered ? t.orders.filteredOrders : t.orders.allOrdersCount}
+              </span>
+              <strong>{showingFiltered ? orderTable.filteredCount : summary.totalCount}</strong>
             </div>
             <div className="stat-pill stat-pill--accent">
-              <span className="muted small">{t.orders.filteredTotal}</span>
-              <strong>{formatMoney(filteredTotalAmount)}</strong>
+              <span className="muted small">{t.overview.monthRevenue}</span>
+              <strong>{formatMoney(summary.monthRevenue)}</strong>
+              <span className="muted small orders-stat-sub">{t.orders.monthOrdersCount(summary.monthOrderCount)}</span>
             </div>
-            {orderTable.hasActiveFilters && orderTable.filteredCount !== orders.length ? (
-              <span className="muted small orders-filter-totals-hint">
-                {t.tableFilters.filteredSummary(orderTable.filteredCount, orders.length)}
+            <div className="stat-pill">
+              <span className="muted small">
+                {showingFiltered ? t.orders.filteredTotal : t.overview.totalRevenue}
               </span>
-            ) : null}
+              <strong>{formatMoney(showingFiltered ? filteredTotalAmount : summary.totalRevenue)}</strong>
+            </div>
+            {showingFiltered ? (
+              <span className="muted small orders-filter-totals-hint">
+                {t.orders.filteredTotalsHint} · {t.tableFilters.filteredSummary(orderTable.filteredCount, orders.length)}
+              </span>
+            ) : (
+              <span className="muted small orders-filter-totals-hint">{t.orders.totalsMatchHome}</span>
+            )}
           </div>
         )}
         {orderTable.filteredCount > 0 && (
@@ -231,7 +252,7 @@ export default function OrdersPage() {
                   <td>{o.store_name}</td>
                   <td>{o.rep_name}</td>
                   <td>{paymentTypeLabel(o.payment_type)}</td>
-                  <td>{o.total_amount}</td>
+                  <td>{formatMoney(parseFloat(o.total_amount) || 0)}</td>
                   <td className="small muted">{formatMarketDateTime(o.created_at)}</td>
                   {canDelete && (
                     <td onClick={(e) => e.stopPropagation()}>

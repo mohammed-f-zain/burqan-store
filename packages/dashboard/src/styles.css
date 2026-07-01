@@ -1365,6 +1365,11 @@ html[dir="rtl"] .swal-toast-burqan .swal2-icon {
   color: var(--accent, #2563eb);
 }
 
+.orders-stat-sub {
+  font-size: 11px;
+  margin-top: 2px;
+}
+
 .orders-filter-totals-hint {
   margin-inline-start: auto;
 }
