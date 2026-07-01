@@ -271,6 +271,7 @@ html[data-theme="light"] body:has(.owner-shell) {
   border: 1px solid var(--line);
   box-shadow: 0 8px 28px rgba(15, 23, 42, 0.05);
   overflow: hidden;
+  text-align: right;
 }
 
 .owner-loyalty-panel::before {
@@ -293,7 +294,7 @@ html[data-theme="light"] body:has(.owner-shell) {
 
 .owner-loyalty-panel__main {
   display: flex;
-  flex-direction: row-reverse;
+  flex-direction: row;
   align-items: stretch;
   gap: 14px;
 }
@@ -304,8 +305,9 @@ html[data-theme="light"] body:has(.owner-shell) {
 
 .owner-loyalty-panel__balance {
   display: flex;
-  flex-direction: row-reverse;
+  flex-direction: row;
   align-items: center;
+  justify-content: flex-start;
   gap: 12px;
   flex: 0 0 auto;
   min-width: 0;
@@ -314,6 +316,7 @@ html[data-theme="light"] body:has(.owner-shell) {
 
 .owner-loyalty-panel__main--solo .owner-loyalty-panel__balance {
   flex: 1;
+  width: 100%;
 }
 
 .owner-loyalty-panel__icon {
@@ -330,10 +333,13 @@ html[data-theme="light"] body:has(.owner-shell) {
 
 .owner-loyalty-panel__balance-text {
   min-width: 0;
+  flex: 1;
+  text-align: right;
 }
 
 .owner-loyalty-panel__kicker {
   display: block;
+  text-align: right;
   font-size: 0.74rem;
   font-weight: 700;
   color: var(--muted);
@@ -342,6 +348,7 @@ html[data-theme="light"] body:has(.owner-shell) {
 
 .owner-loyalty-panel__value {
   margin: 2px 0 0;
+  text-align: right;
   font-size: clamp(1.35rem, 4.5vw, 1.65rem);
   font-weight: 800;
   line-height: 1.15;
@@ -362,14 +369,16 @@ html[data-theme="light"] body:has(.owner-shell) {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  align-items: stretch;
   gap: 6px;
   text-align: right;
 }
 
 .owner-loyalty-panel__days {
   display: flex;
-  flex-direction: row-reverse;
+  flex-direction: row;
   align-items: baseline;
+  justify-content: flex-start;
   gap: 6px;
   flex-wrap: wrap;
 }
@@ -424,6 +433,7 @@ html[data-theme="light"] body:has(.owner-shell) {
 
 .owner-loyalty-panel__caption {
   margin: 0;
+  text-align: right;
   font-size: 0.72rem;
   font-weight: 600;
   color: var(--muted);
@@ -442,6 +452,10 @@ html[data-theme="light"] body:has(.owner-shell) {
   }
 
   .owner-loyalty-panel__balance {
+    width: 100%;
+  }
+
+  .owner-loyalty-panel__expiry {
     width: 100%;
   }
 }
