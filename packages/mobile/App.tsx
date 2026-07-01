@@ -180,6 +180,7 @@ const t = {
   areaAuto: "المنطقة (تلقائي من الخريطة)",
   areaDetecting: "جاري تحديد المنطقة…",
   refreshLocation: "تحديث الموقع",
+  refreshLocationCurrent: "تحديث موقعي الحالي",
   navHome: "الرئيسية",
   navRoute: "مسار اليوم",
   routeDayTitle: "مسار اليوم",
@@ -1784,7 +1785,10 @@ export default function App() {
               noSearchResults: t.dailyStoresNoSearchResults,
               visitQr: t.dailyStoresVisitQr,
               nearestFirst: t.dailyStoresNearestFirst,
+              refreshLocation: t.refreshLocationCurrent,
             }}
+            locating={dailyStoresLoading}
+            onRefreshLocation={() => void loadDailyStores()}
             onSelectStore={setPeekStore}
           />
         </>
@@ -1819,9 +1823,13 @@ export default function App() {
             filterPending: t.dailyStoresFilterPending,
             filterDone: t.dailyStoresFilterDone,
             noSearchResults: t.dailyStoresNoSearchResults,
-            refreshLocation: t.refreshLocation,
+            refreshLocation: t.refreshLocationCurrent,
           }}
           onRefresh={() => {
+            setRouteRefreshing(true);
+            void loadRouteStores();
+          }}
+          onRefreshLocation={() => {
             setRouteRefreshing(true);
             void loadRouteStores();
           }}

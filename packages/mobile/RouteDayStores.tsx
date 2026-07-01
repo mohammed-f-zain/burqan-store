@@ -54,6 +54,7 @@ type Props = {
   refreshing: boolean;
   labels: RouteDayLabels;
   onRefresh: () => void;
+  onRefreshLocation: () => void;
   onSelectStore: (store: DailyStoreCard) => void;
 };
 
@@ -128,6 +129,20 @@ export default function RouteDayStores(props: Props) {
           </Text>
         </View>
         <Text style={styles.nearestHint}>{labels.nearestFirst}</Text>
+        <Pressable
+          style={[styles.locationBtn, (locating || loading) && styles.locationBtnBusy]}
+          onPress={props.onRefreshLocation}
+          disabled={locating || loading}
+        >
+          {locating ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <>
+              <Ionicons name="locate" size={17} color="#fff" />
+              <Text style={styles.locationBtnText}>{labels.refreshLocation}</Text>
+            </>
+          )}
+        </Pressable>
       </View>
 
       <View style={styles.toolbar}>
@@ -285,6 +300,21 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontWeight: "600",
   },
+  locationBtn: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 12,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    paddingVertical: 11,
+    paddingHorizontal: 16,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.35)",
+  },
+  locationBtnBusy: { opacity: 0.75 },
+  locationBtnText: { color: "#fff", fontSize: 13, fontWeight: "800" },
   toolbar: { marginBottom: 8 },
   search: {
     borderWidth: 1,

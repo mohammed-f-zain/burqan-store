@@ -33,6 +33,7 @@ export type DailyStoresLabels = {
   noSearchResults: string;
   visitQr: string;
   nearestFirst?: string;
+  refreshLocation?: string;
 };
 
 type AreaGroup = { areaName: string; stores: DailyStoreCard[] };
@@ -154,6 +155,8 @@ type Props = {
   zoneName?: string | null;
   dayName?: string | null;
   nearestFirst?: boolean;
+  locating?: boolean;
+  onRefreshLocation?: () => void;
   onSelectStore: (store: DailyStoreCard) => void;
 };
 
@@ -166,6 +169,8 @@ export default function DailyStoresByArea({
   zoneName,
   dayName,
   nearestFirst = false,
+  locating = false,
+  onRefreshLocation,
   onSelectStore,
 }: Props) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -239,7 +244,40 @@ export default function DailyStoresByArea({
       )}
 
       {!loading && stores.length > 0 && nearestFirst && labels.nearestFirst ? (
-        <Text style={styles.nearestHint}>{labels.nearestFirst}</Text>
+        <View style={styles.nearestRow}>
+          <Text style={styles.nearestHint}>{labels.nearestFirst}</Text>
+          {onRefreshLocation && labels.refreshLocation ? (
+            <Pressable
+              style={[styles.locationBtn, locating && styles.locationBtnBusy]}
+              onPress={onRefreshLocation}
+              disabled={locating || loading}
+            >
+              {locating ? (
+                <ActivityIndicator size="small" color={accent} />
+              ) : (
+                <>
+                  <Ionicons name="locate" size={16} color={accent} />
+                  <Text style={styles.locationBtnText}>{labels.refreshLocation}</Text>
+                </>
+              )}
+            </Pressable>
+          ) : null}
+        </View>
+      ) : onRefreshLocation && labels.refreshLocation ? (
+        <Pressable
+          style={[styles.locationBtnStandalone, locating && styles.locationBtnBusy]}
+          onPress={onRefreshLocation}
+          disabled={locating || loading}
+        >
+          {locating ? (
+            <ActivityIndicator size="small" color={accent} />
+          ) : (
+            <>
+              <Ionicons name="locate" size={16} color={accent} />
+              <Text style={styles.locationBtnText}>{labels.refreshLocation}</Text>
+            </>
+          )}
+        </Pressable>
       ) : null}
 
       {!loading && stores.length > 0 ? (
@@ -494,9 +532,42 @@ const styles = StyleSheet.create({
     color: accent,
     fontSize: 12,
     fontWeight: "700",
-    marginTop: 8,
     textAlign: "right",
+    flex: 1,
   },
+  nearestRow: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 8,
+  },
+  locationBtn: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: accentSoft,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: "rgba(37, 99, 235, 0.25)",
+  },
+  locationBtnStandalone: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    alignSelf: "flex-end",
+    marginTop: 10,
+    backgroundColor: accentSoft,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: "rgba(37, 99, 235, 0.25)",
+  },
+  locationBtnBusy: { opacity: 0.7 },
+  locationBtnText: { color: accent, fontSize: 12, fontWeight: "800" },
   progressBlock: { marginTop: 14 },
   progressLabels: {
     flexDirection: "row-reverse",
