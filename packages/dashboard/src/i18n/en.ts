@@ -423,6 +423,9 @@ export const en: Messages = {
     deleteConfirm: "Delete this route zone?",
     loadFailed: "Failed to load route zones.",
     saveFailed: "Failed to save.",
+    colActions: "Actions",
+    listCount: (n: number) => `${n} zones`,
+    areaCount: (n: number) => `${n} areas`,
   },
 
   repSchedule: {
@@ -714,6 +717,7 @@ export const en: Messages = {
   },
 
   tableFilters: {
+    searchLabel: "Search",
     searchPlaceholder: "Search all fields…",
     filtersToggle: "Field filters",
     filtersHide: "Hide filters",

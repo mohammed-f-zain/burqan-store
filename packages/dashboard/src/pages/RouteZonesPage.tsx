@@ -2,7 +2,10 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { api } from "../api";
 import RepAreaMapPicker from "../components/RepAreaMapPicker";
+import PaginationBar from "../components/PaginationBar";
+import TableFilterBar from "../components/TableFilterBar";
 import { useAuth } from "../auth/AuthContext";
+import { useTableFilters } from "../hooks/useTableFilters";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
 import { confirmDanger } from "../lib/swalConfirm";
@@ -16,6 +19,8 @@ type RouteZone = {
   isActive: boolean;
   areas: { id: number; name: string }[];
 };
+
+type RouteZoneRow = RouteZone & { areaNamesText: string };
 
 export default function RouteZonesPage() {
   const { can } = useAuth();
@@ -39,6 +44,36 @@ export default function RouteZonesPage() {
     for (const a of areas) m.set(a.id, a.name);
     return m;
   }, [areas]);
+
+  const zoneRows: RouteZoneRow[] = useMemo(
+    () =>
+      zones.map((z) => ({
+        ...z,
+        areaNamesText: z.areas.map((a) => areaNameById.get(a.id) ?? a.name).join(" "),
+      })),
+    [zones, areaNameById]
+  );
+
+  const filterFields = useMemo(
+    () => [
+      { id: "name", label: t.routeZones.name, type: "text" as const, getValue: (z: RouteZoneRow) => z.name },
+      { id: "notes", label: t.routeZones.notes, type: "text" as const, getValue: (z: RouteZoneRow) => z.notes },
+      { id: "areas", label: t.routeZones.areasCol, type: "text" as const, getValue: (z: RouteZoneRow) => z.areaNamesText },
+      {
+        id: "active",
+        label: t.routeZones.statusCol,
+        type: "boolean" as const,
+        getValue: (z: RouteZoneRow) => z.isActive,
+      },
+    ],
+    [t.routeZones.areasCol, t.routeZones.name, t.routeZones.notes, t.routeZones.statusCol]
+  );
+
+  const zoneTable = useTableFilters(zoneRows, {
+    searchAccessors: ["name", "notes", "areaNamesText"],
+    fields: filterFields,
+  });
+  const zonePgn = zoneTable.pagination;
 
   async function load() {
     const [z, a] = await Promise.all([
@@ -153,50 +188,101 @@ export default function RouteZonesPage() {
       ) : null}
 
       <div className="card">
-        <h2>{t.routeZones.listTitle}</h2>
+        <div className="card-head-row">
+          <h2>{t.routeZones.listTitle}</h2>
+          {zones.length > 0 && (
+            <span className="muted small">{t.routeZones.listCount(zones.length)}</span>
+          )}
+        </div>
+
         {zones.length === 0 ? (
           <p className="muted">{t.routeZones.empty}</p>
         ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>{t.routeZones.name}</th>
-                  <th>{t.routeZones.areasCol}</th>
-                  <th>{t.routeZones.statusCol}</th>
-                  {write ? <th /> : null}
-                </tr>
-              </thead>
-              <tbody>
-                {zones.map((z) => (
-                  <tr key={z.id}>
-                    <td>
-                      <strong>{z.name}</strong>
-                      {z.notes ? <div className="muted small">{z.notes}</div> : null}
-                    </td>
-                    <td>
-                      {z.areas.length
-                        ? z.areas.map((a) => areaNameById.get(a.id) ?? a.name).join("، ")
-                        : "—"}
-                    </td>
-                    <td>{z.isActive ? t.routeZones.active : t.routeZones.inactive}</td>
-                    {write ? (
+          <>
+            <TableFilterBar
+              {...zoneTable}
+              onSearchChange={zoneTable.setSearch}
+              onFilterChange={zoneTable.setFilter}
+              onClear={zoneTable.clearFilters}
+              onToggleFilters={() => zoneTable.setShowFilters((v) => !v)}
+              pinnedFieldIds={["active"]}
+              labels={t.tableFilters}
+            />
+            {zoneTable.filteredCount > 0 && (
+              <PaginationBar
+                className="pagination-bar--flush"
+                page={zonePgn.page}
+                totalPages={zonePgn.totalPages}
+                totalItems={zonePgn.total}
+                from={zonePgn.from}
+                to={zonePgn.to}
+                pageSize={zonePgn.pageSize}
+                pageSizeOptions={zonePgn.pageSizeOptions}
+                onPageChange={zonePgn.setPage}
+                onPageSizeChange={zonePgn.setPageSize}
+              />
+            )}
+            <div className="table-wrap">
+              <table className="table route-zones-table">
+                <thead>
+                  <tr>
+                    <th>{t.routeZones.name}</th>
+                    <th>{t.routeZones.areasCol}</th>
+                    <th>{t.routeZones.statusCol}</th>
+                    {write ? <th className="col-actions">{t.routeZones.colActions}</th> : null}
+                  </tr>
+                </thead>
+                <tbody>
+                  {zonePgn.slice.map((z) => (
+                    <tr key={z.id}>
+                      <td className="route-zone-name-cell">
+                        <div className="route-zone-name">{z.name}</div>
+                        {z.notes ? <div className="route-zone-notes muted small">{z.notes}</div> : null}
+                      </td>
+                      <td className="route-zone-areas-cell">
+                        {z.areas.length === 0 ? (
+                          <span className="muted">—</span>
+                        ) : (
+                          <>
+                            <span className="route-zone-area-count muted small">
+                              {t.routeZones.areaCount(z.areas.length)}
+                            </span>
+                            <div className="route-zone-chips">
+                              {z.areas.map((a) => (
+                                <span key={a.id} className="route-zone-chip">
+                                  {areaNameById.get(a.id) ?? a.name}
+                                </span>
+                              ))}
+                            </div>
+                          </>
+                        )}
+                      </td>
                       <td>
-                        <span className="row" style={{ gap: 8 }}>
-                          <button type="button" className="ghost" onClick={() => openEdit(z)}>
-                            {t.routeZones.edit}
-                          </button>
-                          <button type="button" className="ghost danger" onClick={() => void onDelete(z)}>
-                            {t.routeZones.delete}
-                          </button>
+                        <span className={`pill${z.isActive ? " on" : " off"}`}>
+                          {z.isActive ? t.routeZones.active : t.routeZones.inactive}
                         </span>
                       </td>
-                    ) : null}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                      {write ? (
+                        <td className="col-actions">
+                          <span className="table-actions">
+                            <button type="button" className="ghost small" onClick={() => openEdit(z)}>
+                              {t.routeZones.edit}
+                            </button>
+                            <button type="button" className="ghost small danger" onClick={() => void onDelete(z)}>
+                              {t.routeZones.delete}
+                            </button>
+                          </span>
+                        </td>
+                      ) : null}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {zoneTable.filteredCount === 0 && (
+              <p className="muted">{t.tableFilters.noResults}</p>
+            )}
+          </>
         )}
       </div>
 

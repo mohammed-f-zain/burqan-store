@@ -216,7 +216,7 @@ button.ghost {
 .table td {
   padding: 12px 10px;
   border-bottom: 1px solid var(--line);
-  text-align: left;
+  text-align: start;
   vertical-align: top;
 }
 
@@ -981,27 +981,54 @@ html.locale-en body {
 
 .table-filter-bar {
   margin-bottom: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
 }
 
 .table-filter-bar-row {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.table-filter-search-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 240px;
+  min-width: 200px;
+  max-width: 420px;
+  margin: 0;
 }
 
 .table-filter-search {
-  flex: 1 1 220px;
-  min-width: 180px;
-  max-width: 420px;
+  width: 100%;
+  min-height: 38px;
+  box-sizing: border-box;
+}
+
+.table-filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.table-filter-toggle,
+.table-filter-clear {
+  min-height: 38px;
+  white-space: nowrap;
 }
 
 .table-filter-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 10px 14px;
-  margin-top: 12px;
-  padding-top: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px 16px;
+  margin-top: 14px;
+  padding-top: 14px;
   border-top: 1px solid var(--line);
 }
 
@@ -1010,24 +1037,42 @@ html.locale-en body {
   flex-direction: column;
   gap: 4px;
   font-size: 0.85rem;
+  min-width: 0;
+}
+
+.table-filter-field input,
+.table-filter-field select {
+  width: 100%;
+  min-height: 38px;
+  box-sizing: border-box;
 }
 
 .table-filter-field-label {
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: 0.78rem;
+  font-weight: 600;
 }
 
 .table-filter-field--compact {
-  flex: 0 1 200px;
-  min-width: 160px;
+  flex: 0 1 220px;
+  min-width: 180px;
 }
 
 .table-filter-field--compact input[type="date"] {
-  min-height: 36px;
+  min-height: 38px;
 }
 
 .table-filter-summary {
-  margin-inline-start: auto;
+  flex: 1 1 100%;
+  text-align: end;
+}
+
+@media (min-width: 720px) {
+  .table-filter-summary {
+    flex: 1 1 auto;
+    margin-inline-start: auto;
+    text-align: end;
+  }
 }
 
 .table-filter-empty {
@@ -1044,7 +1089,7 @@ html.locale-en body {
   justify-content: space-between;
   gap: 8px;
   width: 100%;
-  min-height: 36px;
+  min-height: 38px;
   padding: 6px 10px;
   text-align: start;
   background: var(--surface);
@@ -1052,6 +1097,7 @@ html.locale-en body {
   border-radius: 8px;
   color: inherit;
   cursor: pointer;
+  box-sizing: border-box;
 }
 
 .searchable-select-caret {
@@ -2363,4 +2409,77 @@ a.overview-stat-card:hover {
   .overview-today-strip {
     grid-template-columns: 1fr;
   }
+}
+
+/* Route zones table */
+.card-head-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.card-head-row h2 {
+  margin: 0;
+}
+
+.route-zones-table {
+  min-width: 640px;
+}
+
+.route-zone-name {
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.route-zone-notes {
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+.route-zone-areas-cell {
+  max-width: 420px;
+}
+
+.route-zone-area-count {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.route-zone-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.route-zone-chip {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(13, 148, 136, 0.28);
+  background: rgba(13, 148, 136, 0.08);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.table .col-actions {
+  width: 1%;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-start;
+}
+
+button.ghost.small {
+  padding: 6px 10px;
+  font-size: 13px;
+  min-height: 32px;
 }

@@ -422,6 +422,9 @@ export const ar = {
     deleteConfirm: "حذف منطقة المسار؟",
     loadFailed: "تعذّر تحميل مناطق المسار.",
     saveFailed: "تعذّر الحفظ.",
+    colActions: "إجراءات",
+    listCount: (n: number) => `${n} منطقة`,
+    areaCount: (n: number) => `${n} مناطق`,
   },
 
   repSchedule: {
@@ -713,6 +716,7 @@ export const ar = {
   },
 
   tableFilters: {
+    searchLabel: "بحث",
     searchPlaceholder: "بحث في كل الحقول…",
     filtersToggle: "تصفية الحقول",
     filtersHide: "إخفاء التصفية",

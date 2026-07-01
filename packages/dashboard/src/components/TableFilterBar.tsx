@@ -2,6 +2,7 @@ import type { FilterFieldDef } from "../lib/filterTableRows";
 import SearchableSelect from "./SearchableSelect";
 
 export type TableFilterLabels = {
+  searchLabel: string;
   searchPlaceholder: string;
   filtersToggle: string;
   filtersHide: string;
@@ -107,25 +108,30 @@ export default function TableFilterBar<T>({
   return (
     <div className="table-filter-bar">
       <div className="table-filter-bar-row">
-        <input
-          type="search"
-          className="table-filter-search"
-          value={search}
-          onChange={(e) => onSearchChange(e.target.value)}
-          placeholder={labels.searchPlaceholder}
-          aria-label={labels.searchPlaceholder}
-        />
+        <label className="table-filter-search-wrap">
+          <span className="table-filter-field-label">{labels.searchLabel}</span>
+          <input
+            type="search"
+            className="table-filter-search"
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder={labels.searchPlaceholder}
+            aria-label={labels.searchPlaceholder}
+          />
+        </label>
         {pinnedFields.map((field) => renderField(field, filters, onFilterChange, labels, true))}
-        {gridFields.length > 0 ? (
-          <button type="button" className="ghost table-filter-toggle" onClick={onToggleFilters}>
-            {showFilters ? labels.filtersHide : labels.filtersToggle}
-          </button>
-        ) : null}
-        {hasActiveFilters ? (
-          <button type="button" className="ghost table-filter-clear" onClick={onClear}>
-            {labels.clear}
-          </button>
-        ) : null}
+        <div className="table-filter-actions">
+          {gridFields.length > 0 ? (
+            <button type="button" className="ghost table-filter-toggle" onClick={onToggleFilters}>
+              {showFilters ? labels.filtersHide : labels.filtersToggle}
+            </button>
+          ) : null}
+          {hasActiveFilters ? (
+            <button type="button" className="ghost table-filter-clear" onClick={onClear}>
+              {labels.clear}
+            </button>
+          ) : null}
+        </div>
         {hasActiveFilters ? (
           <span className="muted small table-filter-summary">
             {labels.filteredSummary(filteredCount, totalCount)}
