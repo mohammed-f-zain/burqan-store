@@ -1269,7 +1269,7 @@ router.get(
   requireAdminPermission("redeem.read"),
   async (req, res, next) => {
     try {
-      const limit = Math.min(100, Math.max(1, z.coerce.number().int().parse(req.query.limit ?? 50)));
+      const limit = Math.min(500, Math.max(1, z.coerce.number().int().parse(req.query.limit ?? 100)));
       const { rows } = await query<{
         id: string;
         created_at: string;
@@ -1315,6 +1315,54 @@ router.get(
           lines: JSON.parse(row.lines_json) as unknown[],
         })),
       });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+router.delete(
+  "/redeem/redemptions/:id",
+  adminAuthMiddleware,
+  requireAnyAdminPermission("redeem.write", "orders.delete"),
+  async (req, res, next) => {
+    try {
+      const id = z.coerce.number().int().positive().parse(req.params.id);
+      const c = await pool.connect();
+      try {
+        await c.query("BEGIN");
+        const { rows } = await c.query<{ store_id: number; total_points_spent: number }>(
+          `SELECT store_id, total_points_spent FROM prize_redemptions WHERE id = $1 FOR UPDATE`,
+          [id]
+        );
+        const redemption = rows[0];
+        if (!redemption) throw new HttpError(404, "عملية الاستبدال غير موجودة");
+
+        await c.query(
+          `UPDATE stores
+           SET loyalty_points_balance = loyalty_points_balance + $1,
+               updated_at = now()
+           WHERE id = $2`,
+          [redemption.total_points_spent, redemption.store_id]
+        );
+        await c.query(`DELETE FROM prize_redemptions WHERE id = $1`, [id]);
+        await c.query("COMMIT");
+        res.json({
+          deleted: true,
+          id: String(id),
+          pointsRestored: redemption.total_points_spent,
+          storeId: redemption.store_id,
+        });
+      } catch (e) {
+        try {
+          await c.query("ROLLBACK");
+        } catch {
+          /* ignore */
+        }
+        throw e;
+      } finally {
+        c.release();
+      }
     } catch (e) {
       next(e);
     }

@@ -589,18 +589,29 @@ export const en: Messages = {
 
   orders: {
     title: "Orders",
+    tabsAria: "Order types",
+    tabSales: "Sales orders",
+    tabRedemptions: "Loyalty point redemptions",
+    redemptionsHint:
+      "Prize redemptions paid with loyalty points — not cash/deferred orders. Deleting restores points to the store balance.",
     rowHint: "Click a row to open the full order details.",
     colId: "Order",
     colStore: "Store",
     colRep: "Sales rep",
     colType: "Type",
     colTotal: "Total",
+    colPoints: "Points",
+    colProducts: "Products",
     colWhen: "Date",
     dateFrom: "From",
     dateTo: "To",
     filteredOrders: "Filtered orders",
+    filteredRedemptions: "Filtered redemptions",
     filteredTotal: "Filtered total",
     allOrdersCount: "Total orders",
+    allRedemptionsCount: "Total redemptions",
+    emptyRedemptions: "No loyalty point redemptions yet.",
+    redemptionsLoadFailed: "Could not load redemptions.",
     monthOrdersCount: (n: number) => `${n} orders this month`,
     totalsMatchHome: "Matches the home dashboard — Asia/Amman",
     filteredTotalsHint: "Totals from the filtered rows in the table",
@@ -618,6 +629,11 @@ export const en: Messages = {
     cancelDelete: "Cancel",
     deleted: "Order deleted.",
     deleteFailed: "Could not delete order.",
+    deleteRedemptionTitle: "Delete this redemption?",
+    confirmDeleteRedemption:
+      "The redemption record will be removed and the spent points will be added back to the store balance. This cannot be undone.",
+    deletedRedemption: "Redemption deleted and points restored to the store.",
+    deleteRedemptionFailed: "Could not delete redemption.",
   },
 
   account: {

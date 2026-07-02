@@ -1461,6 +1461,41 @@ html[dir="rtl"] .swal-toast-burqan .swal2-icon {
   border-bottom: 1px solid var(--line);
 }
 
+.orders-filter-totals-hint {
+  align-self: center;
+  margin-inline-start: auto;
+}
+
+.orders-page-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 14px;
+}
+
+.orders-page-tab {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s, color 0.12s;
+}
+
+.orders-page-tab--on {
+  border-color: rgba(13, 148, 136, 0.45);
+  background: rgba(13, 148, 136, 0.12);
+  color: #0f766e;
+}
+
+html[data-theme="dark"] .orders-page-tab--on {
+  color: var(--accent);
+}
+
 .stat-pill--accent strong {
   color: var(--accent, #2563eb);
 }
@@ -1468,10 +1503,6 @@ html[dir="rtl"] .swal-toast-burqan .swal2-icon {
 .orders-stat-sub {
   font-size: 11px;
   margin-top: 2px;
-}
-
-.orders-filter-totals-hint {
-  margin-inline-start: auto;
 }
 
 .stat-pill {
