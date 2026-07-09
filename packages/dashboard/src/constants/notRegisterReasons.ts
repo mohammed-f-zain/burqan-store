@@ -6,3 +6,8 @@ export const NOT_REGISTER_REASONS = [
   "المتجر مغلق أو غير جاهز",
   "مخزون كافٍ — لا حاجة للتعامل حالياً",
 ] as const;
+
+export function isNotRegisterReasonNote(note: string | null | undefined): boolean {
+  if (!note?.trim()) return false;
+  return (NOT_REGISTER_REASONS as readonly string[]).includes(note.trim());
+}

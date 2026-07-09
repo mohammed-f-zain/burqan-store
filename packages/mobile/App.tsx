@@ -59,6 +59,7 @@ import ToastOverlay, { type ToastKind } from "./ToastOverlay";
 import { theme } from "./theme";
 import DailyStoresByArea from "./DailyStoresByArea";
 import PossibleClientsSection from "./PossibleClientsSection";
+import RepZoneMapCard from "./RepZoneMapCard";
 import GooglePlacesByArea, { type GooglePlaceAreaSummary } from "./GooglePlacesByArea";
 import {
   groupRawGooglePlacesByArea,
@@ -70,7 +71,6 @@ import OrderInvoiceModal from "./OrderInvoiceModal";
 import OrderConfirmModal from "./OrderConfirmModal";
 import StoreCartPanel from "./StoreCartPanel";
 import StorePeekModal from "./StorePeekModal";
-import { NOT_REGISTER_REASONS } from "./notRegisterReasons";
 import RegisterErrorBoundary from "./RegisterErrorBoundary";
 import type { ReceiptData } from "./receiptFormat";
 import type { DailyStoreCard, PrizeProduct, ProspectCard, StoreBrief } from "./storeTypes";
@@ -255,7 +255,7 @@ const t = {
   dailyStoresNoSearchResults: "لا نتائج — جرّب بحثاً آخر",
   dailyStoresVisitQr: "زيارة",
   prospectsTitle: "عملاء محتملون",
-  prospectsHint: "متاجر بدون QR — اربط بطاقة جديدة عند الزيارة التالية",
+  prospectsHint: "عملاء محتملون في مناطق مسار اليوم فقط",
   prospectsEmpty: "لا يوجد عملاء محتملون",
   prospectsAdd: "إضافة",
   prospectsLinkQr: "ربط رمز QR",
@@ -263,18 +263,24 @@ const t = {
   prospectsPending: "باقٍ",
   prospectsSearch: "بحث…",
   prospectsPill: "محتمل",
+  zoneMapTitle: "منطقة مسار اليوم",
+  zoneMapUpdate: "تحديث",
+  zoneMapInZone: "أنت داخل منطقة المسار",
+  zoneMapOutZone: "أنت خارج منطقة المسار",
+  zoneMapUnknown: "اضغط تحديث للتحقق من موقعك",
+  zoneMapNoRoute: "لا يوجد مسار مجدول لهذا اليوم",
+  zoneMapLocating: "جاري التحقق من الموقع…",
+  zoneMapLocationDenied: "يُرجى السماح بالموقع للتحقق من المنطقة",
+  zoneMapFallback: "معاينة الخريطة غير متاحة — استخدم زر التحديث للتحقق",
   prospectConverted: "تم تحويل العميل إلى متجر مسجّل",
   prospectConvertFailed: "تعذّر ربط الرمز",
   prospectLinkScanHint: "امسح رمز بطاقة جديد غير مستخدم لربط هذا العميل",
-  prospectEndVisit: "إنهاء الزيارة",
-  prospectLastReason: "سبب عدم التسجيل",
-  prospectEndTitle: "إنهاء زيارة العميل المحتمل؟",
-  prospectEndMessage: "لم يتم ربط رمز QR. اذكر سبب عدم التسجيل قبل إغلاق الزيارة.",
-  prospectEndNoteLabel: "سبب عدم التسجيل",
-  prospectEndPickHint: "اختر سبباً واحداً",
-  prospectEndMode: "سبب عدم التسجيل — مطلوب",
-  prospectEndNoteRequired: "يرجى اختيار سبب عدم التسجيل",
-  prospectVisitRecordFailed: "تعذّر تسجيل الزيارة",
+  prospectNotRegisterReason: "سبب عدم التسجيل",
+  prospectNotRegisterReasonHint: "يمكنك تغيير السبب لاحقاً من هنا",
+  prospectSaveReason: "حفظ السبب",
+  prospectSavingReason: "جاري الحفظ…",
+  prospectReasonSaved: "تم حفظ السبب",
+  prospectReasonSaveFailed: "تعذّر حفظ السبب",
   prospectCoords: "الإحداثيات",
   prospectMapFallback: "معاينة الخريطة غير متاحة — اضغط فتح على الخريطة",
   navGoogle: "خرائط Google",
@@ -507,13 +513,10 @@ export default function App() {
   const googleRawByAreaRef = useRef<Record<number, RawGooglePlace[]>>({});
   const [peekStore, setPeekStore] = useState<DailyStoreCard | null>(null);
   const [peekProspect, setPeekProspect] = useState<ProspectCard | null>(null);
+  const [prospectReasonSaving, setProspectReasonSaving] = useState(false);
   const [endVisitOpen, setEndVisitOpen] = useState(false);
   const [endVisitBusy, setEndVisitBusy] = useState(false);
   const [endVisitNoBuyRequired, setEndVisitNoBuyRequired] = useState(false);
-  const [prospectEndVisitOpen, setProspectEndVisitOpen] = useState(false);
-  const [prospectEndVisitBusy, setProspectEndVisitBusy] = useState(false);
-  const [prospectEndVisitRequiresReason, setProspectEndVisitRequiresReason] = useState(false);
-  const [prospectEndVisitTarget, setProspectEndVisitTarget] = useState<ProspectCard | null>(null);
   const [visitHadOrder, setVisitHadOrder] = useState(false);
   const [orderReceipt, setOrderReceipt] = useState<ReceiptData | null>(null);
   const [orderReceiptOpen, setOrderReceiptOpen] = useState(false);
@@ -1549,105 +1552,45 @@ export default function App() {
     [activeStore, apiPatch, endStoreSession, showToast]
   );
 
-  useEffect(() => {
-    const prospect = peekProspect;
-    if (!prospect || !token || prospect.visitedToday) return;
-    void (async () => {
-      try {
-        const pos = await getRepPosition({ timeoutMs: 12_000 });
-        await apiPost(`/api/v1/rep/prospect-stores/${prospect.id}/visits`, {
-          repLat: pos.lat,
-          repLng: pos.lng,
-        });
-        setPeekProspect((p) => (p && p.id === prospect.id ? { ...p, visitedToday: true } : p));
-        setProspects((prev) =>
-          prev.map((p) => (p.id === prospect.id ? { ...p, visitedToday: true } : p))
-        );
-      } catch {
-        // Visit can be recorded when ending the visit.
-      }
-    })();
-  }, [apiPost, peekProspect?.id, peekProspect?.visitedToday, token]);
-
-  const openProspectEndVisit = useCallback(
-    async (p: ProspectCard) => {
-      let requiresReason = true;
-      try {
-        const data = (await apiGet(`/api/v1/rep/prospect-stores/${p.id}/today-visit-status`)) as {
-          requiresNotRegisterReason?: boolean;
-        };
-        requiresReason = Boolean(data.requiresNotRegisterReason);
-      } catch {
-        requiresReason = Boolean(p.visitedToday);
-      }
-      setProspectEndVisitRequiresReason(requiresReason);
-      setProspectEndVisitTarget(p);
-      setProspectEndVisitOpen(true);
-    },
-    [apiGet]
-  );
-
-  const confirmProspectEndVisit = useCallback(
-    async (payload: { note: string; kind: EndVisitReasonKind }) => {
-      const target = prospectEndVisitTarget;
-      if (!target) return;
-      const trimmed = payload.note.trim();
-      if (payload.kind === "not-register-reason" && !trimmed) {
-        showToast(t.prospectEndNoteRequired, "error");
-        return;
-      }
-      if (!prospectEndVisitRequiresReason && !trimmed) {
-        setProspectEndVisitOpen(false);
-        setProspectEndVisitTarget(null);
-        setPeekProspect(null);
-        return;
-      }
-      setProspectEndVisitBusy(true);
+  const saveProspectReason = useCallback(
+    async (p: ProspectCard, reason: string) => {
+      setProspectReasonSaving(true);
       try {
         const pos = await getRepPosition({ timeoutMs: 20_000 });
-        if (prospectEndVisitRequiresReason || trimmed) {
-          if (target.visitedToday) {
-            await apiPatch(`/api/v1/rep/prospect-stores/${target.id}/today-visit-note`, {
-              note: trimmed || null,
-              kind: payload.kind,
-            });
-          } else {
-            await apiPost(`/api/v1/rep/prospect-stores/${target.id}/visits`, {
-              repLat: pos.lat,
-              repLng: pos.lng,
-              note: trimmed || null,
-              kind: payload.kind,
-            });
-          }
-        } else if (!target.visitedToday) {
-          await apiPost(`/api/v1/rep/prospect-stores/${target.id}/visits`, {
+        if (p.visitedToday) {
+          await apiPatch(`/api/v1/rep/prospect-stores/${p.id}/today-visit-note`, {
+            note: reason,
+            kind: "not-register-reason",
+          });
+        } else {
+          await apiPost(`/api/v1/rep/prospect-stores/${p.id}/visits`, {
             repLat: pos.lat,
             repLng: pos.lng,
+            note: reason,
+            kind: "not-register-reason",
           });
         }
-        setProspectEndVisitOpen(false);
-        setProspectEndVisitTarget(null);
-        setPeekProspect(null);
+        setPeekProspect((prev) =>
+          prev && prev.id === p.id ? { ...prev, todayVisitNote: reason, visitedToday: true } : prev
+        );
+        setProspects((prev) =>
+          prev.map((row) =>
+            row.id === p.id ? { ...row, todayVisitNote: reason, visitedToday: true } : row
+          )
+        );
+        showToast(t.prospectReasonSaved, "success");
         void loadProspects();
         void loadDailyStores();
       } catch (e) {
         if (e instanceof LocationDeniedError) showToast(t.locationDenied, "error");
         else if (e instanceof LocationInaccurateError) showToast(t.locationInaccurate(e.accuracyM), "error");
         else if (e instanceof LocationTimeoutError) showToast(t.locationTimeout, "error");
-        else showToast(e instanceof Error ? e.message : t.prospectVisitRecordFailed, "error");
+        else showToast(e instanceof Error ? e.message : t.prospectReasonSaveFailed, "error");
       } finally {
-        setProspectEndVisitBusy(false);
+        setProspectReasonSaving(false);
       }
     },
-    [
-      apiPatch,
-      apiPost,
-      loadDailyStores,
-      loadProspects,
-      prospectEndVisitRequiresReason,
-      prospectEndVisitTarget,
-      showToast,
-    ]
+    [apiPatch, apiPost, loadDailyStores, loadProspects, showToast]
   );
 
   const cartLines = useMemo(() => {
@@ -1835,6 +1778,22 @@ export default function App() {
         >
       {bottomTab === "home" && mode !== "store" && mode !== "register" && mode !== "prospect-add" && !activeStore && (
         <>
+          <RepZoneMapCard
+            apiGet={apiGet}
+            onNotice={showToast}
+            labels={{
+              title: t.zoneMapTitle,
+              update: t.zoneMapUpdate,
+              inZone: t.zoneMapInZone,
+              outZone: t.zoneMapOutZone,
+              unknown: t.zoneMapUnknown,
+              noRoute: t.zoneMapNoRoute,
+              locating: t.zoneMapLocating,
+              locationDenied: t.zoneMapLocationDenied,
+              mapFallback: t.zoneMapFallback,
+            }}
+          />
+
           <View style={styles.card}>
             <Pressable style={styles.scanPrimary} onPress={() => void openQrScanner()}>
               <Text style={styles.scanPrimaryText}>{t.openScanner}</Text>
@@ -2594,33 +2553,6 @@ export default function App() {
         }}
         onConfirm={(payload) => void confirmEndVisit(payload)}
       />
-      <EndVisitModal
-        visible={prospectEndVisitOpen}
-        cartItemCount={0}
-        noBuyReasonRequired={prospectEndVisitRequiresReason}
-        fixedReasons={NOT_REGISTER_REASONS}
-        requiredReasonKind="not-register-reason"
-        busy={prospectEndVisitBusy}
-        labels={{
-          title: t.prospectEndTitle,
-          message: t.prospectEndMessage,
-          messageCart: t.visitEndMessageCart,
-          noteLabel: t.prospectEndNoteLabel,
-          notePlaceholder: t.visitEndNotePlaceholder,
-          pickReasonHint: t.prospectEndPickHint,
-          modeVisitNote: t.visitEndModeNote,
-          modeNoBuy: t.prospectEndMode,
-          stay: t.visitEndStay,
-          goCart: t.visitEndGoCart,
-          confirm: t.visitEndConfirm,
-        }}
-        onStay={() => {
-          setProspectEndVisitOpen(false);
-          setProspectEndVisitTarget(null);
-        }}
-        onGoCart={() => {}}
-        onConfirm={(payload) => void confirmProspectEndVisit(payload)}
-      />
       <StorePeekModal
         visible={peekStore != null}
         store={peekStore}
@@ -2642,6 +2574,7 @@ export default function App() {
         <ProspectPeekModal
           visible={peekProspect != null}
           prospect={peekProspect}
+          savingReason={prospectReasonSaving}
           labels={{
             close: t.close,
             phone: t.phone,
@@ -2657,14 +2590,17 @@ export default function App() {
             prospectPill: t.prospectsPill,
             visited: t.prospectsVisited,
             pending: t.prospectsPending,
-            endVisit: t.prospectEndVisit,
-            lastReason: t.prospectLastReason,
+            notRegisterReason: t.prospectNotRegisterReason,
+            notRegisterReasonHint: t.prospectNotRegisterReasonHint,
+            saveReason: t.prospectSaveReason,
+            savingReason: t.prospectSavingReason,
+            reasonSaved: t.prospectReasonSaved,
             mapFallback: t.prospectMapFallback,
             storeLocation: t.location,
           }}
           formatLocation={(p) => formatStoreLocation(p, t.locationUnknown)}
           onClose={() => setPeekProspect(null)}
-          onEndVisit={(p) => void openProspectEndVisit(p)}
+          onSaveReason={(p, reason) => void saveProspectReason(p, reason)}
           onLinkQr={(p) => {
             setConvertingProspectId(p.id);
             showToast(t.prospectLinkScanHint, "info");

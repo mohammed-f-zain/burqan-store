@@ -494,6 +494,15 @@ export const en: Messages = {
     dismissConfirm: "They will be hidden from open lists. This cannot be undone if already converted.",
     dismissed: "Possible client dismissed.",
     dismissFailed: "Could not dismiss.",
+    backToList: "Back to possible clients",
+    detailInfo: "Details",
+    detailMap: "Location",
+    detailVisits: "Visit history",
+    visitDate: "Date",
+    visitRep: "Rep",
+    noVisits: "No visits recorded yet.",
+    convertedStore: "Converted store",
+    rowHint: "Click a row to open full details.",
   },
 
   stores: {

@@ -16,6 +16,7 @@ import OrderDetailPage from "./pages/OrderDetailPage";
 import OrdersPage from "./pages/OrdersPage";
 import OverviewPage from "./pages/OverviewPage";
 import PossibleClientsPage from "./pages/PossibleClientsPage";
+import PossibleClientDetailPage from "./pages/PossibleClientDetailPage";
 import ProductsPage from "./pages/ProductsPage";
 import RedeemPage from "./pages/RedeemPage";
 import OwnerOrderDetail from "./pages/OwnerOrderDetail";
@@ -60,6 +61,7 @@ export default function App() {
                   <Route path="loyalty-stores" element={<LoyaltyStoresPage />} />
                   <Route path="stores/:id" element={<StoreDetailPage />} />
                   <Route path="possible-clients" element={<PossibleClientsPage />} />
+                  <Route path="possible-clients/:id" element={<PossibleClientDetailPage />} />
                   <Route path="visits" element={<VisitsPage />} />
                   <Route path="orders" element={<OrdersPage />} />
                   <Route path="orders/:id" element={<OrderDetailPage />} />

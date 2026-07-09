@@ -2024,6 +2024,47 @@ router.get(
   }
 );
 
+router.get(
+  "/prospect-stores/:id",
+  adminAuthMiddleware,
+  requireAdminPermission("stores.read"),
+  async (req, res, next) => {
+    try {
+      const id = z.coerce.number().int().positive().parse(req.params.id);
+      const { rows } = await query(
+        `SELECT ps.id, ps.name, ps.phone, ps.owner_name, ps.location_lat, ps.location_lng,
+                ps.address_text, ps.image_url, ps.area_id, ps.status, ps.converted_store_id,
+                ps.dismiss_reason, ps.created_at, ps.updated_at,
+                a.name AS area_name,
+                r.full_name AS created_by_rep_name,
+                cs.name AS converted_store_name
+         FROM prospect_stores ps
+         JOIN areas a ON a.id = ps.area_id
+         JOIN representatives r ON r.id = ps.created_by_representative_id
+         LEFT JOIN stores cs ON cs.id = ps.converted_store_id
+         WHERE ps.id = $1`,
+        [id]
+      );
+      const prospect = rows[0];
+      if (!prospect) throw new HttpError(404, "العميل المحتمل غير موجود");
+
+      const { rows: visits } = await query(
+        `SELECT pv.id, pv.visited_at, pv.note, r.full_name AS rep_name
+         FROM prospect_visits pv
+         JOIN representatives r ON r.id = pv.representative_id
+         WHERE pv.prospect_store_id = $1
+         ORDER BY pv.visited_at DESC
+         LIMIT 100`,
+        [id]
+      );
+
+      res.json({ prospect, visits });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
 router.patch(
   "/prospect-stores/:id",
   adminAuthMiddleware,

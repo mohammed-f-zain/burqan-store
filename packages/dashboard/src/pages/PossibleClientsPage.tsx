@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
@@ -29,6 +29,7 @@ type Prospect = {
 };
 
 export default function PossibleClientsPage() {
+  const navigate = useNavigate();
   const { can } = useAuth();
   const { t } = useLocale();
   const canWrite = can("stores.write");
@@ -132,6 +133,7 @@ export default function PossibleClientsPage() {
       <div className="card">
         <h2>{t.prospects.title}</h2>
         <p className="muted small">{t.prospects.hint}</p>
+        <p className="muted small">{t.prospects.rowHint}</p>
 
         <div className="form row spread" style={{ alignItems: "flex-end", gap: 12, marginTop: 12 }}>
           <label style={{ flex: "0 1 220px" }}>
@@ -203,7 +205,19 @@ export default function PossibleClientsPage() {
               </thead>
               <tbody>
                 {pgn.slice.map((p) => (
-                  <tr key={p.id}>
+                  <tr
+                    key={p.id}
+                    className="store-row"
+                    role="link"
+                    tabIndex={0}
+                    onClick={() => navigate(`/app/possible-clients/${p.id}`)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        navigate(`/app/possible-clients/${p.id}`);
+                      }
+                    }}
+                  >
                     <td>
                       <strong>{p.name}</strong>
                       {p.address_text ? <div className="muted small">{p.address_text}</div> : null}
@@ -226,7 +240,7 @@ export default function PossibleClientsPage() {
                     </td>
                     <td className="muted small">{prospectReasonText(p, t)}</td>
                     <td className="muted small">{formatMarketDateTime(p.created_at)}</td>
-                    <td>
+                    <td onClick={(e) => e.stopPropagation()}>
                       {canWrite && p.status === "open" ? (
                         <button type="button" className="ghost danger" onClick={() => void dismiss(p.id)}>
                           {t.prospects.dismiss}

@@ -22,6 +22,7 @@ const RegisterMapPanelLazy = lazy(() =>
 import { getRepPosition, LocationDeniedError, LocationInaccurateError, LocationTimeoutError } from "./getDeviceLocation";
 import { resolveRepArea } from "./resolveRepArea";
 import { productImageUrl } from "./productImage";
+import NotRegisterReasonPicker from "./NotRegisterReasonPicker";
 import { theme } from "./theme";
 
 const labels = {
@@ -54,6 +55,9 @@ const labels = {
   uploadFailed: "فشل رفع الصورة",
   registerFailed: "فشل الحفظ",
   storeCreated: "تم حفظ العميل المحتمل.",
+  notRegisterReason: "سبب عدم التسجيل",
+  notRegisterReasonHint: "لماذا لم يُربَط المتجر برمز QR اليوم؟",
+  notRegisterReasonRequired: "يرجى اختيار سبب عدم التسجيل",
   mapLoadFailed: "تعذّر تحميل خريطة المناطق",
   mapFallback: "معاينة الخريطة غير متاحة على هذا الجهاز — الموقع يُحدَّد من GPS.",
   openInMaps: "فتح في خرائط Google",
@@ -105,6 +109,7 @@ export default function ProspectStoreForm(props: Props) {
   const [uploadBusy, setUploadBusy] = useState(false);
   const [imagePath, setImagePath] = useState<string | null>(null);
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
+  const [visitReason, setVisitReason] = useState<string | null>(null);
 
   const mapAreas = jordanAreas;
 
@@ -205,6 +210,10 @@ export default function ProspectStoreForm(props: Props) {
   }
 
   async function submit() {
+    if (!visitReason) {
+      props.onNotice(labels.notRegisterReasonRequired);
+      return;
+    }
     setBusy(true);
     try {
       const pos = await getRepPosition({ timeoutMs: 20_000 });
@@ -219,6 +228,7 @@ export default function ProspectStoreForm(props: Props) {
           locationLng: pos.lng,
           addressText: address || undefined,
           imageUrl: imagePath ?? undefined,
+          visitNote: visitReason,
         }),
       });
       const data = await res.json();
@@ -343,11 +353,19 @@ export default function ProspectStoreForm(props: Props) {
         )}
       </Pressable>
 
+      <NotRegisterReasonPicker
+        label={labels.notRegisterReason}
+        hint={labels.notRegisterReasonHint}
+        value={visitReason}
+        onChange={setVisitReason}
+        disabled={busy}
+      />
+
       <View style={styles.actions}>
         <Pressable style={styles.secondaryBtn} onPress={() => props.onDone(labels.cancel, false)}>
           <Text style={styles.secondaryText}>{labels.cancel}</Text>
         </Pressable>
-        <Pressable style={styles.primaryBtn} onPress={() => void submit()} disabled={busy || locating || !areaResolved}>
+        <Pressable style={styles.primaryBtn} onPress={() => void submit()} disabled={busy || locating || !areaResolved || !visitReason}>
           {busy ? (
             <ActivityIndicator color={theme.onAccent} />
           ) : (

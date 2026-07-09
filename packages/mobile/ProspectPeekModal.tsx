@@ -1,7 +1,17 @@
-import { lazy, Suspense } from "react";
-import { ActivityIndicator, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { lazy, Suspense, useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Linking,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import NotRegisterReasonPicker from "./NotRegisterReasonPicker";
 import { openInGoogleMaps } from "./openGoogleMaps";
 import type { ProspectCard } from "./storeTypes";
 import { theme } from "./theme";
@@ -25,8 +35,11 @@ type Labels = {
   prospectPill: string;
   visited: string;
   pending: string;
-  endVisit: string;
-  lastReason: string;
+  notRegisterReason: string;
+  notRegisterReasonHint: string;
+  saveReason: string;
+  savingReason: string;
+  reasonSaved: string;
   mapFallback: string;
   storeLocation: string;
 };
@@ -36,13 +49,22 @@ type Props = {
   prospect: ProspectCard | null;
   labels: Labels;
   formatLocation: (p: ProspectCard) => string;
+  savingReason?: boolean;
   onClose: () => void;
   onLinkQr: (prospect: ProspectCard) => void;
-  onEndVisit: (prospect: ProspectCard) => void;
+  onSaveReason: (prospect: ProspectCard, reason: string) => void | Promise<void>;
 };
 
 export default function ProspectPeekModal(props: Props) {
-  const { prospect, visible, labels } = props;
+  const { prospect, visible, labels, savingReason } = props;
+  const [reason, setReason] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (prospect) {
+      setReason(prospect.todayVisitNote?.trim() || null);
+    }
+  }, [prospect?.id, prospect?.todayVisitNote]);
+
   if (!prospect) return null;
 
   const { lat, lng } = prospect.location;
@@ -52,6 +74,7 @@ export default function ProspectPeekModal(props: Props) {
     latitudeDelta: 0.012,
     longitudeDelta: 0.012,
   };
+  const reasonDirty = reason !== (prospect.todayVisitNote?.trim() || null);
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={props.onClose}>
@@ -136,11 +159,26 @@ export default function ProspectPeekModal(props: Props) {
             </View>
           ) : null}
 
-          {prospect.todayVisitNote?.trim() ? (
-            <View style={styles.row}>
-              <Text style={styles.label}>{labels.lastReason}</Text>
-              <Text style={styles.value}>{prospect.todayVisitNote.trim()}</Text>
-            </View>
+          <NotRegisterReasonPicker
+            label={labels.notRegisterReason}
+            hint={labels.notRegisterReasonHint}
+            value={reason}
+            onChange={setReason}
+            disabled={savingReason}
+          />
+
+          {reasonDirty && reason ? (
+            <Pressable
+              style={[styles.saveReasonBtn, savingReason && styles.btnDisabled]}
+              onPress={() => void props.onSaveReason(prospect, reason)}
+              disabled={savingReason}
+            >
+              {savingReason ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.saveReasonBtnText}>{labels.saveReason}</Text>
+              )}
+            </Pressable>
           ) : null}
 
           <Pressable
@@ -161,13 +199,6 @@ export default function ProspectPeekModal(props: Props) {
               <Text style={styles.callBtnText}>{labels.callStore}</Text>
             </Pressable>
           ) : null}
-
-          <Pressable
-            style={styles.endVisitBtn}
-            onPress={() => props.onEndVisit(prospect)}
-          >
-            <Text style={styles.endVisitBtnText}>{labels.endVisit}</Text>
-          </Pressable>
 
           <Pressable
             style={styles.linkQrBtn}
@@ -243,6 +274,15 @@ const styles = StyleSheet.create({
   },
   link: { color: accent },
   ltrWrap: { direction: "ltr", alignSelf: "stretch" },
+  saveReasonBtn: {
+    marginTop: 12,
+    backgroundColor: theme.accent,
+    paddingVertical: 14,
+    borderRadius: theme.radius.md,
+    alignItems: "center",
+  },
+  saveReasonBtnText: { color: "#fff", fontWeight: "800", fontSize: 16 },
+  btnDisabled: { opacity: 0.6 },
   mapsBtn: {
     marginTop: 20,
     backgroundColor: accent,
@@ -261,14 +301,6 @@ const styles = StyleSheet.create({
     borderColor: line,
   },
   callBtnText: { color: text, fontWeight: "700", fontSize: 16 },
-  endVisitBtn: {
-    marginTop: 10,
-    backgroundColor: theme.danger,
-    paddingVertical: 14,
-    borderRadius: theme.radius.md,
-    alignItems: "center",
-  },
-  endVisitBtnText: { color: "#fff", fontWeight: "800", fontSize: 16 },
   linkQrBtn: {
     marginTop: 10,
     backgroundColor: theme.accentSoft,

@@ -492,6 +492,15 @@ export const ar = {
     dismissConfirm: "سيُخفى من القائمة المفتوحة. لا يمكن التراجع إذا تم تحويله مسبقاً.",
     dismissed: "تم استبعاد العميل المحتمل.",
     dismissFailed: "تعذّر الاستبعاد.",
+    backToList: "العودة لقائمة العملاء المحتملين",
+    detailInfo: "التفاصيل",
+    detailMap: "الموقع",
+    detailVisits: "سجل الزيارات",
+    visitDate: "التاريخ",
+    visitRep: "المندوب",
+    noVisits: "لا توجد زيارات مسجّلة بعد.",
+    convertedStore: "المتجر المسجّل",
+    rowHint: "اضغط على الصف لعرض التفاصيل الكاملة.",
   },
 
   stores: {

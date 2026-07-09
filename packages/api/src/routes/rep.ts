@@ -450,6 +450,7 @@ const prospectStoreSchema = z.object({
   locationLng: z.number(),
   addressText: z.string().optional(),
   imageUrl: optionalStoredImagePathSchema,
+  visitNote: z.string().max(2000),
 });
 
 const prospectConvertSchema = z.object({
@@ -515,13 +516,12 @@ async function loadProspectForRep(prospectId: number, rep: { id: number }) {
   );
   const p = rows[0];
   if (!p) throw new HttpError(404, "العميل المحتمل غير موجود");
-  const canAccess =
-    p.created_by_representative_id === rep.id || today.expandedAreaIds.includes(p.area_id);
+  const canAccess = today.expandedAreaIds.includes(p.area_id);
   if (!canAccess) throw new HttpError(403, "ليس ضمن مسار اليوم");
   return p;
 }
 
-/** Possible clients (no QR) — open prospects in today's route zone or created by rep. */
+/** Possible clients (no QR) — open prospects in today's route zone only. */
 router.get("/prospect-stores", repAuthMiddleware, async (req, res, next) => {
   try {
     const rep = req.rep!;
@@ -566,7 +566,7 @@ router.get("/prospect-stores", repAuthMiddleware, async (req, res, next) => {
        FROM prospect_stores ps
        JOIN areas a ON a.id = ps.area_id
        WHERE ps.status = 'open'
-         AND (ps.created_by_representative_id = $2 OR ps.area_id = ANY($1::int[]))
+         AND ps.area_id = ANY($1::int[])
        ORDER BY visited_today ASC, a.name ASC, ps.name ASC`,
       [areaFilterIds, rep.id]
     );
@@ -586,6 +586,10 @@ router.post("/prospect-stores", repAuthMiddleware, async (req, res, next) => {
   try {
     const body = prospectStoreSchema.parse(req.body);
     const rep = req.rep!;
+    const visitNote = body.visitNote.trim();
+    if (!isNotRegisterReasonNote(visitNote)) {
+      throw new HttpError(400, "يرجى اختيار سبب عدم التسجيل من القائمة");
+    }
     const today = await getRepTodayWorkAreaIds(rep.id);
     const resolved = await resolveAreaForRepRoute(
       body.locationLat,
@@ -614,7 +618,7 @@ router.post("/prospect-stores", repAuthMiddleware, async (req, res, next) => {
     await query(
       `INSERT INTO prospect_visits (prospect_store_id, representative_id, note)
        VALUES ($1, $2, $3)`,
-      [prospectId, rep.id, null]
+      [prospectId, rep.id, visitNote]
     );
     const loaded = await loadProspectForRep(prospectId, rep);
     res.status(201).json({
@@ -865,6 +869,71 @@ router.get("/route/today", repAuthMiddleware, async (req, res, next) => {
         areaCount: route.routeZone.areaIds.length,
         areas: route.routeZone.areaNames,
       },
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+const routeZoneStatusQuerySchema = z.object({
+  lat: z.coerce.number().min(-90).max(90).optional(),
+  lng: z.coerce.number().min(-180).max(180).optional(),
+});
+
+/** Today's route zone map + whether rep GPS is inside the zone. */
+router.get("/route/zone-status", repAuthMiddleware, async (req, res, next) => {
+  try {
+    const rep = req.rep!;
+    const q = routeZoneStatusQuerySchema.parse(req.query);
+    const today = await getRepTodayWorkAreaIds(rep.id);
+
+    if (!today.route) {
+      return res.json({
+        routeToday: null,
+        inZone: null,
+        geojson: { type: "FeatureCollection", features: [] },
+        message: "لا يوجد مسار مجدول لهذا اليوم",
+      });
+    }
+
+    if (!today.expandedAreaIds.length) {
+      return res.json({
+        routeToday: {
+          dayName: today.dayName,
+          zoneName: today.route.routeZone.name,
+          zoneId: today.route.routeZone.id,
+          areas: today.route.routeZone.areaNames,
+        },
+        inZone: null,
+        geojson: { type: "FeatureCollection", features: [] },
+        message: "منطقة المسار لا تحتوي مناطق",
+      });
+    }
+
+    let inZone: boolean | null = null;
+    if (q.lat != null && q.lng != null) {
+      const resolved = await resolveAreaForRepRoute(q.lat, q.lng, today.expandedAreaIds);
+      inZone = resolved.assignedToRep;
+    }
+
+    const payload = await buildJordanVoronoiPayload(
+      q.lat != null && q.lng != null ? { lat: q.lat, lng: q.lng, radiusKm: 32 } : undefined
+    );
+    const zoneIdSet = new Set(today.expandedAreaIds);
+    const geojson = {
+      type: "FeatureCollection" as const,
+      features: payload.geojson.features.filter((f) => zoneIdSet.has(f.properties.areaId)),
+    };
+
+    res.json({
+      routeToday: {
+        dayName: today.dayName,
+        zoneName: today.route.routeZone.name,
+        zoneId: today.route.routeZone.id,
+        areas: today.route.routeZone.areaNames,
+      },
+      inZone,
+      geojson,
     });
   } catch (e) {
     next(e);
