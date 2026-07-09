@@ -450,7 +450,7 @@ const prospectStoreSchema = z.object({
   locationLng: z.number(),
   addressText: z.string().optional(),
   imageUrl: optionalStoredImagePathSchema,
-  visitNote: z.string().max(2000),
+  visitNote: z.string().max(2000).optional(),
 });
 
 const prospectConvertSchema = z.object({
@@ -586,8 +586,8 @@ router.post("/prospect-stores", repAuthMiddleware, async (req, res, next) => {
   try {
     const body = prospectStoreSchema.parse(req.body);
     const rep = req.rep!;
-    const visitNote = body.visitNote.trim();
-    if (!isNotRegisterReasonNote(visitNote)) {
+    const visitNote = body.visitNote?.trim() || null;
+    if (visitNote && !isNotRegisterReasonNote(visitNote)) {
       throw new HttpError(400, "يرجى اختيار سبب عدم التسجيل من القائمة");
     }
     const today = await getRepTodayWorkAreaIds(rep.id);
