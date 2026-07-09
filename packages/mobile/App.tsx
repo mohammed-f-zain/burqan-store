@@ -57,11 +57,31 @@ import { clearRepToken, loadStoredRepToken, saveRepToken } from "./repSession";
 import SplashScreen from "./SplashScreen";
 import ToastOverlay, { type ToastKind } from "./ToastOverlay";
 import { theme } from "./theme";
+import DailyStoresByArea from "./DailyStoresByArea";
+import PossibleClientsSection from "./PossibleClientsSection";
+import GooglePlacesByArea, { type GooglePlaceAreaSummary } from "./GooglePlacesByArea";
+import {
+  groupRawGooglePlacesByArea,
+  type RawGooglePlace,
+} from "./groupGooglePlacesByArea";
+import EndVisitModal, { type EndVisitReasonKind } from "./EndVisitModal";
+import EndVisitBar from "./EndVisitBar";
+import OrderInvoiceModal from "./OrderInvoiceModal";
+import OrderConfirmModal from "./OrderConfirmModal";
+import StoreCartPanel from "./StoreCartPanel";
+import StorePeekModal from "./StorePeekModal";
+import { NOT_REGISTER_REASONS } from "./notRegisterReasons";
+import RegisterErrorBoundary from "./RegisterErrorBoundary";
+import type { ReceiptData } from "./receiptFormat";
+import type { DailyStoreCard, PrizeProduct, ProspectCard, StoreBrief } from "./storeTypes";
+import { normalizeStoreBrief } from "./storeTypes";
+import { sortDailyStoreCardsByDistance } from "./geoDistance";
 
 /** Lazy: keeps react-native-maps out of the register screen chunk on Android. */
 const RegisterStoreForm = lazy(() => import("./RegisterStoreForm"));
 const ProspectStoreForm = lazy(() => import("./ProspectStoreForm"));
 const EditStoreForm = lazy(() => import("./EditStoreForm"));
+const ProspectPeekModal = lazy(() => import("./ProspectPeekModal"));
 
 void ExpoSplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -336,26 +356,7 @@ function mapProductRow(r: {
 }
 
 type Area = { id: number; name: string };
-import DailyStoresByArea from "./DailyStoresByArea";
-import PossibleClientsSection from "./PossibleClientsSection";
-import GooglePlacesByArea, { type GooglePlaceAreaSummary } from "./GooglePlacesByArea";
-import {
-  groupRawGooglePlacesByArea,
-  type RawGooglePlace,
-} from "./groupGooglePlacesByArea";
-import EndVisitModal, { type EndVisitReasonKind } from "./EndVisitModal";
-import EndVisitBar from "./EndVisitBar";
-import OrderInvoiceModal from "./OrderInvoiceModal";
-import OrderConfirmModal from "./OrderConfirmModal";
-import StoreCartPanel from "./StoreCartPanel";
-import StorePeekModal from "./StorePeekModal";
-import ProspectPeekModal from "./ProspectPeekModal";
-import { NOT_REGISTER_REASONS } from "./notRegisterReasons";
-import RegisterErrorBoundary from "./RegisterErrorBoundary";
-import type { ReceiptData } from "./receiptFormat";
-import type { DailyStoreCard, PrizeProduct, ProspectCard, StoreBrief } from "./storeTypes";
-import { normalizeStoreBrief } from "./storeTypes";
-import { sortDailyStoreCardsByDistance } from "./geoDistance";
+
 export type { StoreBrief } from "./storeTypes";
 
 type BottomTab = "home" | "route" | "google" | "inventory" | "store" | "profile";
@@ -2637,38 +2638,40 @@ export default function App() {
         formatLocation={(s) => formatStoreLocation(s, t.locationUnknown)}
         onClose={() => setPeekStore(null)}
       />
-      <ProspectPeekModal
-        visible={peekProspect != null}
-        prospect={peekProspect}
-        labels={{
-          close: t.close,
-          phone: t.phone,
-          owner: t.storeOwner,
-          location: t.location,
-          address: t.address,
-          area: t.area,
-          coords: t.prospectCoords,
-          locationUnknown: t.locationUnknown,
-          openInMaps: t.openInMaps,
-          callStore: t.callStore,
-          linkQr: t.prospectsLinkQr,
-          prospectPill: t.prospectsPill,
-          visited: t.prospectsVisited,
-          pending: t.prospectsPending,
-          endVisit: t.prospectEndVisit,
-          lastReason: t.prospectLastReason,
-          mapFallback: t.prospectMapFallback,
-          storeLocation: t.location,
-        }}
-        formatLocation={(p) => formatStoreLocation(p, t.locationUnknown)}
-        onClose={() => setPeekProspect(null)}
-        onEndVisit={(p) => void openProspectEndVisit(p)}
-        onLinkQr={(p) => {
-          setConvertingProspectId(p.id);
-          showToast(t.prospectLinkScanHint, "info");
-          void openQrScanner();
-        }}
-      />
+      <Suspense fallback={null}>
+        <ProspectPeekModal
+          visible={peekProspect != null}
+          prospect={peekProspect}
+          labels={{
+            close: t.close,
+            phone: t.phone,
+            owner: t.storeOwner,
+            location: t.location,
+            address: t.address,
+            area: t.area,
+            coords: t.prospectCoords,
+            locationUnknown: t.locationUnknown,
+            openInMaps: t.openInMaps,
+            callStore: t.callStore,
+            linkQr: t.prospectsLinkQr,
+            prospectPill: t.prospectsPill,
+            visited: t.prospectsVisited,
+            pending: t.prospectsPending,
+            endVisit: t.prospectEndVisit,
+            lastReason: t.prospectLastReason,
+            mapFallback: t.prospectMapFallback,
+            storeLocation: t.location,
+          }}
+          formatLocation={(p) => formatStoreLocation(p, t.locationUnknown)}
+          onClose={() => setPeekProspect(null)}
+          onEndVisit={(p) => void openProspectEndVisit(p)}
+          onLinkQr={(p) => {
+            setConvertingProspectId(p.id);
+            showToast(t.prospectLinkScanHint, "info");
+            void openQrScanner();
+          }}
+        />
+      </Suspense>
     </SafeAreaView>
   );
 }
