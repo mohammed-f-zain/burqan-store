@@ -25,6 +25,8 @@ type Labels = {
   prospectPill: string;
   visited: string;
   pending: string;
+  endVisit: string;
+  lastReason: string;
   mapFallback: string;
   storeLocation: string;
 };
@@ -36,6 +38,7 @@ type Props = {
   formatLocation: (p: ProspectCard) => string;
   onClose: () => void;
   onLinkQr: (prospect: ProspectCard) => void;
+  onEndVisit: (prospect: ProspectCard) => void;
 };
 
 export default function ProspectPeekModal(props: Props) {
@@ -133,6 +136,13 @@ export default function ProspectPeekModal(props: Props) {
             </View>
           ) : null}
 
+          {prospect.todayVisitNote?.trim() ? (
+            <View style={styles.row}>
+              <Text style={styles.label}>{labels.lastReason}</Text>
+              <Text style={styles.value}>{prospect.todayVisitNote.trim()}</Text>
+            </View>
+          ) : null}
+
           <Pressable
             style={styles.mapsBtn}
             onPress={() =>
@@ -151,6 +161,13 @@ export default function ProspectPeekModal(props: Props) {
               <Text style={styles.callBtnText}>{labels.callStore}</Text>
             </Pressable>
           ) : null}
+
+          <Pressable
+            style={styles.endVisitBtn}
+            onPress={() => props.onEndVisit(prospect)}
+          >
+            <Text style={styles.endVisitBtnText}>{labels.endVisit}</Text>
+          </Pressable>
 
           <Pressable
             style={styles.linkQrBtn}
@@ -244,6 +261,14 @@ const styles = StyleSheet.create({
     borderColor: line,
   },
   callBtnText: { color: text, fontWeight: "700", fontSize: 16 },
+  endVisitBtn: {
+    marginTop: 10,
+    backgroundColor: theme.danger,
+    paddingVertical: 14,
+    borderRadius: theme.radius.md,
+    alignItems: "center",
+  },
+  endVisitBtnText: { color: "#fff", fontWeight: "800", fontSize: 16 },
   linkQrBtn: {
     marginTop: 10,
     backgroundColor: theme.accentSoft,

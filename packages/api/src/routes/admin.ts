@@ -1998,10 +1998,16 @@ router.get(
       const { rows } = await query(
         `SELECT ps.id, ps.name, ps.phone, ps.owner_name, ps.location_lat, ps.location_lng,
                 ps.address_text, ps.image_url, ps.area_id, ps.status, ps.converted_store_id,
-                ps.created_at, ps.updated_at,
+                ps.dismiss_reason, ps.created_at, ps.updated_at,
                 a.name AS area_name,
                 r.full_name AS created_by_rep_name,
-                cs.name AS converted_store_name
+                cs.name AS converted_store_name,
+                (
+                  SELECT pv.note FROM prospect_visits pv
+                  WHERE pv.prospect_store_id = ps.id
+                  ORDER BY pv.visited_at DESC
+                  LIMIT 1
+                ) AS last_visit_note
          FROM prospect_stores ps
          JOIN areas a ON a.id = ps.area_id
          JOIN representatives r ON r.id = ps.created_by_representative_id
@@ -2031,6 +2037,7 @@ router.patch(
           name: z.string().min(2).optional(),
           phone: z.string().min(6).optional(),
           ownerName: z.string().min(2).optional(),
+          dismissReason: z.string().max(2000).nullable().optional(),
         })
         .parse(req.body);
       const sets: string[] = ["updated_at = now()"];
@@ -2051,6 +2058,10 @@ router.patch(
       if (body.ownerName) {
         sets.push(`owner_name = $${i++}`);
         vals.push(body.ownerName);
+      }
+      if (body.dismissReason !== undefined) {
+        sets.push(`dismiss_reason = $${i++}`);
+        vals.push(body.dismissReason);
       }
       vals.push(id);
       const { rows } = await query(

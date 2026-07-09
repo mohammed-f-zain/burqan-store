@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { imageUpload } from "../lib/uploadConfig.js";
 import { isNoBuyReasonNote } from "../data/noBuyReasons.js";
+import { isNotRegisterReasonNote } from "../data/notRegisterReasons.js";
 import { query, pool } from "../db/pool.js";
 import { repAuthMiddleware } from "../middleware/repAuth.js";
 import { HttpError } from "../utils/errors.js";
@@ -541,6 +542,7 @@ router.get("/prospect-stores", repAuthMiddleware, async (req, res, next) => {
       converted_store_id: number | null;
       created_at: string;
       visited_today: boolean;
+      today_visit_note: string | null;
     }>(
       `SELECT ps.id, ps.name, ps.phone, ps.owner_name, ps.location_lat, ps.location_lng,
               ps.address_text, ps.image_url, ps.area_id, ps.status, ps.converted_store_id,
@@ -551,7 +553,16 @@ router.get("/prospect-stores", repAuthMiddleware, async (req, res, next) => {
                   AND pv.representative_id = $2
                   AND (pv.visited_at AT TIME ZONE 'Asia/Amman')::date =
                       (NOW() AT TIME ZONE 'Asia/Amman')::date
-              ) AS visited_today
+              ) AS visited_today,
+              (
+                SELECT pv.note FROM prospect_visits pv
+                WHERE pv.prospect_store_id = ps.id
+                  AND pv.representative_id = $2
+                  AND (pv.visited_at AT TIME ZONE 'Asia/Amman')::date =
+                      (NOW() AT TIME ZONE 'Asia/Amman')::date
+                ORDER BY pv.visited_at DESC
+                LIMIT 1
+              ) AS today_visit_note
        FROM prospect_stores ps
        JOIN areas a ON a.id = ps.area_id
        WHERE ps.status = 'open'
@@ -563,6 +574,7 @@ router.get("/prospect-stores", repAuthMiddleware, async (req, res, next) => {
       prospects: rows.map((r) => ({
         ...mapProspectRow(r),
         visitedToday: r.visited_today,
+        todayVisitNote: r.today_visit_note,
       })),
     });
   } catch (e) {
@@ -602,7 +614,7 @@ router.post("/prospect-stores", repAuthMiddleware, async (req, res, next) => {
     await query(
       `INSERT INTO prospect_visits (prospect_store_id, representative_id, note)
        VALUES ($1, $2, $3)`,
-      [prospectId, rep.id, "Initial visit"]
+      [prospectId, rep.id, null]
     );
     const loaded = await loadProspectForRep(prospectId, rep);
     res.status(201).json({
@@ -700,6 +712,81 @@ router.post("/prospect-stores/:id/convert", repAuthMiddleware, async (req, res, 
   }
 });
 
+const prospectVisitBodySchema = repLocationSchema.extend({
+  note: z.string().max(2000).optional().nullable(),
+  kind: z.enum(["visit-note", "not-register-reason"]).optional(),
+});
+
+const prospectVisitNoteSchema = z.object({
+  note: z.string().max(2000).optional().nullable(),
+  kind: z.enum(["visit-note", "not-register-reason"]).optional(),
+});
+
+async function getProspectTodayVisit(repId: number, prospectId: number) {
+  const { rows } = await query<{ id: string; visited_at: string; note: string | null }>(
+    `SELECT id, visited_at, note FROM prospect_visits
+     WHERE representative_id = $1 AND prospect_store_id = $2
+       AND (visited_at AT TIME ZONE 'Asia/Amman')::date =
+           (NOW() AT TIME ZONE 'Asia/Amman')::date
+     ORDER BY visited_at DESC
+     LIMIT 1`,
+    [repId, prospectId]
+  );
+  return rows[0] ?? null;
+}
+
+/** Whether today's prospect visit needs a not-register reason. */
+router.get("/prospect-stores/:id/today-visit-status", repAuthMiddleware, async (req, res, next) => {
+  try {
+    const id = z.coerce.number().int().positive().parse(req.params.id);
+    const rep = req.rep!;
+    const prospect = await loadProspectForRep(id, rep);
+    const todayVisit = await getProspectTodayVisit(rep.id, id);
+    const visitedToday = Boolean(todayVisit);
+    const todayVisitNote = todayVisit?.note ?? null;
+    const requiresNotRegisterReason =
+      prospect.status === "open" && visitedToday && !isNotRegisterReasonNote(todayVisitNote);
+    res.json({
+      visitedToday,
+      todayVisitNote,
+      requiresNotRegisterReason,
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** Attach optional visit note or not-register reason to today's latest prospect visit. */
+router.patch("/prospect-stores/:id/today-visit-note", repAuthMiddleware, async (req, res, next) => {
+  try {
+    const id = z.coerce.number().int().positive().parse(req.params.id);
+    const body = prospectVisitNoteSchema.parse(req.body);
+    const rep = req.rep!;
+    const prospect = await loadProspectForRep(id, rep);
+    if (prospect.status !== "open") throw new HttpError(409, "العميل المحتمل مغلق");
+    const note = body.note?.trim() ? body.note.trim() : null;
+    const kind =
+      body.kind ?? (note && isNotRegisterReasonNote(note) ? "not-register-reason" : "visit-note");
+
+    if (kind === "not-register-reason") {
+      if (!note || !isNotRegisterReasonNote(note)) {
+        throw new HttpError(400, "يرجى اختيار سبب عدم التسجيل من القائمة");
+      }
+    }
+
+    const todayVisit = await getProspectTodayVisit(rep.id, id);
+    if (!todayVisit) throw new HttpError(404, "لا توجد زيارة مسجّلة اليوم لهذا العميل المحتمل");
+
+    const { rows } = await query<{ id: string; visited_at: string; note: string | null }>(
+      `UPDATE prospect_visits SET note = $1 WHERE id = $2 RETURNING id, visited_at, note`,
+      [note, todayVisit.id]
+    );
+    res.json({ visit: rows[0] });
+  } catch (e) {
+    next(e);
+  }
+});
+
 /** Record a visit to a possible client today. */
 router.post("/prospect-stores/:id/visits", repAuthMiddleware, async (req, res, next) => {
   try {
@@ -707,15 +794,42 @@ router.post("/prospect-stores/:id/visits", repAuthMiddleware, async (req, res, n
     const rep = req.rep!;
     const prospect = await loadProspectForRep(id, rep);
     if (prospect.status !== "open") throw new HttpError(409, "العميل المحتمل مغلق");
-    const loc = repLocationSchema.parse(req.body);
-    assertWithinScanDistance(loc.repLat, loc.repLng, prospect.location_lat, prospect.location_lng);
-    const { rows } = await query(
-      `INSERT INTO prospect_visits (prospect_store_id, representative_id)
-       VALUES ($1, $2)
-       RETURNING id, visited_at`,
-      [id, rep.id]
+    const body = prospectVisitBodySchema.parse(req.body);
+    assertWithinScanDistance(
+      body.repLat,
+      body.repLng,
+      prospect.location_lat,
+      prospect.location_lng
     );
-    res.status(201).json({ visit: rows[0] });
+
+    const note = body.note?.trim() ? body.note.trim() : null;
+    const kind =
+      body.kind ?? (note && isNotRegisterReasonNote(note) ? "not-register-reason" : "visit-note");
+    if (kind === "not-register-reason") {
+      if (!note || !isNotRegisterReasonNote(note)) {
+        throw new HttpError(400, "يرجى اختيار سبب عدم التسجيل من القائمة");
+      }
+    }
+
+    const existing = await getProspectTodayVisit(rep.id, id);
+    if (existing) {
+      if (note != null) {
+        const { rows } = await query<{ id: string; visited_at: string; note: string | null }>(
+          `UPDATE prospect_visits SET note = $1 WHERE id = $2 RETURNING id, visited_at, note`,
+          [note, existing.id]
+        );
+        return res.json({ visit: rows[0], created: false });
+      }
+      return res.json({ visit: existing, created: false });
+    }
+
+    const { rows } = await query<{ id: string; visited_at: string; note: string | null }>(
+      `INSERT INTO prospect_visits (prospect_store_id, representative_id, note)
+       VALUES ($1, $2, $3)
+       RETURNING id, visited_at, note`,
+      [id, rep.id, note]
+    );
+    res.status(201).json({ visit: rows[0], created: true });
   } catch (e) {
     next(e);
   }

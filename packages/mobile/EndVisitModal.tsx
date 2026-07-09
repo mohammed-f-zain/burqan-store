@@ -17,6 +17,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { NO_BUY_REASONS } from "./noBuyReasons";
 import { theme } from "./theme";
 
+export type EndVisitReasonKind = "visit-note" | "no-buy-reason" | "not-register-reason";
+
 export type EndVisitLabels = {
   title: string;
   message: string;
@@ -35,15 +37,25 @@ type Props = {
   visible: boolean;
   cartItemCount: number;
   noBuyReasonRequired?: boolean;
+  fixedReasons?: readonly string[];
+  requiredReasonKind?: EndVisitReasonKind;
   busy?: boolean;
   labels: EndVisitLabels;
   onStay: () => void;
   onGoCart: () => void;
-  onConfirm: (payload: { note: string; kind: "visit-note" | "no-buy-reason" }) => void;
+  onConfirm: (payload: { note: string; kind: EndVisitReasonKind }) => void;
 };
 
 export default function EndVisitModal(props: Props) {
-  const { visible, cartItemCount, noBuyReasonRequired, busy, labels } = props;
+  const {
+    visible,
+    cartItemCount,
+    noBuyReasonRequired,
+    fixedReasons = NO_BUY_REASONS,
+    requiredReasonKind = "no-buy-reason",
+    busy,
+    labels,
+  } = props;
   const [note, setNote] = useState("");
   const [noBuyReason, setNoBuyReason] = useState<string | null>(null);
 
@@ -97,7 +109,7 @@ export default function EndVisitModal(props: Props) {
                     <Text style={styles.reasonHint}>{labels.pickReasonHint}</Text>
                   ) : null}
                   <View style={styles.reasonList}>
-                    {NO_BUY_REASONS.map((reason) => {
+                    {fixedReasons.map((reason) => {
                       const selected = noBuyReason === reason;
                       return (
                         <Pressable
@@ -139,7 +151,7 @@ export default function EndVisitModal(props: Props) {
                 onPress={() =>
                   props.onConfirm({
                     note: noBuyReasonRequired ? noBuyReason! : note.trim(),
-                    kind: noBuyReasonRequired ? "no-buy-reason" : "visit-note",
+                    kind: noBuyReasonRequired ? requiredReasonKind : "visit-note",
                   })
                 }
                 disabled={busy || !canConfirm}

@@ -23,6 +23,8 @@ type Prospect = {
   created_by_rep_name: string;
   converted_store_id: number | null;
   converted_store_name: string | null;
+  last_visit_note: string | null;
+  dismiss_reason: string | null;
   created_at: string;
 };
 
@@ -80,6 +82,12 @@ export default function PossibleClientsPage() {
         type: "text" as const,
         getValue: (p: Prospect) => statusLabel(p.status, t),
       },
+      {
+        id: "reason",
+        label: t.prospects.colReason,
+        type: "text" as const,
+        getValue: (p: Prospect) => prospectReasonText(p, t),
+      },
     ],
     [areaOptions, t]
   );
@@ -95,6 +103,7 @@ export default function PossibleClientsPage() {
       "address_text",
       (p) => statusLabel(p.status, t),
       (p) => p.converted_store_name ?? "",
+      (p) => prospectReasonText(p, t),
     ],
     fields: filterFields,
   });
@@ -187,6 +196,7 @@ export default function PossibleClientsPage() {
                   <th>{t.prospects.colArea}</th>
                   <th>{t.prospects.colRep}</th>
                   <th>{t.prospects.colStatus}</th>
+                  <th>{t.prospects.colReason}</th>
                   <th>{t.prospects.colCreated}</th>
                   <th />
                 </tr>
@@ -214,6 +224,7 @@ export default function PossibleClientsPage() {
                         </div>
                       ) : null}
                     </td>
+                    <td className="muted small">{prospectReasonText(p, t)}</td>
                     <td className="muted small">{formatMarketDateTime(p.created_at)}</td>
                     <td>
                       {canWrite && p.status === "open" ? (
@@ -231,6 +242,15 @@ export default function PossibleClientsPage() {
       </div>
     </div>
   );
+}
+
+function prospectReasonText(
+  p: Prospect,
+  t: { prospects: { noReason: string } }
+): string {
+  if (p.status === "dismissed" && p.dismiss_reason?.trim()) return p.dismiss_reason.trim();
+  if (p.last_visit_note?.trim()) return p.last_visit_note.trim();
+  return t.prospects.noReason;
 }
 
 function statusLabel(status: string, t: { prospects: { statusOpen: string; statusConverted: string; statusDismissed: string } }) {

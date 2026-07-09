@@ -7,6 +7,7 @@ export type ProspectCard = {
   addressText?: string | null;
   areaName?: string | null;
   visitedToday?: boolean;
+  todayVisitNote?: string | null;
 };
 
 export type DailyStoreCard = {
