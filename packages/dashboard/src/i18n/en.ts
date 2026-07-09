@@ -449,6 +449,10 @@ export const en: Messages = {
     colActions: "Actions",
     listCount: (n: number) => `${n} zones`,
     areaCount: (n: number) => `${n} areas`,
+    repsCol: "Assigned reps",
+    allReps: "All reps",
+    repsHint: "Leave empty to show this route to all reps when scheduling.",
+    noReps: "No active reps.",
   },
 
   repSchedule: {

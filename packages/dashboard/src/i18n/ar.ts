@@ -447,6 +447,10 @@ export const ar = {
     colActions: "إجراءات",
     listCount: (n: number) => `${n} منطقة`,
     areaCount: (n: number) => `${n} مناطق`,
+    repsCol: "المندوبون",
+    allReps: "كل المندوبين",
+    repsHint: "اتركه فارغاً ليظهر المسار لكل المندوبين عند الجدولة.",
+    noReps: "لا يوجد مندوبون مفعّلون.",
   },
 
   repSchedule: {

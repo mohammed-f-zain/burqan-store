@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 
 import { Router } from "express";
-import { DatabaseError } from "pg";
+import { DatabaseError, type PoolClient } from "pg";
 import { z } from "zod";
 
 import { config } from "../config.js";
@@ -27,7 +27,7 @@ import {
   VISIT_WITHOUT_ORDER_SAME_DAY_SQL,
 } from "../data/noBuyReasons.js";
 import { buildJordanVoronoiPayload } from "../utils/buildJordanVoronoiPayload.js";
-import { ARABIC_WEEKDAY_NAMES } from "../utils/routeZones.js";
+import { ARABIC_WEEKDAY_NAMES, routeZoneVisibleToRepSql } from "../utils/routeZones.js";
 import { importGooglePlaces } from "../utils/importGooglePlaces.js";
 import { isGooglePlacesEnabled } from "../utils/googlePlaces.js";
 import { GOVERNORATE_AREA_SUFFIX } from "../utils/matchAreaFromGoogle.js";
@@ -1827,11 +1827,13 @@ router.put(
         .filter((z): z is number => z != null);
       if (zoneIds.length) {
         const { rows: zones } = await query<{ id: number }>(
-          `SELECT id FROM route_zones WHERE id = ANY($1::int[]) AND is_active = true`,
-          [zoneIds]
+          `SELECT rz.id FROM route_zones rz
+           WHERE rz.id = ANY($1::int[]) AND rz.is_active = true
+           AND ${routeZoneVisibleToRepSql("rz.id", "$2")}`,
+          [zoneIds, id]
         );
         if (zones.length !== new Set(zoneIds).size) {
-          throw new HttpError(400, "منطقة مسار غير موجودة أو غير مفعّلة");
+          throw new HttpError(400, "منطقة مسار غير موجودة أو غير مفعّلة أو غير مخصّصة لهذا المندوب");
         }
       }
 
@@ -2641,14 +2643,45 @@ const routeZoneBodySchema = z.object({
   notes: z.string().max(2000).nullable().optional(),
   areaIds: z.array(z.number().int().positive()).min(1),
   isActive: z.boolean().optional(),
+  representativeIds: z.array(z.number().int().positive()).optional(),
 });
+
+async function syncRouteZoneRepresentatives(
+  client: PoolClient,
+  zoneId: number,
+  representativeIds: number[]
+) {
+  if (representativeIds.length) {
+    const { rows: repCheck } = await client.query<{ id: number }>(
+      `SELECT id FROM representatives WHERE id = ANY($1::int[])`,
+      [representativeIds]
+    );
+    if (repCheck.length !== representativeIds.length) {
+      throw new HttpError(400, "بعض المندوبين المختارين غير موجودين");
+    }
+  }
+  await client.query(`DELETE FROM route_zone_representatives WHERE route_zone_id = $1`, [zoneId]);
+  for (const repId of representativeIds) {
+    await client.query(
+      `INSERT INTO route_zone_representatives (route_zone_id, representative_id) VALUES ($1, $2)`,
+      [zoneId, repId]
+    );
+  }
+}
 
 router.get(
   "/route-zones",
   adminAuthMiddleware,
   requireAdminPermission("areas.read"),
-  async (_req, res, next) => {
+  async (req, res, next) => {
     try {
+      const representativeId = z.coerce.number().int().positive().optional().parse(req.query.representativeId);
+
+      const zoneWhere = representativeId
+        ? `WHERE ${routeZoneVisibleToRepSql("rz.id", "$1")}`
+        : "";
+      const zoneParams = representativeId ? [representativeId] : [];
+
       const { rows: zones } = await query<{
         id: number;
         name: string;
@@ -2656,7 +2689,10 @@ router.get(
         is_active: boolean;
         created_at: string;
         updated_at: string;
-      }>(`SELECT * FROM route_zones ORDER BY name ASC`);
+      }>(
+        `SELECT rz.* FROM route_zones rz ${zoneWhere} ORDER BY rz.name ASC`,
+        zoneParams
+      );
 
       const { rows: links } = await query<{ route_zone_id: number; area_id: number; area_name: string }>(
         `SELECT rza.route_zone_id, rza.area_id, a.name AS area_name
@@ -2665,10 +2701,27 @@ router.get(
          ORDER BY a.name ASC`
       );
 
+      const { rows: repLinks } = await query<{
+        route_zone_id: number;
+        representative_id: number;
+        full_name: string;
+      }>(
+        `SELECT rzr.route_zone_id, rzr.representative_id, r.full_name
+         FROM route_zone_representatives rzr
+         JOIN representatives r ON r.id = rzr.representative_id
+         ORDER BY r.full_name ASC`
+      );
+
       const areasByZone = new Map<number, { id: number; name: string }[]>();
       for (const l of links) {
         if (!areasByZone.has(l.route_zone_id)) areasByZone.set(l.route_zone_id, []);
         areasByZone.get(l.route_zone_id)!.push({ id: l.area_id, name: l.area_name });
+      }
+
+      const repsByZone = new Map<number, { id: number; fullName: string }[]>();
+      for (const l of repLinks) {
+        if (!repsByZone.has(l.route_zone_id)) repsByZone.set(l.route_zone_id, []);
+        repsByZone.get(l.route_zone_id)!.push({ id: l.representative_id, fullName: l.full_name });
       }
 
       res.json({
@@ -2678,6 +2731,7 @@ router.get(
           notes: z.notes,
           isActive: z.is_active,
           areas: areasByZone.get(z.id) ?? [],
+          representatives: repsByZone.get(z.id) ?? [],
           createdAt: z.created_at,
           updatedAt: z.updated_at,
         })),
@@ -2716,6 +2770,9 @@ router.post(
             `INSERT INTO route_zone_areas (route_zone_id, area_id) VALUES ($1, $2)`,
             [zoneId, aid]
           );
+        }
+        if (body.representativeIds !== undefined) {
+          await syncRouteZoneRepresentatives(c, zoneId, body.representativeIds);
         }
         await c.query("COMMIT");
         res.status(201).json({ id: zoneId });
@@ -2788,6 +2845,9 @@ router.patch(
               [id, aid]
             );
           }
+        }
+        if (body.representativeIds !== undefined) {
+          await syncRouteZoneRepresentatives(c, id, body.representativeIds);
         }
         await c.query("COMMIT");
       } catch (e) {

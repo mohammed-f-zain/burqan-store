@@ -1,7 +1,11 @@
 import { useEffect, useState } from "react";
 
 import { api } from "../api";
-import RepRouteScheduleFields, { type RouteZoneOption, type ScheduleRow } from "./RepRouteScheduleFields";
+import RepRouteScheduleFields, {
+  mergeScheduleZones,
+  type RouteZoneOption,
+  type ScheduleRow,
+} from "./RepRouteScheduleFields";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
 import { toastError, toastSuccess } from "../lib/toast";
@@ -24,11 +28,14 @@ export default function RepRouteScheduleModal({ repId, repName, onClose }: Props
       setLoading(true);
       try {
         const [z, s] = await Promise.all([
-          api.get<{ routeZones: RouteZoneOption[] }>("/route-zones"),
+          api.get<{ routeZones: RouteZoneOption[] }>("/route-zones", {
+            params: { representativeId: repId },
+          }),
           api.get<{ schedule: ScheduleRow[] }>(`/representatives/${repId}/route-schedule`),
         ]);
-        setZones(z.data.routeZones.filter((x) => x.isActive));
-        setRows(s.data.schedule);
+        const schedule = s.data.schedule;
+        setZones(mergeScheduleZones(z.data.routeZones.filter((x) => x.isActive), schedule));
+        setRows(schedule);
       } catch (e) {
         toastError(pickAxiosErrorMessage(e, t.repSchedule.loadFailed));
         onClose();

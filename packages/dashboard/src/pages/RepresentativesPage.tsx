@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import RepRouteScheduleModal from "../components/RepRouteScheduleModal";
 import RepRouteScheduleFields, {
+  mergeScheduleZones,
   type RouteZoneOption,
   type ScheduleRow,
 } from "../components/RepRouteScheduleFields";
@@ -77,19 +78,21 @@ export default function RepresentativesPage() {
   const [scheduleLoading, setScheduleLoading] = useState(false);
   const canFillCar = can("fill_car.read") || can("reps.read");
 
-  async function loadRouteZones() {
-    const { data } = await api.get<{ routeZones: RouteZoneOption[] }>("/route-zones");
-    setRouteZones(data.routeZones.filter((x) => x.isActive));
-  }
-
   async function loadRepSchedule(repId: number) {
     setScheduleLoading(true);
     try {
       const { data } = await api.get<{ schedule: ScheduleRow[] }>(`/representatives/${repId}/route-schedule`);
       setScheduleRows(data.schedule);
+      const { data: zonesData } = await api.get<{ routeZones: RouteZoneOption[] }>("/route-zones", {
+        params: { representativeId: repId },
+      });
+      setRouteZones(
+        mergeScheduleZones(zonesData.routeZones.filter((x) => x.isActive), data.schedule)
+      );
     } catch (e) {
       toastError(pickAxiosErrorMessage(e, t.repSchedule.loadFailed));
       setScheduleRows([]);
+      setRouteZones([]);
     } finally {
       setScheduleLoading(false);
     }
@@ -195,7 +198,6 @@ export default function RepresentativesPage() {
     setEImagePath(r.image_url ?? "");
     setEIsActive(r.is_active);
     setENewPassword("");
-    void loadRouteZones();
     void loadRepSchedule(r.id);
   }
 

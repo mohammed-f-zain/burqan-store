@@ -8,6 +8,23 @@ export type ScheduleRow = {
   routeZoneName: string | null;
 };
 
+export function mergeScheduleZones(
+  filtered: RouteZoneOption[],
+  schedule: ScheduleRow[]
+): RouteZoneOption[] {
+  const byId = new Map(filtered.map((z) => [z.id, z]));
+  for (const row of schedule) {
+    if (row.routeZoneId != null && !byId.has(row.routeZoneId)) {
+      byId.set(row.routeZoneId, {
+        id: row.routeZoneId,
+        name: row.routeZoneName ?? String(row.routeZoneId),
+        isActive: true,
+      });
+    }
+  }
+  return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name, "ar"));
+}
+
 type Props = {
   zones: RouteZoneOption[];
   rows: ScheduleRow[];

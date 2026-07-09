@@ -128,3 +128,14 @@ export function formatDistanceM(m: number): string {
   const km = m / 1000;
   return km < 10 ? `${km.toFixed(1)} كم` : `${Math.round(km)} كم`;
 }
+
+/** SQL fragment: zone visible to rep when unassigned or explicitly linked. */
+export function routeZoneVisibleToRepSql(zoneIdCol: string, repIdParam: string): string {
+  return `(
+    NOT EXISTS (SELECT 1 FROM route_zone_representatives rzr WHERE rzr.route_zone_id = ${zoneIdCol})
+    OR EXISTS (
+      SELECT 1 FROM route_zone_representatives rzr
+      WHERE rzr.route_zone_id = ${zoneIdCol} AND rzr.representative_id = ${repIdParam}
+    )
+  )`;
+}
