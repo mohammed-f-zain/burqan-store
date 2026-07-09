@@ -2623,6 +2623,165 @@ a.overview-stat-card:hover {
   line-height: 1.35;
 }
 
+label.checkbox-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-direction: row;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 14px;
+  width: fit-content;
+}
+
+label.checkbox-inline input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  min-height: 16px;
+  padding: 0;
+  margin: 0;
+  border-radius: 4px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.rep-pick-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.rep-pick-item span {
+  line-height: 1.35;
+}
+
+.status-pill {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.status-pill--open {
+  border-color: rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.12);
+  color: #b45309;
+}
+
+.status-pill--converted {
+  border-color: rgba(22, 163, 74, 0.35);
+  background: rgba(22, 163, 74, 0.1);
+  color: #15803d;
+}
+
+.status-pill--dismissed {
+  border-color: rgba(100, 116, 139, 0.35);
+  background: rgba(100, 116, 139, 0.1);
+  color: #475569;
+}
+
+.visit-reason-pill {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(37, 99, 235, 0.25);
+  background: rgba(37, 99, 235, 0.08);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.prospect-detail-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.prospect-area-chip {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(13, 148, 136, 0.28);
+  background: rgba(13, 148, 136, 0.08);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.prospect-reason-callout {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.06), rgba(34, 211, 238, 0.08));
+}
+
+.prospect-reason-callout__label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.prospect-reason-callout__text {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.prospect-visit-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.prospect-visit-card {
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.prospect-visit-card__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-bottom: 8px;
+}
+
+.prospect-visit-card__date {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.prospect-visit-card__rep {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.prospect-visit-card__body {
+  font-size: 14px;
+  line-height: 1.45;
+}
+
 .table .col-actions {
   width: 1%;
   white-space: nowrap;

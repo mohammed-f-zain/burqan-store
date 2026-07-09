@@ -103,13 +103,13 @@ export default function RepAreaMapPicker({ areas, selectedIds, onChange }: Props
             ))}
           </select>
         </label>
-        <label>
+        <label className="checkbox-inline">
           <input
             type="checkbox"
             checked={showGovCoverageOnMap}
             onChange={(e) => setShowGovCoverageOnMap(e.target.checked)}
           />
-          {t.areas.mapShowGovCoverage}
+          <span>{t.areas.mapShowGovCoverage}</span>
         </label>
         {voronoiLoading ? <span className="muted small">{t.areas.voronoiLoading}</span> : null}
         <span className="muted small rep-area-map-picker__count">

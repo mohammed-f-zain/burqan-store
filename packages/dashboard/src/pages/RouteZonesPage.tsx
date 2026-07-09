@@ -53,13 +53,13 @@ function RepPickList({
       ) : (
         <div className="rep-pick-list">
           {reps.map((rep) => (
-            <label key={rep.id} className="rep-pick-item">
+            <label key={rep.id} className="checkbox-inline rep-pick-item">
               <input
                 type="checkbox"
                 checked={selectedIds.includes(rep.id)}
                 onChange={() => onChange(toggleRepId(selectedIds, rep.id))}
-              />{" "}
-              {rep.full_name}
+              />
+              <span>{rep.full_name}</span>
             </label>
           ))}
         </div>
@@ -386,9 +386,9 @@ export default function RouteZonesPage() {
                 {t.routeZones.notes}
                 <textarea value={eNotes} onChange={(e) => setENotes(e.target.value)} rows={2} />
               </label>
-              <label>
-                {t.routeZones.activeToggle}{" "}
+              <label className="checkbox-inline">
                 <input type="checkbox" checked={eActive} onChange={(e) => setEActive(e.target.checked)} />
+                <span>{t.routeZones.activeToggle}</span>
               </label>
               <RepAreaMapPicker areas={areas} selectedIds={ePicked} onChange={setEPicked} />
               <RepPickList reps={reps} selectedIds={ePickedRepIds} onChange={setEPickedRepIds} labels={repPickLabels} />

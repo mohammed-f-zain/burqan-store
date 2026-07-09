@@ -105,19 +105,26 @@ export default function PossibleClientDetailPage() {
     prospect.status === "dismissed" && prospect.dismiss_reason?.trim()
       ? prospect.dismiss_reason.trim()
       : visits.find((v) => v.note?.trim())?.note?.trim() ?? null;
+  const photo = mediaUrl(prospect.image_url);
 
   return (
-    <div className="grid">
+    <div className="grid prospect-detail">
       <div className="card">
-        <div className="row spread" style={{ alignItems: "flex-start", gap: 12 }}>
+        <div className="row spread" style={{ alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
           <div>
             <Link to="/app/possible-clients" className="muted small linkish">
               ← {t.prospects.backToList}
             </Link>
-            <h2 style={{ marginTop: 8 }}>{prospect.name}</h2>
-            <span className={`status-pill status-pill--${prospect.status}`}>
-              {statusLabel(prospect.status, t)}
-            </span>
+            <h2 style={{ margin: "8px 0 0" }}>{prospect.name}</h2>
+            <p className="muted" style={{ marginTop: 6 }}>
+              #{prospect.id} · {prospect.area_name}
+            </p>
+            <div className="prospect-detail-badges">
+              <span className={`status-pill status-pill--${prospect.status}`}>
+                {statusLabel(prospect.status, t)}
+              </span>
+              <span className="prospect-area-chip">{prospect.area_name}</span>
+            </div>
           </div>
           {canWrite && prospect.status === "open" ? (
             <button type="button" className="ghost danger" onClick={() => void dismiss()}>
@@ -126,16 +133,32 @@ export default function PossibleClientDetailPage() {
           ) : null}
         </div>
 
-        <div className="detail-grid" style={{ marginTop: 20 }}>
-          <div>
-            <h3>{t.prospects.detailInfo}</h3>
-            <dl className="detail-dl">
-              <dt>{t.prospects.colPhone}</dt>
-              <dd>{prospect.phone}</dd>
+        <div className="store-detail-grid">
+          <div className="store-detail-info">
+            {photo ? <img src={photo} alt="" className="store-detail-photo" /> : null}
+
+            {lastReason ? (
+              <div className="prospect-reason-callout">
+                <span className="prospect-reason-callout__label">{t.prospects.colReason}</span>
+                <span
+                  className={
+                    isNotRegisterReasonNote(lastReason) ? "visit-reason-pill" : "prospect-reason-callout__text"
+                  }
+                >
+                  {lastReason}
+                </span>
+              </div>
+            ) : null}
+
+            <dl className="store-detail-dl">
               <dt>{t.prospects.colOwner}</dt>
               <dd>{prospect.owner_name}</dd>
-              <dt>{t.prospects.colArea}</dt>
-              <dd>{prospect.area_name}</dd>
+              <dt>{t.prospects.colPhone}</dt>
+              <dd>
+                <a href={`tel:${prospect.phone}`} className="linkish">
+                  {prospect.phone}
+                </a>
+              </dd>
               <dt>{t.prospects.colRep}</dt>
               <dd>{prospect.created_by_rep_name}</dd>
               <dt>{t.prospects.colCreated}</dt>
@@ -146,8 +169,6 @@ export default function PossibleClientDetailPage() {
                   <dd>{prospect.address_text}</dd>
                 </>
               ) : null}
-              <dt>{t.prospects.colReason}</dt>
-              <dd>{lastReason ?? t.prospects.noReason}</dd>
               {prospect.converted_store_id ? (
                 <>
                   <dt>{t.prospects.convertedStore}</dt>
@@ -158,23 +179,21 @@ export default function PossibleClientDetailPage() {
                   </dd>
                 </>
               ) : null}
+              {!lastReason ? (
+                <>
+                  <dt>{t.prospects.colReason}</dt>
+                  <dd className="muted">{t.prospects.noReason}</dd>
+                </>
+              ) : null}
             </dl>
-
-            {prospect.image_url ? (
-              <div style={{ marginTop: 16 }}>
-                <img
-                  src={mediaUrl(prospect.image_url)}
-                  alt=""
-                  style={{ maxWidth: 240, maxHeight: 240, borderRadius: 12 }}
-                />
-              </div>
-            ) : null}
           </div>
 
-          <div>
-            <h3>{t.prospects.detailMap}</h3>
+          <div className="store-detail-map-card">
+            <p className="muted small" style={{ margin: 0 }}>
+              {t.prospects.detailMap}
+            </p>
             <StoreMap lat={prospect.location_lat} lng={prospect.location_lng} variant="large" />
-            <p className="muted small" style={{ marginTop: 8 }}>
+            <p className="muted small mono" style={{ marginTop: 8 }}>
               {prospect.location_lat.toFixed(6)}, {prospect.location_lng.toFixed(6)}
             </p>
           </div>
@@ -182,37 +201,28 @@ export default function PossibleClientDetailPage() {
       </div>
 
       <div className="card">
-        <h3>{t.prospects.detailVisits}</h3>
+        <h3 style={{ marginTop: 0 }}>{t.prospects.detailVisits}</h3>
         {visits.length === 0 ? (
           <p className="muted">{t.prospects.noVisits}</p>
         ) : (
-          <div className="table-wrap">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>{t.prospects.visitDate}</th>
-                  <th>{t.prospects.visitRep}</th>
-                  <th>{t.prospects.colReason}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visits.map((v) => (
-                  <tr key={v.id}>
-                    <td className="muted small">{formatMarketDateTime(v.visited_at)}</td>
-                    <td>{v.rep_name}</td>
-                    <td>
-                      {v.note?.trim() ? (
-                        <span className={isNotRegisterReasonNote(v.note) ? "visit-reason-pill" : undefined}>
-                          {v.note.trim()}
-                        </span>
-                      ) : (
-                        <span className="muted">{t.prospects.noReason}</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="prospect-visit-timeline">
+            {visits.map((v) => (
+              <div key={v.id} className="prospect-visit-card">
+                <div className="prospect-visit-card__head">
+                  <time className="prospect-visit-card__date">{formatMarketDateTime(v.visited_at)}</time>
+                  <span className="prospect-visit-card__rep">{v.rep_name}</span>
+                </div>
+                <div className="prospect-visit-card__body">
+                  {v.note?.trim() ? (
+                    <span className={isNotRegisterReasonNote(v.note) ? "visit-reason-pill" : undefined}>
+                      {v.note.trim()}
+                    </span>
+                  ) : (
+                    <span className="muted">{t.prospects.noReason}</span>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
