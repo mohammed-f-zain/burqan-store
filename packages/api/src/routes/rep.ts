@@ -5,7 +5,7 @@ import { z } from "zod";
 
 import { imageUpload } from "../lib/uploadConfig.js";
 import { isNoBuyReasonNote } from "../data/noBuyReasons.js";
-import { isNotRegisterReasonNote, isValidProspectReasonNote } from "../data/notRegisterReasons.js";
+import { isNotRegisterReasonNote } from "../data/notRegisterReasons.js";
 import { query, pool } from "../db/pool.js";
 import { repAuthMiddleware } from "../middleware/repAuth.js";
 import { HttpError } from "../utils/errors.js";
@@ -24,8 +24,6 @@ import {
 } from "../utils/geo.js";
 import { parseQrPublicToken } from "../utils/qrToken.js";
 import { buildJordanVoronoiPayload } from "../utils/buildJordanVoronoiPayload.js";
-import { areaRowsToVoronoiSites, buildVoronoiGeoJson } from "../utils/jordanVoronoi.js";
-import { loadVoronoiAreaRows } from "../utils/loadVoronoiAreaRows.js";
 import { expandRepAreaIds } from "../utils/expandRepAreaIds.js";
 import {
   awardLoyaltyPoints,
@@ -589,8 +587,8 @@ router.post("/prospect-stores", repAuthMiddleware, async (req, res, next) => {
     const body = prospectStoreSchema.parse(req.body);
     const rep = req.rep!;
     const visitNote = body.visitNote?.trim() || null;
-    if (visitNote && !isValidProspectReasonNote(visitNote)) {
-      throw new HttpError(400, "يرجى إدخال سبب عدم التسجيل (حرفان على الأقل)");
+    if (visitNote && !isNotRegisterReasonNote(visitNote)) {
+      throw new HttpError(400, "يرجى اختيار سبب عدم التسجيل من القائمة");
     }
     const today = await getRepTodayWorkAreaIds(rep.id);
     const resolved = await resolveAreaForRepRoute(
@@ -751,7 +749,7 @@ router.get("/prospect-stores/:id/today-visit-status", repAuthMiddleware, async (
     const visitedToday = Boolean(todayVisit);
     const todayVisitNote = todayVisit?.note ?? null;
     const requiresNotRegisterReason =
-      prospect.status === "open" && visitedToday && !isValidProspectReasonNote(todayVisitNote);
+      prospect.status === "open" && visitedToday && !isNotRegisterReasonNote(todayVisitNote);
     res.json({
       visitedToday,
       todayVisitNote,
@@ -774,8 +772,10 @@ router.patch("/prospect-stores/:id/today-visit-note", repAuthMiddleware, async (
     const kind =
       body.kind ?? (note && isNotRegisterReasonNote(note) ? "not-register-reason" : "visit-note");
 
-    if (kind === "not-register-reason" && !isValidProspectReasonNote(note)) {
-      throw new HttpError(400, "يرجى إدخال سبب عدم التسجيل (حرفان على الأقل)");
+    if (kind === "not-register-reason") {
+      if (!note || !isNotRegisterReasonNote(note)) {
+        throw new HttpError(400, "يرجى اختيار سبب عدم التسجيل من القائمة");
+      }
     }
 
     const todayVisit = await getProspectTodayVisit(rep.id, id);
@@ -809,8 +809,10 @@ router.post("/prospect-stores/:id/visits", repAuthMiddleware, async (req, res, n
     const note = body.note?.trim() ? body.note.trim() : null;
     const kind =
       body.kind ?? (note && isNotRegisterReasonNote(note) ? "not-register-reason" : "visit-note");
-    if (kind === "not-register-reason" && !isValidProspectReasonNote(note)) {
-      throw new HttpError(400, "يرجى إدخال سبب عدم التسجيل (حرفان على الأقل)");
+    if (kind === "not-register-reason") {
+      if (!note || !isNotRegisterReasonNote(note)) {
+        throw new HttpError(400, "يرجى اختيار سبب عدم التسجيل من القائمة");
+      }
     }
 
     const existing = await getProspectTodayVisit(rep.id, id);
@@ -914,9 +916,14 @@ router.get("/route/zone-status", repAuthMiddleware, async (req, res, next) => {
       inZone = resolved.assignedToRep;
     }
 
+    const payload = await buildJordanVoronoiPayload(
+      q.lat != null && q.lng != null ? { lat: q.lat, lng: q.lng, radiusKm: 32 } : undefined
+    );
     const zoneIdSet = new Set(today.expandedAreaIds);
-    const zoneRows = (await loadVoronoiAreaRows()).filter((r) => zoneIdSet.has(r.id));
-    const geojson = buildVoronoiGeoJson(areaRowsToVoronoiSites(zoneRows));
+    const geojson = {
+      type: "FeatureCollection" as const,
+      features: payload.geojson.features.filter((f) => zoneIdSet.has(f.properties.areaId)),
+    };
 
     res.json({
       routeToday: {

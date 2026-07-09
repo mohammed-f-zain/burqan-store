@@ -59,7 +59,7 @@ import ToastOverlay, { type ToastKind } from "./ToastOverlay";
 import { theme } from "./theme";
 import DailyStoresByArea from "./DailyStoresByArea";
 import PossibleClientsSection from "./PossibleClientsSection";
-import RepZoneMapCard, { type ZoneStorePin } from "./RepZoneMapCard";
+import RepZoneMapCard from "./RepZoneMapCard";
 import GooglePlacesByArea, { type GooglePlaceAreaSummary } from "./GooglePlacesByArea";
 import {
   groupRawGooglePlacesByArea,
@@ -277,8 +277,7 @@ const t = {
   prospectConvertFailed: "تعذّر ربط الرمز",
   prospectLinkScanHint: "امسح رمز بطاقة جديد غير مستخدم لربط هذا العميل",
   prospectNotRegisterReason: "سبب عدم التسجيل",
-  prospectNotRegisterReasonHint: "اختر من القائمة أو اكتب سبباً يدوياً",
-  prospectCustomReasonPlaceholder: "اكتب سبب عدم التسجيل…",
+  prospectNotRegisterReasonHint: "يمكنك تغيير السبب لاحقاً من هنا",
   prospectSaveReason: "حفظ السبب",
   prospectSavingReason: "جاري الحفظ…",
   prospectReasonSaved: "تم حفظ السبب",
@@ -669,23 +668,6 @@ export default function App() {
     [repProfile?.areas]
   );
 
-  const zoneStorePins = useMemo((): ZoneStorePin[] => {
-    return dailyStores
-      .filter(
-        (s) =>
-          Number.isFinite(s.location.lat) &&
-          Number.isFinite(s.location.lng) &&
-          (Math.abs(s.location.lat) > 0.0001 || Math.abs(s.location.lng) > 0.0001)
-      )
-      .map((s) => ({
-        id: s.id,
-        name: s.name,
-        lat: s.location.lat,
-        lng: s.location.lng,
-        visitedToday: s.visitedToday,
-      }));
-  }, [dailyStores]);
-
   const mapGoogleProspects = useCallback(
     (
       prospects: {
@@ -755,35 +737,37 @@ export default function App() {
     if (!token) return;
     setDailyStoresLoading(true);
     try {
+      let nearestFirst = false;
+      let repLat = 0;
+      let repLng = 0;
+      try {
+        const pos = await getRepPosition({ timeoutMs: 12_000 });
+        repLat = pos.lat;
+        repLng = pos.lng;
+        nearestFirst = true;
+      } catch {
+        // load without nearest-first sort
+      }
       const data = (await apiGet("/api/v1/rep/stores/daily")) as {
         stores?: DailyStoreCard[];
         googlePlacesReady?: boolean;
         routeToday?: { dayName?: string; zoneName?: string } | null;
         message?: string;
       };
-      const burqan = (data.stores ?? []) as DailyStoreCard[];
+      let burqan = (data.stores ?? []) as DailyStoreCard[];
+      if (nearestFirst && burqan.length > 0) {
+        burqan = sortDailyStoreCardsByDistance(burqan, repLat, repLng);
+      }
       setDailyStores(burqan);
       setDailyMeta({
         zoneName: data.routeToday?.zoneName,
         dayName: data.routeToday?.dayName,
         message: data.message,
-        nearestFirst: false,
+        nearestFirst,
       });
       if (typeof data.googlePlacesReady === "boolean") {
         setGooglePlacesReady(data.googlePlacesReady);
       }
-
-      void (async () => {
-        try {
-          const pos = await getRepPosition({ timeoutMs: 8_000, maxAccuracyM: 150 });
-          setDailyStores((prev) =>
-            prev.length > 0 ? sortDailyStoreCardsByDistance(prev, pos.lat, pos.lng) : prev
-          );
-          setDailyMeta((prev) => (prev ? { ...prev, nearestFirst: true } : prev));
-        } catch {
-          // keep list without distance sort
-        }
-      })();
     } catch {
       setDailyStores([]);
       setDailyMeta(null);
@@ -1797,7 +1781,6 @@ export default function App() {
         <>
           <RepZoneMapCard
             apiGet={apiGet}
-            stores={zoneStorePins}
             onNotice={showToast}
             labels={{
               title: t.zoneMapTitle,
@@ -2611,7 +2594,6 @@ export default function App() {
             pending: t.prospectsPending,
             notRegisterReason: t.prospectNotRegisterReason,
             notRegisterReasonHint: t.prospectNotRegisterReasonHint,
-            customReasonPlaceholder: t.prospectCustomReasonPlaceholder,
             saveReason: t.prospectSaveReason,
             savingReason: t.prospectSavingReason,
             reasonSaved: t.prospectReasonSaved,

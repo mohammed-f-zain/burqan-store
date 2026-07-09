@@ -13,10 +13,3 @@ export function isNotRegisterReasonNote(note: string | null | undefined): boolea
   if (!note?.trim()) return false;
   return (NOT_REGISTER_REASONS as readonly string[]).includes(note.trim());
 }
-
-/** Any non-empty reason text from preset list or custom entry. */
-export function isValidProspectReasonNote(note: string | null | undefined): boolean {
-  const trimmed = note?.trim();
-  if (!trimmed) return false;
-  return trimmed.length >= 2 && trimmed.length <= 2000;
-}
