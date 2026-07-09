@@ -3,12 +3,16 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 
+import RouteStoresMap from "./RouteStoresMap";
+import type { ZoneStorePin } from "./RepZoneMapNative";
 import { theme } from "./theme";
 import type { DailyStoreCard } from "./storeTypes";
 
@@ -135,6 +139,23 @@ function defaultExpanded(groups: AreaGroup[]): Record<string, boolean> {
   return next;
 }
 
+function toStorePins(stores: DailyStoreCard[]): ZoneStorePin[] {
+  return stores
+    .filter(
+      (s) =>
+        Number.isFinite(s.location.lat) &&
+        Number.isFinite(s.location.lng) &&
+        (Math.abs(s.location.lat) > 0.0001 || Math.abs(s.location.lng) > 0.0001)
+    )
+    .map((s) => ({
+      id: s.id,
+      name: s.name,
+      lat: s.location.lat,
+      lng: s.location.lng,
+      visitedToday: s.visitedToday,
+    }));
+}
+
 function matchesSearch(store: DailyStoreCard, q: string): boolean {
   const needle = q.trim().toLowerCase();
   if (!needle) return true;
@@ -173,9 +194,14 @@ export default function DailyStoresByArea({
   onRefreshLocation,
   onSelectStore,
 }: Props) {
+  const { height: windowHeight } = useWindowDimensions();
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [filter, setFilter] = useState<FilterMode>("all");
   const [search, setSearch] = useState("");
+
+  const isZoneMode = Boolean(zoneName?.trim());
+  const storePins = useMemo(() => toStorePins(stores), [stores]);
+  const zoneStoreScrollMaxH = Math.min(440, Math.round(windowHeight * 0.42));
 
   const filteredStores = useMemo(() => {
     return stores.filter((s) => {
@@ -215,6 +241,162 @@ export default function DailyStoresByArea({
     for (const g of groups) next[areaKey(g.areaName)] = open;
     setExpanded(next);
   };
+
+  const searchAndFilters = !loading && stores.length > 0 ? (
+    <>
+      <View style={styles.searchWrap}>
+        <Ionicons name="search" size={18} color={muted} style={styles.searchIcon} />
+        <TextInput
+          style={styles.searchInput}
+          value={search}
+          onChangeText={setSearch}
+          placeholder={labels.searchPlaceholder}
+          placeholderTextColor={muted}
+          autoCapitalize="none"
+          clearButtonMode="while-editing"
+        />
+      </View>
+
+      <View style={styles.toolbar}>
+        <View style={styles.filterRow}>
+          {(
+            [
+              ["all", labels.filterAll],
+              ["pending", labels.filterPending],
+              ["done", labels.filterDone],
+            ] as const
+          ).map(([mode, label]) => (
+            <Pressable
+              key={mode}
+              style={[styles.filterChip, filter === mode && styles.filterChipActive]}
+              onPress={() => setFilter(mode)}
+            >
+              <Text style={[styles.filterChipText, filter === mode && styles.filterChipTextActive]}>
+                {label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+        {!isZoneMode && groups.length > 1 ? (
+          <Pressable
+            style={styles.expandToggle}
+            onPress={() => {
+              const anyClosed = groups.some((g) => !expanded[areaKey(g.areaName)]);
+              setAllExpanded(anyClosed);
+            }}
+          >
+            <Text style={styles.expandToggleText}>
+              {groups.every((g) => expanded[areaKey(g.areaName)]) ? labels.collapseAll : labels.expandAll}
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </>
+  ) : null;
+
+  if (isZoneMode && !loading && stores.length > 0) {
+    const zoneDisplay = parseAreaName(zoneName!.trim(), labels.unknownArea);
+    const allDone = stores.length > 0 && stores.every((s) => s.visitedToday);
+
+    return (
+      <View style={styles.section}>
+        <View style={styles.zoneStickyHeader}>
+          <View style={styles.headerRow}>
+            <Text style={styles.title}>{title}</Text>
+            <View style={styles.headerBadge}>
+              <Text style={styles.headerBadgeText}>{labels.count(totalVisited, stores.length)}</Text>
+            </View>
+          </View>
+
+          <View style={styles.zoneHeaderTitleRow}>
+            <View style={styles.areaIconWrap}>
+              <Ionicons name="navigate" size={20} color={accent} />
+            </View>
+            <View style={styles.areaHeaderBody}>
+              <Text style={styles.areaName} numberOfLines={2}>
+                {zoneDisplay.title}
+              </Text>
+              {dayName ? (
+                <Text style={styles.areaSubtitle} numberOfLines={1}>
+                  {dayName}
+                </Text>
+              ) : null}
+            </View>
+          </View>
+
+          <View style={styles.progressBlock}>
+            <View style={styles.progressLabels}>
+              <Text style={styles.progressTitle}>{labels.count(totalVisited, stores.length)}</Text>
+              {totalPending > 0 ? (
+                <Text style={styles.progressPending}>{labels.pendingCount(totalPending)}</Text>
+              ) : null}
+            </View>
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` }]} />
+            </View>
+          </View>
+
+          {storePins.length > 0 ? <RouteStoresMap stores={storePins} height={180} interactive /> : null}
+
+          {nearestFirst && labels.nearestFirst ? (
+            <View style={styles.nearestRow}>
+              <Text style={styles.nearestHint}>{labels.nearestFirst}</Text>
+              {onRefreshLocation && labels.refreshLocation ? (
+                <Pressable
+                  style={[styles.locationBtn, locating && styles.locationBtnBusy]}
+                  onPress={onRefreshLocation}
+                  disabled={locating || loading}
+                >
+                  {locating ? (
+                    <ActivityIndicator size="small" color={accent} />
+                  ) : (
+                    <>
+                      <Ionicons name="locate" size={16} color={accent} />
+                      <Text style={styles.locationBtnText}>{labels.refreshLocation}</Text>
+                    </>
+                  )}
+                </Pressable>
+              ) : null}
+            </View>
+          ) : null}
+
+          {searchAndFilters}
+        </View>
+
+        {allDone ? (
+          <View style={styles.allDoneBanner}>
+            <Ionicons name="checkmark-circle" size={22} color="#16a34a" />
+            <Text style={styles.allDone}>{labels.allVisited}</Text>
+          </View>
+        ) : null}
+
+        {filteredStores.length === 0 ? (
+          <View style={styles.emptyBox}>
+            <Ionicons name="search-outline" size={40} color={muted} />
+            <Text style={styles.empty}>{labels.noSearchResults}</Text>
+          </View>
+        ) : (
+          <ScrollView
+            style={[styles.zoneStoreScroll, { maxHeight: zoneStoreScrollMaxH }]}
+            nestedScrollEnabled
+            showsVerticalScrollIndicator
+          >
+            {sortZoneStores(filteredStores, nearestFirst).map((s, idx) => (
+              <StoreRow
+                key={s.id}
+                store={s}
+                isLast={idx === filteredStores.length - 1}
+                rank={nearestFirst ? idx + 1 : undefined}
+                visitedLabel={labels.visited}
+                visitQrLabel={labels.visitQr}
+                onPress={() => onSelectStore(s)}
+              />
+            ))}
+          </ScrollView>
+        )}
+      </View>
+    );
+  }
 
   return (
     <View style={styles.section}>
@@ -281,55 +463,7 @@ export default function DailyStoresByArea({
       ) : null}
 
       {!loading && stores.length > 0 ? (
-        <>
-          <View style={styles.searchWrap}>
-            <Ionicons name="search" size={18} color={muted} style={styles.searchIcon} />
-            <TextInput
-              style={styles.searchInput}
-              value={search}
-              onChangeText={setSearch}
-              placeholder={labels.searchPlaceholder}
-              placeholderTextColor={muted}
-              autoCapitalize="none"
-              clearButtonMode="while-editing"
-            />
-          </View>
-
-          <View style={styles.toolbar}>
-            <View style={styles.filterRow}>
-              {(
-                [
-                  ["all", labels.filterAll],
-                  ["pending", labels.filterPending],
-                  ["done", labels.filterDone],
-                ] as const
-              ).map(([mode, label]) => (
-                <Pressable
-                  key={mode}
-                  style={[styles.filterChip, filter === mode && styles.filterChipActive]}
-                  onPress={() => setFilter(mode)}
-                >
-                  <Text style={[styles.filterChipText, filter === mode && styles.filterChipTextActive]}>
-                    {label}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-            {groups.length > 1 ? (
-              <Pressable
-                style={styles.expandToggle}
-                onPress={() => {
-                  const anyClosed = groups.some((g) => !expanded[areaKey(g.areaName)]);
-                  setAllExpanded(anyClosed);
-                }}
-              >
-                <Text style={styles.expandToggleText}>
-                  {groups.every((g) => expanded[areaKey(g.areaName)]) ? labels.collapseAll : labels.expandAll}
-                </Text>
-              </Pressable>
-            ) : null}
-          </View>
-        </>
+        searchAndFilters
       ) : null}
 
       {loading ? (
@@ -767,4 +901,24 @@ const styles = StyleSheet.create({
   },
   visitPillText: { color: accent, fontSize: 12, fontWeight: "800" },
   pressed: { opacity: 0.88 },
+  zoneStickyHeader: {
+    backgroundColor: accentSoft,
+    borderRadius: radius.lg,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "rgba(37, 99, 235, 0.12)",
+  },
+  zoneHeaderTitleRow: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 12,
+  },
+  zoneStoreScroll: {
+    marginTop: 10,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: line,
+    backgroundColor: "#f8fafc",
+  },
 });

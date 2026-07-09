@@ -17,9 +17,11 @@ import {
 import type { MapRegion } from "./registerMapConfig";
 import { shouldLoadNativeMapsModule } from "./registerMapConfig";
 import { theme } from "./theme";
+import { regionFromStorePins, type ZoneStorePin } from "./RepZoneMapNative";
 import { voronoiGeoJsonToCells, type VoronoiMapCell } from "./voronoiMapGeo";
 
-const RepZoneMapNative = lazy(() => import("./RepZoneMapNative"));
+const RepZoneMapNativeLazy = lazy(() => import("./RepZoneMapNative"));
+export type { ZoneStorePin };
 
 const JORDAN_REGION: MapRegion = {
   latitude: 31.25,
@@ -57,23 +59,35 @@ type ZoneStatusResponse = {
 type Props = {
   apiGet: (path: string) => Promise<Record<string, unknown>>;
   labels: RepZoneMapLabels;
+  stores?: ZoneStorePin[];
   onNotice?: (msg: string) => void;
 };
 
-function regionFromCells(cells: VoronoiMapCell[], lat: number | null, lng: number | null): MapRegion {
-  if (lat != null && lng != null) {
-    return { latitude: lat, longitude: lng, latitudeDelta: 0.16, longitudeDelta: 0.16 };
+function regionFromCells(
+  cells: VoronoiMapCell[],
+  lat: number | null,
+  lng: number | null,
+  stores: ZoneStorePin[]
+): MapRegion {
+  const base = (() => {
+    if (lat != null && lng != null) {
+      return { latitude: lat, longitude: lng, latitudeDelta: 0.16, longitudeDelta: 0.16 };
+    }
+    if (cells.length) {
+      const cLat = cells.reduce((s, c) => s + c.centerLat, 0) / cells.length;
+      const cLng = cells.reduce((s, c) => s + c.centerLng, 0) / cells.length;
+      return { latitude: cLat, longitude: cLng, latitudeDelta: 0.4, longitudeDelta: 0.4 };
+    }
+    return JORDAN_REGION;
+  })();
+  if (stores.length) {
+    return regionFromStorePins(stores, lat, lng, base);
   }
-  if (cells.length) {
-    const cLat = cells.reduce((s, c) => s + c.centerLat, 0) / cells.length;
-    const cLng = cells.reduce((s, c) => s + c.centerLng, 0) / cells.length;
-    return { latitude: cLat, longitude: cLng, latitudeDelta: 0.4, longitudeDelta: 0.4 };
-  }
-  return JORDAN_REGION;
+  return base;
 }
 
 export default function RepZoneMapCard(props: Props) {
-  const { apiGet, labels, onNotice } = props;
+  const { apiGet, labels, stores = [], onNotice } = props;
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [routeToday, setRouteToday] = useState<RouteToday | null>(null);
@@ -137,7 +151,10 @@ export default function RepZoneMapCard(props: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount once
   }, []);
 
-  const mapRegion = useMemo(() => regionFromCells(mapAreas, lat, lng), [mapAreas, lat, lng]);
+  const mapRegion = useMemo(
+    () => regionFromCells(mapAreas, lat, lng, stores),
+    [mapAreas, lat, lng, stores]
+  );
 
   const statusText =
     inZone === true ? labels.inZone : inZone === false ? labels.outZone : labels.unknown;
@@ -206,12 +223,14 @@ export default function RepZoneMapCard(props: Props) {
               </View>
             }
           >
-            <RepZoneMapNative
+            <RepZoneMapNativeLazy
               mapRegion={mapRegion}
               lat={lat}
               lng={lng}
               mapAreas={mapAreas}
               inZone={inZone}
+              stores={stores}
+              interactive
             />
           </Suspense>
         ) : (
@@ -273,7 +292,7 @@ const styles = StyleSheet.create({
   statusUnknown: { backgroundColor: theme.accentSoft, color: theme.muted },
   statusText: { fontSize: 13, fontWeight: "700" },
   mapWrap: {
-    height: 148,
+    height: 280,
     borderRadius: theme.radius.md,
     overflow: "hidden",
     backgroundColor: "#0f172a",

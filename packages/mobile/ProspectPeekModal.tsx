@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import NotRegisterReasonPicker from "./NotRegisterReasonPicker";
+import { isValidProspectReason } from "./notRegisterReasons";
 import { openInGoogleMaps } from "./openGoogleMaps";
 import type { ProspectCard } from "./storeTypes";
 import { theme } from "./theme";
@@ -37,6 +38,7 @@ type Labels = {
   pending: string;
   notRegisterReason: string;
   notRegisterReasonHint: string;
+  customReasonPlaceholder: string;
   saveReason: string;
   savingReason: string;
   reasonSaved: string;
@@ -75,6 +77,7 @@ export default function ProspectPeekModal(props: Props) {
     longitudeDelta: 0.012,
   };
   const reasonDirty = reason !== (prospect.todayVisitNote?.trim() || null);
+  const reasonValid = isValidProspectReason(reason);
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={props.onClose}>
@@ -162,12 +165,13 @@ export default function ProspectPeekModal(props: Props) {
           <NotRegisterReasonPicker
             label={labels.notRegisterReason}
             hint={labels.notRegisterReasonHint}
+            customPlaceholder={labels.customReasonPlaceholder}
             value={reason}
             onChange={setReason}
             disabled={savingReason}
           />
 
-          {reasonDirty && reason ? (
+          {reasonDirty && reasonValid ? (
             <Pressable
               style={[styles.saveReasonBtn, savingReason && styles.btnDisabled]}
               onPress={() => void props.onSaveReason(prospect, reason)}

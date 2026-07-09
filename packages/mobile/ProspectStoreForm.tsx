@@ -23,6 +23,7 @@ import { getRepPosition, LocationDeniedError, LocationInaccurateError, LocationT
 import { resolveRepArea } from "./resolveRepArea";
 import { productImageUrl } from "./productImage";
 import NotRegisterReasonPicker from "./NotRegisterReasonPicker";
+import { isValidProspectReason } from "./notRegisterReasons";
 import { theme } from "./theme";
 
 const labels = {
@@ -57,7 +58,8 @@ const labels = {
   storeCreated: "تم حفظ العميل المحتمل.",
   notRegisterReason: "سبب عدم التسجيل",
   notRegisterReasonHint: "لماذا لم يُربَط المتجر برمز QR اليوم؟",
-  notRegisterReasonRequired: "يرجى اختيار سبب عدم التسجيل",
+  notRegisterReasonRequired: "يرجى اختيار أو كتابة سبب عدم التسجيل (حرفان على الأقل)",
+  customReasonPlaceholder: "اكتب سبب عدم التسجيل…",
   mapLoadFailed: "تعذّر تحميل خريطة المناطق",
   mapFallback: "معاينة الخريطة غير متاحة على هذا الجهاز — الموقع يُحدَّد من GPS.",
   openInMaps: "فتح في خرائط Google",
@@ -210,7 +212,7 @@ export default function ProspectStoreForm(props: Props) {
   }
 
   async function submit() {
-    if (!visitReason) {
+    if (!isValidProspectReason(visitReason)) {
       props.onNotice(labels.notRegisterReasonRequired);
       return;
     }
@@ -356,6 +358,7 @@ export default function ProspectStoreForm(props: Props) {
       <NotRegisterReasonPicker
         label={labels.notRegisterReason}
         hint={labels.notRegisterReasonHint}
+        customPlaceholder={labels.customReasonPlaceholder}
         value={visitReason}
         onChange={setVisitReason}
         disabled={busy}
@@ -365,7 +368,7 @@ export default function ProspectStoreForm(props: Props) {
         <Pressable style={styles.secondaryBtn} onPress={() => props.onDone(labels.cancel, false)}>
           <Text style={styles.secondaryText}>{labels.cancel}</Text>
         </Pressable>
-        <Pressable style={styles.primaryBtn} onPress={() => void submit()} disabled={busy || locating || !areaResolved || !visitReason}>
+        <Pressable style={styles.primaryBtn} onPress={() => void submit()} disabled={busy || locating || !areaResolved || !isValidProspectReason(visitReason)}>
           {busy ? (
             <ActivityIndicator color={theme.onAccent} />
           ) : (

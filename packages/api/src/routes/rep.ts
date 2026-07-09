@@ -5,7 +5,7 @@ import { z } from "zod";
 
 import { imageUpload } from "../lib/uploadConfig.js";
 import { isNoBuyReasonNote } from "../data/noBuyReasons.js";
-import { isNotRegisterReasonNote } from "../data/notRegisterReasons.js";
+import { isNotRegisterReasonNote, isValidProspectReasonNote } from "../data/notRegisterReasons.js";
 import { query, pool } from "../db/pool.js";
 import { repAuthMiddleware } from "../middleware/repAuth.js";
 import { HttpError } from "../utils/errors.js";
@@ -587,8 +587,8 @@ router.post("/prospect-stores", repAuthMiddleware, async (req, res, next) => {
     const body = prospectStoreSchema.parse(req.body);
     const rep = req.rep!;
     const visitNote = body.visitNote?.trim() || null;
-    if (visitNote && !isNotRegisterReasonNote(visitNote)) {
-      throw new HttpError(400, "يرجى اختيار سبب عدم التسجيل من القائمة");
+    if (visitNote && !isValidProspectReasonNote(visitNote)) {
+      throw new HttpError(400, "يرجى إدخال سبب عدم التسجيل (حرفان على الأقل)");
     }
     const today = await getRepTodayWorkAreaIds(rep.id);
     const resolved = await resolveAreaForRepRoute(
@@ -749,7 +749,7 @@ router.get("/prospect-stores/:id/today-visit-status", repAuthMiddleware, async (
     const visitedToday = Boolean(todayVisit);
     const todayVisitNote = todayVisit?.note ?? null;
     const requiresNotRegisterReason =
-      prospect.status === "open" && visitedToday && !isNotRegisterReasonNote(todayVisitNote);
+      prospect.status === "open" && visitedToday && !isValidProspectReasonNote(todayVisitNote);
     res.json({
       visitedToday,
       todayVisitNote,
@@ -772,10 +772,8 @@ router.patch("/prospect-stores/:id/today-visit-note", repAuthMiddleware, async (
     const kind =
       body.kind ?? (note && isNotRegisterReasonNote(note) ? "not-register-reason" : "visit-note");
 
-    if (kind === "not-register-reason") {
-      if (!note || !isNotRegisterReasonNote(note)) {
-        throw new HttpError(400, "يرجى اختيار سبب عدم التسجيل من القائمة");
-      }
+    if (kind === "not-register-reason" && !isValidProspectReasonNote(note)) {
+      throw new HttpError(400, "يرجى إدخال سبب عدم التسجيل (حرفان على الأقل)");
     }
 
     const todayVisit = await getProspectTodayVisit(rep.id, id);
@@ -809,10 +807,8 @@ router.post("/prospect-stores/:id/visits", repAuthMiddleware, async (req, res, n
     const note = body.note?.trim() ? body.note.trim() : null;
     const kind =
       body.kind ?? (note && isNotRegisterReasonNote(note) ? "not-register-reason" : "visit-note");
-    if (kind === "not-register-reason") {
-      if (!note || !isNotRegisterReasonNote(note)) {
-        throw new HttpError(400, "يرجى اختيار سبب عدم التسجيل من القائمة");
-      }
+    if (kind === "not-register-reason" && !isValidProspectReasonNote(note)) {
+      throw new HttpError(400, "يرجى إدخال سبب عدم التسجيل (حرفان على الأقل)");
     }
 
     const existing = await getProspectTodayVisit(rep.id, id);

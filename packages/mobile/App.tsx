@@ -59,7 +59,7 @@ import ToastOverlay, { type ToastKind } from "./ToastOverlay";
 import { theme } from "./theme";
 import DailyStoresByArea from "./DailyStoresByArea";
 import PossibleClientsSection from "./PossibleClientsSection";
-import RepZoneMapCard from "./RepZoneMapCard";
+import RepZoneMapCard, { type ZoneStorePin } from "./RepZoneMapCard";
 import GooglePlacesByArea, { type GooglePlaceAreaSummary } from "./GooglePlacesByArea";
 import {
   groupRawGooglePlacesByArea,
@@ -277,7 +277,8 @@ const t = {
   prospectConvertFailed: "تعذّر ربط الرمز",
   prospectLinkScanHint: "امسح رمز بطاقة جديد غير مستخدم لربط هذا العميل",
   prospectNotRegisterReason: "سبب عدم التسجيل",
-  prospectNotRegisterReasonHint: "يمكنك تغيير السبب لاحقاً من هنا",
+  prospectNotRegisterReasonHint: "اختر من القائمة أو اكتب سبباً يدوياً",
+  prospectCustomReasonPlaceholder: "اكتب سبب عدم التسجيل…",
   prospectSaveReason: "حفظ السبب",
   prospectSavingReason: "جاري الحفظ…",
   prospectReasonSaved: "تم حفظ السبب",
@@ -667,6 +668,23 @@ export default function App() {
     () => (repProfile?.areas ?? []).map((a) => a.name),
     [repProfile?.areas]
   );
+
+  const zoneStorePins = useMemo((): ZoneStorePin[] => {
+    return dailyStores
+      .filter(
+        (s) =>
+          Number.isFinite(s.location.lat) &&
+          Number.isFinite(s.location.lng) &&
+          (Math.abs(s.location.lat) > 0.0001 || Math.abs(s.location.lng) > 0.0001)
+      )
+      .map((s) => ({
+        id: s.id,
+        name: s.name,
+        lat: s.location.lat,
+        lng: s.location.lng,
+        visitedToday: s.visitedToday,
+      }));
+  }, [dailyStores]);
 
   const mapGoogleProspects = useCallback(
     (
@@ -1781,6 +1799,7 @@ export default function App() {
         <>
           <RepZoneMapCard
             apiGet={apiGet}
+            stores={zoneStorePins}
             onNotice={showToast}
             labels={{
               title: t.zoneMapTitle,
@@ -2594,6 +2613,7 @@ export default function App() {
             pending: t.prospectsPending,
             notRegisterReason: t.prospectNotRegisterReason,
             notRegisterReasonHint: t.prospectNotRegisterReasonHint,
+            customReasonPlaceholder: t.prospectCustomReasonPlaceholder,
             saveReason: t.prospectSaveReason,
             savingReason: t.prospectSavingReason,
             reasonSaved: t.prospectReasonSaved,
