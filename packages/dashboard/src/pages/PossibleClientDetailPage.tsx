@@ -40,7 +40,6 @@ type VisitRow = {
 
 export default function PossibleClientDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
   const { can } = useAuth();
   const { t } = useLocale();
   const canWrite = can("stores.write");
