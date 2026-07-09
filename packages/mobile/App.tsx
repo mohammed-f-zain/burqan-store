@@ -263,6 +263,7 @@ const t = {
   prospectsPending: "باقٍ",
   prospectsSearch: "بحث…",
   prospectsPill: "محتمل",
+  prospectsLoadMore: (n: number) => `عرض المزيد (${n})`,
   zoneMapTitle: "منطقة مسار اليوم",
   zoneMapUpdate: "تحديث",
   zoneMapInZone: "أنت داخل منطقة المسار",
@@ -1827,6 +1828,7 @@ export default function App() {
               pending: t.prospectsPending,
               searchPlaceholder: t.prospectsSearch,
               pill: t.prospectsPill,
+              loadMore: t.prospectsLoadMore,
             }}
             onAdd={() => setMode("prospect-add")}
             onSelect={setPeekProspect}

@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -22,7 +22,11 @@ export type PossibleClientsLabels = {
   pending: string;
   searchPlaceholder: string;
   pill: string;
+  loadMore: (remaining: number) => string;
 };
+
+const INITIAL_VISIBLE = 4;
+const LOAD_MORE_STEP = 4;
 
 type Props = {
   prospects: ProspectCard[];
@@ -36,6 +40,7 @@ type Props = {
 export default function PossibleClientsSection(props: Props) {
   const { prospects, loading, labels, onAdd, onSelect, onLinkQr } = props;
   const [search, setSearch] = useState("");
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -48,6 +53,13 @@ export default function PossibleClientsSection(props: Props) {
         (p.areaName ?? "").toLowerCase().includes(q)
     );
   }, [prospects, search]);
+
+  useEffect(() => {
+    setVisibleCount(INITIAL_VISIBLE);
+  }, [search, prospects]);
+
+  const visible = filtered.slice(0, visibleCount);
+  const hasMore = visibleCount < filtered.length;
 
   return (
     <View style={styles.wrap}>
@@ -79,7 +91,7 @@ export default function PossibleClientsSection(props: Props) {
         <Text style={styles.empty}>{labels.empty}</Text>
       ) : (
         <View style={styles.list}>
-          {filtered.map((p) => (
+          {visible.map((p) => (
             <View key={p.id} style={styles.card}>
               <Pressable onPress={() => onSelect(p)}>
                 <View style={styles.cardTop}>
@@ -108,6 +120,15 @@ export default function PossibleClientsSection(props: Props) {
               </Pressable>
             </View>
           ))}
+          {hasMore ? (
+            <Pressable
+              style={styles.loadMoreBtn}
+              onPress={() => setVisibleCount((n) => Math.min(n + LOAD_MORE_STEP, filtered.length))}
+            >
+              <Text style={styles.loadMoreText}>{labels.loadMore(filtered.length - visibleCount)}</Text>
+              <Ionicons name="chevron-down" size={18} color={theme.accent} />
+            </Pressable>
+          ) : null}
         </View>
       )}
     </View>
@@ -199,4 +220,16 @@ const styles = StyleSheet.create({
     backgroundColor: theme.accentSoft,
   },
   linkBtnText: { color: theme.accentDark, fontWeight: "800", fontSize: 14 },
+  loadMoreBtn: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: theme.line,
+    backgroundColor: "#f8fafc",
+  },
+  loadMoreText: { color: theme.accent, fontWeight: "700", fontSize: 14 },
 });
