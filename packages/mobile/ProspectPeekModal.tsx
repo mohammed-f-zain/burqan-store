@@ -37,6 +37,7 @@ type Labels = {
   pending: string;
   notRegisterReason: string;
   notRegisterReasonHint: string;
+  customReasonPlaceholder: string;
   saveReason: string;
   savingReason: string;
   reasonSaved: string;
@@ -165,9 +166,10 @@ export default function ProspectPeekModal(props: Props) {
             value={reason}
             onChange={setReason}
             disabled={savingReason}
+            customPlaceholder={labels.customReasonPlaceholder}
           />
 
-          {reasonDirty && reason ? (
+          {reasonDirty && reason && reason.trim().length >= 2 ? (
             <Pressable
               style={[styles.saveReasonBtn, savingReason && styles.btnDisabled]}
               onPress={() => void props.onSaveReason(prospect, reason)}

@@ -4,18 +4,27 @@ import MapView, { Marker, Polygon, PROVIDER_GOOGLE } from "react-native-maps";
 import type { MapRegion } from "./registerMapConfig";
 import { theme } from "./theme";
 import type { VoronoiMapCell } from "./voronoiMapGeo";
+import type { ZoneStorePin } from "./zoneMapTypes";
 
 type Props = {
   mapRegion: MapRegion;
   lat: number | null;
   lng: number | null;
   mapAreas: VoronoiMapCell[];
+  stores?: ZoneStorePin[];
   inZone: boolean | null;
+  interactive?: boolean;
 };
 
+function storePinColor(store: ZoneStorePin): string {
+  if (store.visitedToday) return "#16a34a";
+  if (store.isProspect) return "#f59e0b";
+  return "#2563eb";
+}
+
 export default function RepZoneMapNative(props: Props) {
-  const { mapRegion, lat, lng, mapAreas, inZone } = props;
-  const pinColor = inZone === true ? "#16a34a" : inZone === false ? theme.danger : theme.accent;
+  const { mapRegion, lat, lng, mapAreas, stores = [], inZone, interactive = false } = props;
+  const repPinColor = inZone === true ? "#16a34a" : inZone === false ? theme.danger : theme.accent;
 
   return (
     <MapView
@@ -23,8 +32,8 @@ export default function RepZoneMapNative(props: Props) {
       style={{ width: "100%", height: "100%" }}
       initialRegion={mapRegion}
       provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
-      scrollEnabled={false}
-      zoomEnabled={false}
+      scrollEnabled={interactive}
+      zoomEnabled={interactive}
       rotateEnabled={false}
       pitchEnabled={false}
     >
@@ -37,8 +46,16 @@ export default function RepZoneMapNative(props: Props) {
           strokeWidth={2}
         />
       ))}
+      {stores.map((s) => (
+        <Marker
+          key={`store-${s.id}-${s.isProspect ? "p" : "b"}`}
+          coordinate={{ latitude: s.lat, longitude: s.lng }}
+          pinColor={storePinColor(s)}
+          title={s.name}
+        />
+      ))}
       {lat != null && lng != null ? (
-        <Marker coordinate={{ latitude: lat, longitude: lng }} pinColor={pinColor} title="موقعك" />
+        <Marker coordinate={{ latitude: lat, longitude: lng }} pinColor={repPinColor} title="موقعك" />
       ) : null}
     </MapView>
   );

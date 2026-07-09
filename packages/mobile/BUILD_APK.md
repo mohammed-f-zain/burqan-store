@@ -18,11 +18,25 @@
 
 ## Install on your phone (latest preview build)
 
-1. Open on the phone (Chrome):  
-   https://expo.dev/accounts/saeedfwaz/projects/mobile/builds/01045792-addf-4992-9d53-11afbb4fd5b1  
-   (Fixes Android crash on launch — do not use older builds.)  
+After each release, build a fresh APK — an old install will not include the latest fixes.
+
+1. Open the latest build link from EAS on the phone (Chrome).
 2. Tap **Install** / download the APK, then allow “Install unknown apps” if Android asks.
 3. The app talks to **https://api.burqan.store** (configured in `eas.json` → `preview` profile).
+
+### Phone APK crashes but Expo Go works (Android maps)
+
+Expo Go uses Expo’s map shell. A **standalone APK** loads `react-native-maps` with your Google Maps API key. If the **EAS keystore SHA-1** is not added in Google Cloud (Maps SDK for Android, package `com.burqan.rep`), `MapView` can **crash the whole app** on open.
+
+**Default (stable):** Android release builds **do not** load embedded maps unless you set `EXPO_PUBLIC_ANDROID_RELEASE_MAPS=1` in `eas.json` and rebuild. The app shows a text fallback; lists, scan, and orders still work.
+
+**To enable maps on the APK:** add the release SHA-1 from `eas credentials`, enable Maps SDK for Android, then add to `eas.json` preview `env`:
+
+```json
+"EXPO_PUBLIC_ANDROID_RELEASE_MAPS": "1"
+```
+
+Rebuild the APK.
 
 ## Build a new APK later
 

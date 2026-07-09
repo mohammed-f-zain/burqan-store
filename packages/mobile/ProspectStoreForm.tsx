@@ -23,6 +23,7 @@ import { getRepPosition, LocationDeniedError, LocationInaccurateError, LocationT
 import { resolveRepArea } from "./resolveRepArea";
 import { productImageUrl } from "./productImage";
 import NotRegisterReasonPicker from "./NotRegisterReasonPicker";
+import { isPresetNotRegisterReason, prospectReasonApiKind } from "./notRegisterReasons";
 import { theme } from "./theme";
 
 const labels = {
@@ -56,8 +57,9 @@ const labels = {
   registerFailed: "فشل الحفظ",
   storeCreated: "تم حفظ العميل المحتمل.",
   notRegisterReason: "سبب عدم التسجيل",
-  notRegisterReasonHint: "لماذا لم يُربَط المتجر برمز QR اليوم؟",
-  notRegisterReasonRequired: "يرجى اختيار سبب عدم التسجيل",
+  notRegisterReasonHint: "اختر من القائمة أو اكتب سبباً يدوياً",
+  notRegisterReasonRequired: "يرجى اختيار سبب أو كتابة سبب يدوي (حرفان على الأقل)",
+  customReasonPlaceholder: "اكتب سبب عدم التسجيل…",
   mapLoadFailed: "تعذّر تحميل خريطة المناطق",
   mapFallback: "معاينة الخريطة غير متاحة على هذا الجهاز — الموقع يُحدَّد من GPS.",
   openInMaps: "فتح في خرائط Google",
@@ -210,29 +212,50 @@ export default function ProspectStoreForm(props: Props) {
   }
 
   async function submit() {
-    if (!visitReason) {
+    const trimmed = visitReason?.trim() ?? "";
+    if (trimmed.length < 2) {
       props.onNotice(labels.notRegisterReasonRequired);
       return;
     }
     setBusy(true);
     try {
       const pos = await getRepPosition({ timeoutMs: 20_000 });
+      const payload: Record<string, unknown> = {
+        name,
+        phone,
+        ownerName,
+        locationLat: pos.lat,
+        locationLng: pos.lng,
+        addressText: address || undefined,
+        imageUrl: imagePath ?? undefined,
+      };
+      if (isPresetNotRegisterReason(trimmed)) {
+        payload.visitNote = trimmed;
+      }
       const res = await fetch(`${props.apiBase}/api/v1/rep/prospect-stores`, {
         method: "POST",
         headers: props.headers,
-        body: JSON.stringify({
-          name,
-          phone,
-          ownerName,
-          locationLat: pos.lat,
-          locationLng: pos.lng,
-          addressText: address || undefined,
-          imageUrl: imagePath ?? undefined,
-          visitNote: visitReason,
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? labels.registerFailed);
+
+      const prospectId = Number(data.prospect?.id);
+      if (!isPresetNotRegisterReason(trimmed) && Number.isFinite(prospectId)) {
+        const visitRes = await fetch(`${props.apiBase}/api/v1/rep/prospect-stores/${prospectId}/visits`, {
+          method: "POST",
+          headers: props.headers,
+          body: JSON.stringify({
+            repLat: pos.lat,
+            repLng: pos.lng,
+            note: trimmed,
+            kind: prospectReasonApiKind(trimmed),
+          }),
+        });
+        const visitData = await visitRes.json();
+        if (!visitRes.ok) throw new Error(visitData.error ?? labels.registerFailed);
+      }
+
       props.onDone(labels.storeCreated, true);
     } catch (e) {
       if (e instanceof LocationDeniedError) props.onDone(labels.locationDenied, false);
@@ -359,13 +382,18 @@ export default function ProspectStoreForm(props: Props) {
         value={visitReason}
         onChange={setVisitReason}
         disabled={busy}
+        customPlaceholder={labels.customReasonPlaceholder}
       />
 
       <View style={styles.actions}>
         <Pressable style={styles.secondaryBtn} onPress={() => props.onDone(labels.cancel, false)}>
           <Text style={styles.secondaryText}>{labels.cancel}</Text>
         </Pressable>
-        <Pressable style={styles.primaryBtn} onPress={() => void submit()} disabled={busy || locating || !areaResolved || !visitReason}>
+        <Pressable
+          style={styles.primaryBtn}
+          onPress={() => void submit()}
+          disabled={busy || locating || !areaResolved || (visitReason?.trim().length ?? 0) < 2}
+        >
           {busy ? (
             <ActivityIndicator color={theme.onAccent} />
           ) : (

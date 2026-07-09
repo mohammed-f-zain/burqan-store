@@ -11,8 +11,11 @@ import {
   View,
 } from "react-native";
 
+import RouteStoresMap from "./RouteStoresMap";
 import { theme } from "./theme";
 import type { DailyStoreCard } from "./storeTypes";
+import type { MapRegion } from "./registerMapConfig";
+import { dailyStoresToPins } from "./zoneMapTypes";
 
 export type RouteDayLabels = {
   title: string;
@@ -60,10 +63,28 @@ type Props = {
 
 type FilterMode = "all" | "pending" | "done";
 
+const JORDAN_REGION: MapRegion = {
+  latitude: 31.25,
+  longitude: 36.5,
+  latitudeDelta: 4.8,
+  longitudeDelta: 4.2,
+};
+
 export default function RouteDayStores(props: Props) {
   const { stores, meta, loading, locating, labels } = props;
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterMode>("all");
+
+  const storePins = useMemo(() => dailyStoresToPins(stores), [stores]);
+
+  const mapRegion = useMemo((): MapRegion => {
+    if (storePins.length) {
+      const lat = storePins.reduce((s, p) => s + p.lat, 0) / storePins.length;
+      const lng = storePins.reduce((s, p) => s + p.lng, 0) / storePins.length;
+      return { latitude: lat, longitude: lng, latitudeDelta: 0.14, longitudeDelta: 0.14 };
+    }
+    return JORDAN_REGION;
+  }, [storePins]);
 
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase();
@@ -111,65 +132,75 @@ export default function RouteDayStores(props: Props) {
 
   return (
     <View style={styles.wrap}>
-      <View style={styles.hero}>
-        <View style={styles.heroTop}>
-          <View style={styles.heroIcon}>
-            <Ionicons name="navigate" size={22} color="#fff" />
+      <View style={styles.stickyHeader}>
+        <View style={styles.hero}>
+          <View style={styles.heroTop}>
+            <View style={styles.heroIcon}>
+              <Ionicons name="navigate" size={22} color="#fff" />
+            </View>
+            <View style={styles.heroText}>
+              <Text style={styles.heroTitle}>{labels.title}</Text>
+              <Text style={styles.heroSub}>{labels.today(dayName, zoneName)}</Text>
+            </View>
           </View>
-          <View style={styles.heroText}>
-            <Text style={styles.heroTitle}>{labels.title}</Text>
-            <Text style={styles.heroSub}>{labels.today(dayName, zoneName)}</Text>
-          </View>
-        </View>
-        <View style={styles.heroStats}>
-          <Text style={styles.heroStat}>{labels.storesCount(stores.length)}</Text>
-          <Text style={styles.heroStatMuted}>
-            {visitedCount} {labels.visited} · {stores.length - visitedCount} {labels.pending}
-            {possibleCount > 0 ? ` · ${labels.possibleCount(possibleCount)}` : ""}
-          </Text>
-        </View>
-        <Text style={styles.nearestHint}>{labels.nearestFirst}</Text>
-        <Pressable
-          style={[styles.locationBtn, (locating || loading) && styles.locationBtnBusy]}
-          onPress={props.onRefreshLocation}
-          disabled={locating || loading}
-        >
-          {locating ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <>
-              <Ionicons name="locate" size={17} color="#fff" />
-              <Text style={styles.locationBtnText}>{labels.refreshLocation}</Text>
-            </>
-          )}
-        </Pressable>
-      </View>
 
-      <View style={styles.toolbar}>
-        <TextInput
-          style={styles.search}
-          value={search}
-          onChangeText={setSearch}
-          placeholder={labels.searchPlaceholder}
-          placeholderTextColor={theme.muted}
-          textAlign="right"
-        />
-        <View style={styles.filters}>
-          {(["all", "pending", "done"] as const).map((f) => (
-            <Pressable
-              key={f}
-              style={[styles.filterChip, filter === f && styles.filterChipOn]}
-              onPress={() => setFilter(f)}
-            >
-              <Text style={[styles.filterText, filter === f && styles.filterTextOn]}>
-                {f === "all" ? labels.filterAll : f === "pending" ? labels.filterPending : labels.filterDone}
-              </Text>
-            </Pressable>
-          ))}
+          {storePins.length > 0 ? (
+            <View style={styles.heroMapWrap}>
+              <RouteStoresMap mapRegion={mapRegion} stores={storePins} height={128} />
+            </View>
+          ) : null}
+
+          <View style={styles.heroStats}>
+            <Text style={styles.heroStat}>{labels.storesCount(stores.length)}</Text>
+            <Text style={styles.heroStatMuted}>
+              {visitedCount} {labels.visited} · {stores.length - visitedCount} {labels.pending}
+              {possibleCount > 0 ? ` · ${labels.possibleCount(possibleCount)}` : ""}
+            </Text>
+          </View>
+          <Text style={styles.nearestHint}>{labels.nearestFirst}</Text>
+          <Pressable
+            style={[styles.locationBtn, (locating || loading) && styles.locationBtnBusy]}
+            onPress={props.onRefreshLocation}
+            disabled={locating || loading}
+          >
+            {locating ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <>
+                <Ionicons name="locate" size={17} color="#fff" />
+                <Text style={styles.locationBtnText}>{labels.refreshLocation}</Text>
+              </>
+            )}
+          </Pressable>
+        </View>
+
+        <View style={styles.toolbar}>
+          <TextInput
+            style={styles.search}
+            value={search}
+            onChangeText={setSearch}
+            placeholder={labels.searchPlaceholder}
+            placeholderTextColor={theme.muted}
+            textAlign="right"
+          />
+          <View style={styles.filters}>
+            {(["all", "pending", "done"] as const).map((f) => (
+              <Pressable
+                key={f}
+                style={[styles.filterChip, filter === f && styles.filterChipOn]}
+                onPress={() => setFilter(f)}
+              >
+                <Text style={[styles.filterText, filter === f && styles.filterTextOn]}>
+                  {f === "all" ? labels.filterAll : f === "pending" ? labels.filterPending : labels.filterDone}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
         </View>
       </View>
 
       <ScrollView
+        style={styles.listScroll}
         contentContainerStyle={styles.list}
         refreshControl={
           <RefreshControl refreshing={props.refreshing} onRefresh={props.onRefresh} tintColor={theme.accent} />
@@ -189,9 +220,7 @@ export default function RouteDayStores(props: Props) {
               onPress={() => props.onSelectStore(s)}
             >
               <View style={[styles.rankBadge, isPossible(s) && styles.rankBadgePossible]}>
-                <Text style={[styles.rankText, isPossible(s) && styles.rankTextPossible]}>
-                  {index + 1}
-                </Text>
+                <Text style={[styles.rankText, isPossible(s) && styles.rankTextPossible]}>{index + 1}</Text>
               </View>
               <View style={styles.storeBody}>
                 <View style={styles.storeTopRow}>
@@ -235,7 +264,7 @@ export default function RouteDayStores(props: Props) {
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1 },
+  wrap: { flex: 1, minHeight: 0 },
   center: { alignItems: "center", justifyContent: "center", padding: 24, gap: 12 },
   card: {
     backgroundColor: theme.card,
@@ -257,11 +286,16 @@ const styles = StyleSheet.create({
   title: { color: theme.text, fontSize: 18, fontWeight: "800", textAlign: "center" },
   emptyMsg: { color: theme.muted, fontSize: 15, textAlign: "center", marginTop: 12, lineHeight: 22 },
   muted: { color: theme.muted, fontSize: 13, marginTop: 8 },
+  stickyHeader: {
+    zIndex: 2,
+    backgroundColor: theme.bg,
+    paddingBottom: 4,
+  },
   hero: {
     backgroundColor: theme.accent,
     borderRadius: theme.radius.xl,
     padding: 16,
-    marginBottom: 12,
+    marginBottom: 8,
     ...theme.shadow.card,
   },
   heroTop: { flexDirection: "row-reverse", alignItems: "center", gap: 12 },
@@ -276,12 +310,12 @@ const styles = StyleSheet.create({
   heroText: { flex: 1 },
   heroTitle: { color: "#fff", fontSize: 17, fontWeight: "800", textAlign: "right" },
   heroSub: { color: "rgba(255,255,255,0.92)", fontSize: 14, fontWeight: "600", textAlign: "right", marginTop: 4 },
-  heroAreas: {
-    color: "rgba(255,255,255,0.85)",
-    fontSize: 12,
-    textAlign: "right",
-    marginTop: 10,
-    lineHeight: 18,
+  heroMapWrap: {
+    marginTop: 12,
+    borderRadius: theme.radius.md,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.25)",
   },
   heroStats: {
     flexDirection: "row-reverse",
@@ -315,7 +349,7 @@ const styles = StyleSheet.create({
   },
   locationBtnBusy: { opacity: 0.75 },
   locationBtnText: { color: "#fff", fontSize: 13, fontWeight: "800" },
-  toolbar: { marginBottom: 8 },
+  toolbar: { marginBottom: 4 },
   search: {
     borderWidth: 1,
     borderColor: theme.line,
@@ -338,6 +372,7 @@ const styles = StyleSheet.create({
   filterChipOn: { backgroundColor: theme.accentSoft, borderColor: theme.accent },
   filterText: { color: theme.muted, fontWeight: "700", fontSize: 13 },
   filterTextOn: { color: theme.accentDark },
+  listScroll: { flex: 1, minHeight: 0 },
   list: { paddingBottom: 24 },
   storeCard: {
     flexDirection: "row-reverse",

@@ -39,7 +39,7 @@ import {
   LocationTimeoutError,
   warmRepPosition,
 } from "./getDeviceLocation";
-import ProductCatalogGrid from "./ProductCatalogGrid";
+import { prospectReasonApiKind } from "./notRegisterReasons";
 import InventoryList from "./InventoryList";
 import {
   getProductGridLayout,
@@ -60,6 +60,7 @@ import { theme } from "./theme";
 import DailyStoresByArea from "./DailyStoresByArea";
 import PossibleClientsSection from "./PossibleClientsSection";
 import RepZoneMapCard from "./RepZoneMapCard";
+import { dailyStoresToPins } from "./zoneMapTypes";
 import GooglePlacesByArea, { type GooglePlaceAreaSummary } from "./GooglePlacesByArea";
 import {
   groupRawGooglePlacesByArea,
@@ -277,11 +278,13 @@ const t = {
   prospectConvertFailed: "تعذّر ربط الرمز",
   prospectLinkScanHint: "امسح رمز بطاقة جديد غير مستخدم لربط هذا العميل",
   prospectNotRegisterReason: "سبب عدم التسجيل",
-  prospectNotRegisterReasonHint: "يمكنك تغيير السبب لاحقاً من هنا",
+  prospectNotRegisterReasonHint: "اختر من القائمة أو اكتب سبباً يدوياً",
+  prospectCustomReasonPlaceholder: "اكتب سبب عدم التسجيل…",
   prospectSaveReason: "حفظ السبب",
   prospectSavingReason: "جاري الحفظ…",
   prospectReasonSaved: "تم حفظ السبب",
   prospectReasonSaveFailed: "تعذّر حفظ السبب",
+  prospectNotRegisterReasonRequired: "يرجى اختيار سبب أو كتابة سبب يدوي (حرفان على الأقل)",
   prospectCoords: "الإحداثيات",
   prospectMapFallback: "معاينة الخريطة غير متاحة — اضغط فتح على الخريطة",
   navGoogle: "خرائط Google",
@@ -667,6 +670,8 @@ export default function App() {
     () => (repProfile?.areas ?? []).map((a) => a.name),
     [repProfile?.areas]
   );
+
+  const zoneStorePins = useMemo(() => dailyStoresToPins(dailyStores), [dailyStores]);
 
   const mapGoogleProspects = useCallback(
     (
@@ -1555,28 +1560,34 @@ export default function App() {
 
   const saveProspectReason = useCallback(
     async (p: ProspectCard, reason: string) => {
+      const trimmed = reason.trim();
+      if (trimmed.length < 2) {
+        showToast(t.prospectNotRegisterReasonRequired, "error");
+        return;
+      }
+      const kind = prospectReasonApiKind(trimmed);
       setProspectReasonSaving(true);
       try {
         const pos = await getRepPosition({ timeoutMs: 20_000 });
         if (p.visitedToday) {
           await apiPatch(`/api/v1/rep/prospect-stores/${p.id}/today-visit-note`, {
-            note: reason,
-            kind: "not-register-reason",
+            note: trimmed,
+            kind,
           });
         } else {
           await apiPost(`/api/v1/rep/prospect-stores/${p.id}/visits`, {
             repLat: pos.lat,
             repLng: pos.lng,
-            note: reason,
-            kind: "not-register-reason",
+            note: trimmed,
+            kind,
           });
         }
         setPeekProspect((prev) =>
-          prev && prev.id === p.id ? { ...prev, todayVisitNote: reason, visitedToday: true } : prev
+          prev && prev.id === p.id ? { ...prev, todayVisitNote: trimmed, visitedToday: true } : prev
         );
         setProspects((prev) =>
           prev.map((row) =>
-            row.id === p.id ? { ...row, todayVisitNote: reason, visitedToday: true } : row
+            row.id === p.id ? { ...row, todayVisitNote: trimmed, visitedToday: true } : row
           )
         );
         showToast(t.prospectReasonSaved, "success");
@@ -1750,6 +1761,65 @@ export default function App() {
                 />
               </View>
             </View>
+          ) : bottomTab === "route" && mode !== "store" && mode !== "register" ? (
+            <View style={[styles.flexTab, pageFrameStyle, styles.page, { paddingBottom: insets.bottom + 88 }]}>
+              <RouteDayStores
+                stores={routeStores}
+                meta={routeMeta}
+                loading={routeLoading}
+                locating={routeLocating}
+                refreshing={routeRefreshing}
+                labels={{
+                  title: t.routeDayTitle,
+                  subtitle: t.routeDaySubtitle,
+                  today: t.routeDayToday,
+                  areasIncluded: t.routeDayAreas,
+                  storesCount: t.routeDayStoresCount,
+                  possibleCount: t.routeDayPossibleCount,
+                  possiblePill: t.routeDayPossiblePill,
+                  nearestFirst: t.routeDayNearest,
+                  empty: t.routeDayEmpty,
+                  noSchedule: t.routeDayNoSchedule,
+                  noZoneAreas: t.routeDayNoZoneAreas,
+                  locating: t.locating,
+                  locationDenied: t.locationDenied,
+                  loadFailed: t.routeDayLoadFailed,
+                  visited: t.dailyStoresVisited,
+                  pending: t.dailyStoresPending,
+                  searchPlaceholder: t.dailyStoresSearchPlaceholder,
+                  filterAll: t.dailyStoresFilterAll,
+                  filterPending: t.dailyStoresFilterPending,
+                  filterDone: t.dailyStoresFilterDone,
+                  noSearchResults: t.dailyStoresNoSearchResults,
+                  refreshLocation: t.refreshLocationCurrent,
+                }}
+                onRefresh={() => {
+                  setRouteRefreshing(true);
+                  void loadRouteStores();
+                }}
+                onRefreshLocation={() => {
+                  setRouteRefreshing(true);
+                  void loadRouteStores();
+                }}
+                onSelectStore={(s) => {
+                  if (s.source === "prospect") {
+                    setPeekProspect({
+                      id: s.id,
+                      name: s.name,
+                      phone: s.phone,
+                      ownerName: s.ownerName,
+                      location: s.location,
+                      addressText: s.addressText,
+                      areaName: s.areaName,
+                      visitedToday: s.visitedToday,
+                      todayVisitNote: s.visitNote ?? null,
+                    });
+                    return;
+                  }
+                  setPeekStore(s);
+                }}
+              />
+            </View>
           ) : (
         <ScrollView
           style={{ flex: 1 }}
@@ -1781,6 +1851,7 @@ export default function App() {
         <>
           <RepZoneMapCard
             apiGet={apiGet}
+            stores={zoneStorePins}
             onNotice={showToast}
             labels={{
               title: t.zoneMapTitle,
@@ -1873,65 +1944,6 @@ export default function App() {
             onSelectStore={setPeekStore}
           />
         </>
-      )}
-
-      {bottomTab === "route" && mode !== "store" && mode !== "register" && (
-        <RouteDayStores
-          stores={routeStores}
-          meta={routeMeta}
-          loading={routeLoading}
-          locating={routeLocating}
-          refreshing={routeRefreshing}
-          labels={{
-            title: t.routeDayTitle,
-            subtitle: t.routeDaySubtitle,
-            today: t.routeDayToday,
-            areasIncluded: t.routeDayAreas,
-            storesCount: t.routeDayStoresCount,
-            possibleCount: t.routeDayPossibleCount,
-            possiblePill: t.routeDayPossiblePill,
-            nearestFirst: t.routeDayNearest,
-            empty: t.routeDayEmpty,
-            noSchedule: t.routeDayNoSchedule,
-            noZoneAreas: t.routeDayNoZoneAreas,
-            locating: t.locating,
-            locationDenied: t.locationDenied,
-            loadFailed: t.routeDayLoadFailed,
-            visited: t.dailyStoresVisited,
-            pending: t.dailyStoresPending,
-            searchPlaceholder: t.dailyStoresSearchPlaceholder,
-            filterAll: t.dailyStoresFilterAll,
-            filterPending: t.dailyStoresFilterPending,
-            filterDone: t.dailyStoresFilterDone,
-            noSearchResults: t.dailyStoresNoSearchResults,
-            refreshLocation: t.refreshLocationCurrent,
-          }}
-          onRefresh={() => {
-            setRouteRefreshing(true);
-            void loadRouteStores();
-          }}
-          onRefreshLocation={() => {
-            setRouteRefreshing(true);
-            void loadRouteStores();
-          }}
-          onSelectStore={(s) => {
-            if (s.source === "prospect") {
-              setPeekProspect({
-                id: s.id,
-                name: s.name,
-                phone: s.phone,
-                ownerName: s.ownerName,
-                location: s.location,
-                addressText: s.addressText,
-                areaName: s.areaName,
-                visitedToday: s.visitedToday,
-                todayVisitNote: s.visitNote ?? null,
-              });
-              return;
-            }
-            setPeekStore(s);
-          }}
-        />
       )}
 
       {bottomTab === "google" && mode !== "store" && mode !== "register" && (
@@ -2594,6 +2606,7 @@ export default function App() {
             pending: t.prospectsPending,
             notRegisterReason: t.prospectNotRegisterReason,
             notRegisterReasonHint: t.prospectNotRegisterReasonHint,
+            customReasonPlaceholder: t.prospectCustomReasonPlaceholder,
             saveReason: t.prospectSaveReason,
             savingReason: t.prospectSavingReason,
             reasonSaved: t.prospectReasonSaved,

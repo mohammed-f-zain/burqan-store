@@ -18,8 +18,17 @@ export function androidGoogleMapsConfigured(): boolean {
   return Boolean(String(fromExpo || fromExtra || fromEnv || "").trim());
 }
 
-/** Never load react-native-maps on Android unless a Google Maps API key is configured. */
+function isExpoGoClient(): boolean {
+  return Constants.appOwnership === "expo";
+}
+
+/**
+ * Google Maps in a custom Android APK needs the EAS/Play keystore SHA-1 in Google Cloud.
+ * Without it, MapView can crash the whole app natively. Expo Go uses its own maps shell.
+ */
 export function shouldLoadNativeMapsModule(): boolean {
   if (Platform.OS === "ios") return true;
-  return androidGoogleMapsConfigured();
+  if (!androidGoogleMapsConfigured()) return false;
+  if (isExpoGoClient()) return true;
+  return process.env.EXPO_PUBLIC_ANDROID_RELEASE_MAPS === "1";
 }

@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -15,11 +15,10 @@ import {
   LocationTimeoutError,
 } from "./getDeviceLocation";
 import type { MapRegion } from "./registerMapConfig";
-import { shouldLoadNativeMapsModule } from "./registerMapConfig";
 import { theme } from "./theme";
 import { voronoiGeoJsonToCells, type VoronoiMapCell } from "./voronoiMapGeo";
-
-const RepZoneMapNative = lazy(() => import("./RepZoneMapNative"));
+import type { ZoneStorePin } from "./zoneMapTypes";
+import RouteStoresMap from "./RouteStoresMap";
 
 const JORDAN_REGION: MapRegion = {
   latitude: 31.25,
@@ -56,6 +55,7 @@ type ZoneStatusResponse = {
 
 type Props = {
   apiGet: (path: string) => Promise<Record<string, unknown>>;
+  stores?: ZoneStorePin[];
   labels: RepZoneMapLabels;
   onNotice?: (msg: string) => void;
 };
@@ -73,7 +73,7 @@ function regionFromCells(cells: VoronoiMapCell[], lat: number | null, lng: numbe
 }
 
 export default function RepZoneMapCard(props: Props) {
-  const { apiGet, labels, onNotice } = props;
+  const { apiGet, stores = [], labels, onNotice } = props;
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [routeToday, setRouteToday] = useState<RouteToday | null>(null);
@@ -198,32 +198,16 @@ export default function RepZoneMapCard(props: Props) {
       </View>
 
       <View style={styles.mapWrap}>
-        {shouldLoadNativeMapsModule() ? (
-          <Suspense
-            fallback={
-              <View style={styles.mapLoading}>
-                <ActivityIndicator color={theme.accent} />
-              </View>
-            }
-          >
-            <RepZoneMapNative
-              mapRegion={mapRegion}
-              lat={lat}
-              lng={lng}
-              mapAreas={mapAreas}
-              inZone={inZone}
-            />
-          </Suspense>
-        ) : (
-          <View style={styles.mapFallback}>
-            <Text style={styles.mapFallbackText}>{labels.mapFallback}</Text>
-            {routeToday.areas.length ? (
-              <Text style={styles.areasList} numberOfLines={2}>
-                {routeToday.areas.join(" · ")}
-              </Text>
-            ) : null}
-          </View>
-        )}
+        <RouteStoresMap
+          mapRegion={mapRegion}
+          lat={lat}
+          lng={lng}
+          mapAreas={mapAreas}
+          stores={stores}
+          inZone={inZone}
+          height={148}
+          fallbackText={labels.mapFallback}
+        />
       </View>
     </View>
   );
@@ -276,12 +260,7 @@ const styles = StyleSheet.create({
     height: 148,
     borderRadius: theme.radius.md,
     overflow: "hidden",
-    backgroundColor: "#0f172a",
   },
-  mapLoading: { flex: 1, justifyContent: "center", alignItems: "center" },
-  mapFallback: { flex: 1, justifyContent: "center", alignItems: "center", padding: 12 },
-  mapFallbackText: { color: "#cbd5e1", fontSize: 12, textAlign: "center" },
-  areasList: { color: "#94a3b8", fontSize: 11, marginTop: 6, textAlign: "center" },
   loadingText: { color: theme.muted, textAlign: "center", marginTop: 8, fontSize: 13 },
   noRoute: { color: theme.muted, textAlign: "right", fontSize: 14, marginTop: 4 },
 });
