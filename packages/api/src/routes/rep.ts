@@ -24,6 +24,8 @@ import {
 } from "../utils/geo.js";
 import { parseQrPublicToken } from "../utils/qrToken.js";
 import { buildJordanVoronoiPayload } from "../utils/buildJordanVoronoiPayload.js";
+import { areaRowsToVoronoiSites, buildVoronoiGeoJson } from "../utils/jordanVoronoi.js";
+import { loadVoronoiAreaRows } from "../utils/loadVoronoiAreaRows.js";
 import { expandRepAreaIds } from "../utils/expandRepAreaIds.js";
 import {
   awardLoyaltyPoints,
@@ -912,14 +914,9 @@ router.get("/route/zone-status", repAuthMiddleware, async (req, res, next) => {
       inZone = resolved.assignedToRep;
     }
 
-    const payload = await buildJordanVoronoiPayload(
-      q.lat != null && q.lng != null ? { lat: q.lat, lng: q.lng, radiusKm: 32 } : undefined
-    );
     const zoneIdSet = new Set(today.expandedAreaIds);
-    const geojson = {
-      type: "FeatureCollection" as const,
-      features: payload.geojson.features.filter((f) => zoneIdSet.has(f.properties.areaId)),
-    };
+    const zoneRows = (await loadVoronoiAreaRows()).filter((r) => zoneIdSet.has(r.id));
+    const geojson = buildVoronoiGeoJson(areaRowsToVoronoiSites(zoneRows));
 
     res.json({
       routeToday: {

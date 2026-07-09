@@ -30,6 +30,8 @@ const JORDAN_REGION: MapRegion = {
   longitudeDelta: 4.2,
 };
 
+const GPS_REFRESH_TIMEOUT_MS = 8_000;
+
 export type RepZoneMapLabels = {
   title: string;
   update: string;
@@ -86,6 +88,21 @@ function regionFromCells(
   return base;
 }
 
+function applyZoneStatus(
+  data: ZoneStatusResponse,
+  setters: {
+    setRouteToday: (v: RouteToday | null) => void;
+    setInZone: (v: boolean | null) => void;
+    setMessage: (v: string | null) => void;
+    setMapAreas: (v: VoronoiMapCell[]) => void;
+  }
+) {
+  setters.setRouteToday(data.routeToday);
+  setters.setInZone(data.inZone);
+  setters.setMessage(data.message ?? null);
+  setters.setMapAreas(voronoiGeoJsonToCells(data.geojson));
+}
+
 export default function RepZoneMapCard(props: Props) {
   const { apiGet, labels, stores = [], onNotice } = props;
   const [loading, setLoading] = useState(true);
@@ -97,42 +114,57 @@ export default function RepZoneMapCard(props: Props) {
   const [lng, setLng] = useState<number | null>(null);
   const [mapAreas, setMapAreas] = useState<VoronoiMapCell[]>([]);
 
+  const applyResponse = useCallback(
+    (data: ZoneStatusResponse) => {
+      applyZoneStatus(data, {
+        setRouteToday,
+        setInZone,
+        setMessage,
+        setMapAreas,
+      });
+    },
+    [applyResponse]
+  );
+
+  const fetchZoneStatus = useCallback(
+    async (coords?: { lat: number; lng: number }) => {
+      const qs = coords ? `?lat=${coords.lat}&lng=${coords.lng}` : "";
+      const data = (await apiGet(`/api/v1/rep/route/zone-status${qs}`)) as ZoneStatusResponse;
+      applyResponse(data);
+      return data;
+    },
+    [apiGet, applyResponse]
+  );
+
+  const refreshGpsInZone = useCallback(async () => {
+    try {
+      const pos = await getRepPosition({ timeoutMs: GPS_REFRESH_TIMEOUT_MS, maxAccuracyM: 150 });
+      setLat(pos.lat);
+      setLng(pos.lng);
+      await fetchZoneStatus({ lat: pos.lat, lng: pos.lng });
+    } catch (e) {
+      if (e instanceof LocationDeniedError) onNotice?.(labels.locationDenied);
+      else if (e instanceof LocationTimeoutError || e instanceof LocationInaccurateError) {
+        onNotice?.(labels.locating);
+      }
+    }
+  }, [fetchZoneStatus, labels.locationDenied, labels.locating, onNotice]);
+
   const loadZoneStatus = useCallback(
     async (opts?: { refreshGps?: boolean }) => {
-      const refreshGps = opts?.refreshGps ?? false;
-      if (refreshGps) setUpdating(true);
-      else setLoading(true);
-
-      let nextLat = lat;
-      let nextLng = lng;
-
-      if (refreshGps || nextLat == null || nextLng == null) {
+      if (opts?.refreshGps) {
+        setUpdating(true);
         try {
-          const pos = await getRepPosition({ timeoutMs: 12_000, maxAccuracyM: 120 });
-          nextLat = pos.lat;
-          nextLng = pos.lng;
-          setLat(pos.lat);
-          setLng(pos.lng);
-        } catch (e) {
-          if (refreshGps) {
-            if (e instanceof LocationDeniedError) onNotice?.(labels.locationDenied);
-            else if (e instanceof LocationTimeoutError || e instanceof LocationInaccurateError) {
-              onNotice?.(labels.locating);
-            }
-          }
+          await refreshGpsInZone();
+        } finally {
+          setUpdating(false);
         }
+        return;
       }
 
+      setLoading(true);
       try {
-        const qs =
-          nextLat != null && nextLng != null
-            ? `?lat=${nextLat}&lng=${nextLng}`
-            : "";
-        const data = (await apiGet(`/api/v1/rep/route/zone-status${qs}`)) as ZoneStatusResponse;
-        setRouteToday(data.routeToday);
-        setInZone(data.inZone);
-        setMessage(data.message ?? null);
-        setMapAreas(voronoiGeoJsonToCells(data.geojson));
+        await fetchZoneStatus();
       } catch {
         setRouteToday(null);
         setInZone(null);
@@ -140,10 +172,10 @@ export default function RepZoneMapCard(props: Props) {
         setMessage(labels.noRoute);
       } finally {
         setLoading(false);
-        setUpdating(false);
       }
+      void refreshGpsInZone();
     },
-    [apiGet, labels.locationDenied, labels.locating, labels.noRoute, lat, lng, onNotice]
+    [fetchZoneStatus, labels.noRoute, refreshGpsInZone]
   );
 
   useEffect(() => {

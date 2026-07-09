@@ -755,37 +755,35 @@ export default function App() {
     if (!token) return;
     setDailyStoresLoading(true);
     try {
-      let nearestFirst = false;
-      let repLat = 0;
-      let repLng = 0;
-      try {
-        const pos = await getRepPosition({ timeoutMs: 12_000 });
-        repLat = pos.lat;
-        repLng = pos.lng;
-        nearestFirst = true;
-      } catch {
-        // load without nearest-first sort
-      }
       const data = (await apiGet("/api/v1/rep/stores/daily")) as {
         stores?: DailyStoreCard[];
         googlePlacesReady?: boolean;
         routeToday?: { dayName?: string; zoneName?: string } | null;
         message?: string;
       };
-      let burqan = (data.stores ?? []) as DailyStoreCard[];
-      if (nearestFirst && burqan.length > 0) {
-        burqan = sortDailyStoreCardsByDistance(burqan, repLat, repLng);
-      }
+      const burqan = (data.stores ?? []) as DailyStoreCard[];
       setDailyStores(burqan);
       setDailyMeta({
         zoneName: data.routeToday?.zoneName,
         dayName: data.routeToday?.dayName,
         message: data.message,
-        nearestFirst,
+        nearestFirst: false,
       });
       if (typeof data.googlePlacesReady === "boolean") {
         setGooglePlacesReady(data.googlePlacesReady);
       }
+
+      void (async () => {
+        try {
+          const pos = await getRepPosition({ timeoutMs: 8_000, maxAccuracyM: 150 });
+          setDailyStores((prev) =>
+            prev.length > 0 ? sortDailyStoreCardsByDistance(prev, pos.lat, pos.lng) : prev
+          );
+          setDailyMeta((prev) => (prev ? { ...prev, nearestFirst: true } : prev));
+        } catch {
+          // keep list without distance sort
+        }
+      })();
     } catch {
       setDailyStores([]);
       setDailyMeta(null);

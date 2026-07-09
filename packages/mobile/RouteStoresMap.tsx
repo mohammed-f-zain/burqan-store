@@ -30,11 +30,7 @@ export default function RouteStoresMap({ stores, height = 168, interactive = tru
   if (!stores.length) return null;
 
   if (!shouldLoadNativeMapsModule()) {
-    return (
-      <View style={[styles.fallback, { height }]}>
-        <ActivityIndicator color={theme.accent} />
-      </View>
-    );
+    return null;
   }
 
   return (
