@@ -174,7 +174,9 @@ export default function ProspectPeekModal(props: Props) {
           {reasonDirty && reasonValid ? (
             <Pressable
               style={[styles.saveReasonBtn, savingReason && styles.btnDisabled]}
-              onPress={() => void props.onSaveReason(prospect, reason)}
+              onPress={() => {
+                if (reason) void props.onSaveReason(prospect, reason);
+              }}
               disabled={savingReason}
             >
               {savingReason ? (

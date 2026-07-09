@@ -3,7 +3,7 @@ import { ActivityIndicator, StyleSheet, View } from "react-native";
 
 import type { MapRegion } from "./registerMapConfig";
 import { shouldLoadNativeMapsModule } from "./registerMapConfig";
-import { regionFromStorePins, type ZoneStorePin } from "./RepZoneMapNative";
+import { regionFromStorePins, type ZoneStorePin } from "./zoneMapTypes";
 import { theme } from "./theme";
 
 const RepZoneMapNativeLazy = lazy(() => import("./RepZoneMapNative"));

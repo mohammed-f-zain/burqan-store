@@ -4,14 +4,9 @@ import MapView, { Marker, Polygon, PROVIDER_GOOGLE } from "react-native-maps";
 import type { MapRegion } from "./registerMapConfig";
 import { theme } from "./theme";
 import type { VoronoiMapCell } from "./voronoiMapGeo";
+import type { ZoneStorePin } from "./zoneMapTypes";
 
-export type ZoneStorePin = {
-  id: number;
-  name: string;
-  lat: number;
-  lng: number;
-  visitedToday?: boolean;
-};
+export type { ZoneStorePin } from "./zoneMapTypes";
 
 type Props = {
   mapRegion: MapRegion;
@@ -60,25 +55,4 @@ export default function RepZoneMapNative(props: Props) {
       ) : null}
     </MapView>
   );
-}
-
-export function regionFromStorePins(
-  stores: ZoneStorePin[],
-  repLat: number | null,
-  repLng: number | null,
-  fallback: MapRegion
-): MapRegion {
-  const pts: { lat: number; lng: number }[] = stores.map((s) => ({ lat: s.lat, lng: s.lng }));
-  if (repLat != null && repLng != null) pts.push({ lat: repLat, lng: repLng });
-  if (!pts.length) return fallback;
-  const minLat = Math.min(...pts.map((p) => p.lat));
-  const maxLat = Math.max(...pts.map((p) => p.lat));
-  const minLng = Math.min(...pts.map((p) => p.lng));
-  const maxLng = Math.max(...pts.map((p) => p.lng));
-  return {
-    latitude: (minLat + maxLat) / 2,
-    longitude: (minLng + maxLng) / 2,
-    latitudeDelta: Math.max((maxLat - minLat) * 1.45, 0.05),
-    longitudeDelta: Math.max((maxLng - minLng) * 1.45, 0.05),
-  };
 }

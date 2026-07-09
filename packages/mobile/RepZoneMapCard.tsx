@@ -17,11 +17,11 @@ import {
 import type { MapRegion } from "./registerMapConfig";
 import { shouldLoadNativeMapsModule } from "./registerMapConfig";
 import { theme } from "./theme";
-import { regionFromStorePins, type ZoneStorePin } from "./RepZoneMapNative";
+import { regionFromStorePins, type ZoneStorePin } from "./zoneMapTypes";
 import { voronoiGeoJsonToCells, type VoronoiMapCell } from "./voronoiMapGeo";
 
 const RepZoneMapNativeLazy = lazy(() => import("./RepZoneMapNative"));
-export type { ZoneStorePin };
+export type { ZoneStorePin } from "./zoneMapTypes";
 
 const JORDAN_REGION: MapRegion = {
   latitude: 31.25,

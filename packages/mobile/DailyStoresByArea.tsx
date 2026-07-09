@@ -12,7 +12,7 @@ import {
 } from "react-native";
 
 import RouteStoresMap from "./RouteStoresMap";
-import type { ZoneStorePin } from "./RepZoneMapNative";
+import type { ZoneStorePin } from "./zoneMapTypes";
 import { theme } from "./theme";
 import type { DailyStoreCard } from "./storeTypes";
 
