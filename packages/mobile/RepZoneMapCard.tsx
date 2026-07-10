@@ -20,6 +20,8 @@ import { voronoiGeoJsonToCells, type VoronoiMapCell } from "./voronoiMapGeo";
 import type { ZoneStorePin } from "./zoneMapTypes";
 import RouteStoresMap from "./RouteStoresMap";
 
+const HOME_MAP_HEIGHT = 200;
+
 const JORDAN_REGION: MapRegion = {
   latitude: 31.25,
   longitude: 36.5,
@@ -197,7 +199,11 @@ export default function RepZoneMapCard(props: Props) {
         <Text style={[styles.statusText, statusStyle]}>{statusText}</Text>
       </View>
 
-      <View style={styles.mapWrap}>
+      <View
+        style={[styles.mapWrap, { height: HOME_MAP_HEIGHT }]}
+        onStartShouldSetResponder={() => true}
+        onMoveShouldSetResponder={() => true}
+      >
         <RouteStoresMap
           mapRegion={mapRegion}
           lat={lat}
@@ -205,7 +211,8 @@ export default function RepZoneMapCard(props: Props) {
           mapAreas={mapAreas}
           stores={stores}
           inZone={inZone}
-          height={148}
+          height={HOME_MAP_HEIGHT}
+          interactive
           fallbackText={labels.mapFallback}
         />
       </View>
@@ -257,7 +264,6 @@ const styles = StyleSheet.create({
   statusUnknown: { backgroundColor: theme.accentSoft, color: theme.muted },
   statusText: { fontSize: 13, fontWeight: "700" },
   mapWrap: {
-    height: 148,
     borderRadius: theme.radius.md,
     overflow: "hidden",
   },

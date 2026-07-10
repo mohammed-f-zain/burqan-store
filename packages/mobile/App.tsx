@@ -1762,7 +1762,7 @@ export default function App() {
               </View>
             </View>
           ) : bottomTab === "route" && mode !== "store" && mode !== "register" ? (
-            <View style={[styles.flexTab, pageFrameStyle, styles.page, { paddingBottom: insets.bottom + 88 }]}>
+            <View style={[styles.flexTab, pageFrameStyle]}>
               <RouteDayStores
                 stores={routeStores}
                 meta={routeMeta}

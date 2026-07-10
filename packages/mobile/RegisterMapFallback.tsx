@@ -9,6 +9,10 @@ export type RegisterMapPanelProps = {
   lng: number | null;
   mapAreas: JordanAreaMap[];
   areaId?: number;
+  /** Highlight rep route zone polygons instead of the GPS-resolved area cell. */
+  zoneMap?: boolean;
+  /** Rep GPS inside today's route zone (pin color). */
+  inZone?: boolean | null;
   labels: {
     mapFallback: string;
     openInMaps: string;

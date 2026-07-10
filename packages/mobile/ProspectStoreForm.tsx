@@ -10,11 +10,11 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { fetchJson } from "./fetchJson";
+import { fetchRepZoneMapAreas } from "./fetchRepZoneMapAreas";
 import RegisterMapFallback from "./RegisterMapFallback";
 import type { MapRegion } from "./registerMapConfig";
-import { shouldLoadNativeMapsModule } from "./registerMapConfig";
-import { voronoiGeoJsonToCells, type VoronoiMapCell } from "./voronoiMapGeo";
+import { mapRegionFromCells, shouldLoadNativeMapsModule } from "./registerMapConfig";
+import type { VoronoiMapCell } from "./voronoiMapGeo";
 
 const RegisterMapPanelLazy = lazy(() =>
   import("./registerMapPanel").then((m) => ({ default: m.RegisterMapPanel }))
@@ -23,7 +23,6 @@ import { getRepPosition, LocationDeniedError, LocationInaccurateError, LocationT
 import { resolveRepArea } from "./resolveRepArea";
 import { productImageUrl } from "./productImage";
 import NotRegisterReasonPicker from "./NotRegisterReasonPicker";
-import { isPresetNotRegisterReason, prospectReasonApiKind } from "./notRegisterReasons";
 import { theme } from "./theme";
 
 const labels = {
@@ -105,7 +104,7 @@ export default function ProspectStoreForm(props: Props) {
   const [areaName, setAreaName] = useState("");
   const [areaAssignedToRep, setAreaAssignedToRep] = useState(true);
   const [areaResolved, setAreaResolved] = useState(false);
-  const [jordanAreas, setJordanAreas] = useState<VoronoiMapCell[]>([]);
+  const [zoneMapAreas, setZoneMapAreas] = useState<VoronoiMapCell[]>([]);
   const [locating, setLocating] = useState(true);
   const [busy, setBusy] = useState(false);
   const [uploadBusy, setUploadBusy] = useState(false);
@@ -113,24 +112,17 @@ export default function ProspectStoreForm(props: Props) {
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
   const [visitReason, setVisitReason] = useState<string | null>(null);
 
-  const mapAreas = jordanAreas;
+  const mapAreas = zoneMapAreas;
 
-  const mapRegion = useMemo((): MapRegion => {
-    if (lat != null && lng != null) {
-      return { latitude: lat, longitude: lng, latitudeDelta: 0.12, longitudeDelta: 0.12 };
-    }
-    return JORDAN_REGION;
-  }, [lat, lng]);
+  const mapRegion = useMemo(
+    (): MapRegion => mapRegionFromCells(zoneMapAreas, lat, lng, JORDAN_REGION),
+    [lat, lng, zoneMapAreas]
+  );
 
-  const loadJordanAreas = useCallback(
+  const loadZoneMapAreas = useCallback(
     async (nearLat: number, nearLng: number) => {
-      const url = `${props.apiBase}/api/v1/rep/areas/jordan?lat=${nearLat}&lng=${nearLng}&radiusKm=22`;
-      const { res, data } = await fetchJson<{ geojson?: { features?: unknown[] }; error?: string }>(url, {
-        headers: props.headers,
-        timeoutMs: 20_000,
-      });
-      if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : labels.mapLoadFailed);
-      setJordanAreas(voronoiGeoJsonToCells(data.geojson));
+      const cells = await fetchRepZoneMapAreas(props.apiBase, props.headers, nearLat, nearLng);
+      setZoneMapAreas(cells);
     },
     [props.apiBase, props.headers]
   );
@@ -147,7 +139,7 @@ export default function ProspectStoreForm(props: Props) {
       setAreaName(resolved.areaName);
       setAreaAssignedToRep(resolved.assignedToRep);
       setAreaResolved(true);
-      void loadJordanAreas(pos.lat, pos.lng).catch((e) => {
+      void loadZoneMapAreas(pos.lat, pos.lng).catch((e) => {
         props.onNotice(e instanceof Error ? e.message : labels.mapLoadFailed);
       });
     } catch (e) {
@@ -160,7 +152,7 @@ export default function ProspectStoreForm(props: Props) {
     } finally {
       setLocating(false);
     }
-  }, [props.apiBase, props.headers, props.onNotice, loadJordanAreas]);
+  }, [props.apiBase, props.headers, props.onNotice, loadZoneMapAreas]);
 
   useEffect(() => {
     void refreshLocation();
@@ -228,10 +220,8 @@ export default function ProspectStoreForm(props: Props) {
         locationLng: pos.lng,
         addressText: address || undefined,
         imageUrl: imagePath ?? undefined,
+        visitNote: trimmed,
       };
-      if (isPresetNotRegisterReason(trimmed)) {
-        payload.visitNote = trimmed;
-      }
       const res = await fetch(`${props.apiBase}/api/v1/rep/prospect-stores`, {
         method: "POST",
         headers: props.headers,
@@ -239,22 +229,6 @@ export default function ProspectStoreForm(props: Props) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? labels.registerFailed);
-
-      const prospectId = Number(data.prospect?.id);
-      if (!isPresetNotRegisterReason(trimmed) && Number.isFinite(prospectId)) {
-        const visitRes = await fetch(`${props.apiBase}/api/v1/rep/prospect-stores/${prospectId}/visits`, {
-          method: "POST",
-          headers: props.headers,
-          body: JSON.stringify({
-            repLat: pos.lat,
-            repLng: pos.lng,
-            note: trimmed,
-            kind: prospectReasonApiKind(trimmed),
-          }),
-        });
-        const visitData = await visitRes.json();
-        if (!visitRes.ok) throw new Error(visitData.error ?? labels.registerFailed);
-      }
 
       props.onDone(labels.storeCreated, true);
     } catch (e) {
@@ -304,8 +278,9 @@ export default function ProspectStoreForm(props: Props) {
               mapRegion={mapRegion}
               lat={lat}
               lng={lng}
-              mapAreas={jordanAreas}
-              areaId={areaId}
+              mapAreas={mapAreas}
+              zoneMap
+              inZone={areaAssignedToRep}
               labels={{
                 mapFallback: labels.mapFallback,
                 openInMaps: labels.openInMaps,
@@ -318,8 +293,9 @@ export default function ProspectStoreForm(props: Props) {
             mapRegion={mapRegion}
             lat={lat}
             lng={lng}
-            mapAreas={jordanAreas}
-            areaId={areaId}
+            mapAreas={mapAreas}
+            zoneMap
+            inZone={areaAssignedToRep}
             labels={{
               mapFallback: labels.mapFallback,
               openInMaps: labels.openInMaps,

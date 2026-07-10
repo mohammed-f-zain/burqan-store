@@ -587,9 +587,6 @@ router.post("/prospect-stores", repAuthMiddleware, async (req, res, next) => {
     const body = prospectStoreSchema.parse(req.body);
     const rep = req.rep!;
     const visitNote = body.visitNote?.trim() || null;
-    if (visitNote && !isNotRegisterReasonNote(visitNote)) {
-      throw new HttpError(400, "يرجى اختيار سبب عدم التسجيل من القائمة");
-    }
     const today = await getRepTodayWorkAreaIds(rep.id);
     const resolved = await resolveAreaForRepRoute(
       body.locationLat,

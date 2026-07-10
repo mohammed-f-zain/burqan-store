@@ -1,7 +1,7 @@
 import { Platform } from "react-native";
-import MapView, { Marker, Polygon, PROVIDER_GOOGLE } from "react-native-maps";
+import MapView, { Marker, Polygon } from "react-native-maps";
 
-import type { MapRegion } from "./registerMapConfig";
+import { mapViewProvider, type MapRegion } from "./registerMapConfig";
 import { theme } from "./theme";
 import type { VoronoiMapCell } from "./voronoiMapGeo";
 import type { ZoneStorePin } from "./zoneMapTypes";
@@ -31,9 +31,11 @@ export default function RepZoneMapNative(props: Props) {
       key={lat != null && lng != null ? `${lat.toFixed(5)}-${lng.toFixed(5)}` : "zone"}
       style={{ width: "100%", height: "100%" }}
       initialRegion={mapRegion}
-      provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
+      provider={mapViewProvider()}
       scrollEnabled={interactive}
       zoomEnabled={interactive}
+      zoomTapEnabled={interactive}
+      zoomControlEnabled={interactive && Platform.OS === "android"}
       rotateEnabled={false}
       pitchEnabled={false}
     >

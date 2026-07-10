@@ -10,11 +10,11 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { fetchJson } from "./fetchJson";
+import { fetchRepZoneMapAreas } from "./fetchRepZoneMapAreas";
 import RegisterMapFallback from "./RegisterMapFallback";
 import type { MapRegion } from "./registerMapConfig";
-import { shouldLoadNativeMapsModule } from "./registerMapConfig";
-import { voronoiGeoJsonToCells, type VoronoiMapCell } from "./voronoiMapGeo";
+import { mapRegionFromCells, shouldLoadNativeMapsModule } from "./registerMapConfig";
+import type { VoronoiMapCell } from "./voronoiMapGeo";
 
 const RegisterMapPanelLazy = lazy(() =>
   import("./registerMapPanel").then((m) => ({ default: m.RegisterMapPanel }))
@@ -100,36 +100,24 @@ export default function RegisterStoreForm(props: Props) {
   const [areaName, setAreaName] = useState("");
   const [areaAssignedToRep, setAreaAssignedToRep] = useState(true);
   const [areaResolved, setAreaResolved] = useState(false);
-  const [jordanAreas, setJordanAreas] = useState<VoronoiMapCell[]>([]);
+  const [zoneMapAreas, setZoneMapAreas] = useState<VoronoiMapCell[]>([]);
   const [locating, setLocating] = useState(true);
   const [busy, setBusy] = useState(false);
   const [uploadBusy, setUploadBusy] = useState(false);
   const [imagePath, setImagePath] = useState<string | null>(null);
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
 
-  const mapAreas = jordanAreas;
+  const mapAreas = zoneMapAreas;
 
-  const mapRegion = useMemo((): MapRegion => {
-    if (lat != null && lng != null) {
-      return {
-        latitude: lat,
-        longitude: lng,
-        latitudeDelta: 0.12,
-        longitudeDelta: 0.12,
-      };
-    }
-    return JORDAN_REGION;
-  }, [lat, lng]);
+  const mapRegion = useMemo(
+    (): MapRegion => mapRegionFromCells(zoneMapAreas, lat, lng, JORDAN_REGION),
+    [lat, lng, zoneMapAreas]
+  );
 
-  const loadJordanAreas = useCallback(
+  const loadZoneMapAreas = useCallback(
     async (nearLat: number, nearLng: number) => {
-      const url = `${props.apiBase}/api/v1/rep/areas/jordan?lat=${nearLat}&lng=${nearLng}&radiusKm=22`;
-      const { res, data } = await fetchJson<{ geojson?: { features?: unknown[] }; error?: string }>(url, {
-        headers: props.headers,
-        timeoutMs: 20_000,
-      });
-      if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : labels.mapLoadFailed);
-      setJordanAreas(voronoiGeoJsonToCells(data.geojson));
+      const cells = await fetchRepZoneMapAreas(props.apiBase, props.headers, nearLat, nearLng);
+      setZoneMapAreas(cells);
     },
     [props.apiBase, props.headers]
   );
@@ -144,11 +132,11 @@ export default function RegisterStoreForm(props: Props) {
       setAreaName(resolved.areaName);
       setAreaAssignedToRep(resolved.assignedToRep);
       setAreaResolved(true);
-      void loadJordanAreas(pos.lat, pos.lng).catch((e) => {
+      void loadZoneMapAreas(pos.lat, pos.lng).catch((e) => {
         props.onNotice(e instanceof Error ? e.message : labels.mapLoadFailed);
       });
     },
-    [props.apiBase, props.headers, props.onNotice, loadJordanAreas]
+    [props.apiBase, props.headers, props.onNotice, loadZoneMapAreas]
   );
 
   const handleLocationError = useCallback(
@@ -307,7 +295,8 @@ export default function RegisterStoreForm(props: Props) {
               lat={lat}
               lng={lng}
               mapAreas={mapAreas}
-              areaId={areaId}
+              zoneMap
+              inZone={areaAssignedToRep}
               labels={{
                 mapFallback: labels.mapFallback,
                 openInMaps: labels.openInMaps,
@@ -321,7 +310,8 @@ export default function RegisterStoreForm(props: Props) {
             lat={lat}
             lng={lng}
             mapAreas={mapAreas}
-            areaId={areaId}
+            zoneMap
+            inZone={areaAssignedToRep}
             labels={{
               mapFallback: labels.mapFallback,
               openInMaps: labels.openInMaps,
