@@ -50,6 +50,7 @@ import {
 import { isLocalApiBase, resolveApiBase } from "./resolveApiBase";
 import { toArabicUserMessage } from "./arabicMessage";
 import ProductDetailModal, { type Product } from "./ProductDetailModal";
+import ProductCatalogGrid from "./ProductCatalogGrid";
 import { productImageUrl } from "./productImage";
 import ProfileScreen, { type RepProfile } from "./ProfileScreen";
 import RouteDayStores from "./RouteDayStores";
