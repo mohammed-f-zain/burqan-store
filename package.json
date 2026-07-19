@@ -10,6 +10,7 @@
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "api:dev": "npm run dev -w @burqan/api",
+    "api:build": "npm run build -w @burqan/api",
     "api:migrate": "npm run migrate -w @burqan/api",
     "api:migrate:geo": "npm run migrate:geo -w @burqan/api",
     "api:seed": "npm run seed -w @burqan/api",
