@@ -137,7 +137,9 @@ export default function RouteZonesPage() {
       api.get<{ representatives: RepOption[] }>("/representatives"),
     ]);
     setZones(z.data.routeZones);
-    setAreas(a.data.areas.filter((x) => !x.name.endsWith(" — تغطية المحافظة")));
+    // Include governorate coverage rows (e.g. عجلون — تغطية المحافظة) so stores
+    // registered under them can be attached to a route zone.
+    setAreas(a.data.areas);
     setReps(r.data.representatives.filter((x) => x.is_active));
   }
 
@@ -252,7 +254,12 @@ export default function RouteZonesPage() {
             {t.routeZones.notes}
             <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
           </label>
-          <RepAreaMapPicker areas={areas} selectedIds={picked} onChange={setPicked} />
+          <RepAreaMapPicker
+            areas={areas}
+            selectedIds={picked}
+            onChange={setPicked}
+            defaultShowGovCoverage
+          />
           <RepPickList reps={reps} selectedIds={pickedRepIds} onChange={setPickedRepIds} labels={repPickLabels} />
           <button type="submit" className="primary">
             {t.routeZones.createBtn}
@@ -390,7 +397,12 @@ export default function RouteZonesPage() {
                 <input type="checkbox" checked={eActive} onChange={(e) => setEActive(e.target.checked)} />
                 <span>{t.routeZones.activeToggle}</span>
               </label>
-              <RepAreaMapPicker areas={areas} selectedIds={ePicked} onChange={setEPicked} />
+              <RepAreaMapPicker
+                areas={areas}
+                selectedIds={ePicked}
+                onChange={setEPicked}
+                defaultShowGovCoverage
+              />
               <RepPickList reps={reps} selectedIds={ePickedRepIds} onChange={setEPickedRepIds} labels={repPickLabels} />
               <div className="row" style={{ gap: 8, marginTop: 12 }}>
                 <button type="submit" className="primary">

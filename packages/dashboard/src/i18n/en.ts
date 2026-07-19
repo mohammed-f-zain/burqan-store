@@ -422,7 +422,8 @@ export const en: Messages = {
 
   routeZones: {
     title: "Route zones",
-    subtitle: "Create named route zones by selecting one or more map areas — assign them to reps by weekday.",
+    subtitle:
+      "Create named route zones by selecting map areas — including governorate coverage cells (e.g. Ajloun) — then assign them to reps by weekday.",
     createTitle: "New route zone",
     listTitle: "Route zones",
     name: "Zone name",

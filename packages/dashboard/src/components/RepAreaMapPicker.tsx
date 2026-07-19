@@ -13,14 +13,21 @@ type Props = {
   areas: Area[];
   selectedIds: number[];
   onChange: Dispatch<SetStateAction<number[]>>;
+  /** Show governorate coverage cells by default (route zones need them selectable). */
+  defaultShowGovCoverage?: boolean;
 };
 
-export default function RepAreaMapPicker({ areas, selectedIds, onChange }: Props) {
+export default function RepAreaMapPicker({
+  areas,
+  selectedIds,
+  onChange,
+  defaultShowGovCoverage = false,
+}: Props) {
   const { t } = useLocale();
   const [voronoiGeo, setVoronoiGeo] = useState<VoronoiFeatureCollection | null>(null);
   const [voronoiLoading, setVoronoiLoading] = useState(false);
   const [mapGovFilter, setMapGovFilter] = useState("عمان");
-  const [showGovCoverageOnMap, setShowGovCoverageOnMap] = useState(false);
+  const [showGovCoverageOnMap, setShowGovCoverageOnMap] = useState(defaultShowGovCoverage);
 
   const governorateOptions = useMemo(() => {
     const s = new Set<string>();
