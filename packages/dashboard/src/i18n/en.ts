@@ -375,6 +375,12 @@ export const en: Messages = {
     areaMapHint: "Tap colored regions on the map to select or deselect areas.",
     areaMapSelected: (n: number) => `${n} area${n === 1 ? "" : "s"} selected`,
     areaMapSelectedInView: (n: number) => `${n} in current view`,
+    areaMapGovCoverageTitle: "Governorate coverage",
+    areaMapGovCoverageHint:
+      "Coverage cells are often invisible on the map (same center as a neighborhood). Pick them from this list — e.g. Ajloun governorate coverage.",
+    areaMapGovCoverageEmpty: "No governorate coverage areas in the current filter.",
+    areaMapSearchLabel: "Search areas by name",
+    areaMapSearchPlaceholder: "e.g. عجلون — تغطية",
     areaMapSelectVisible: "Select visible",
     areaMapClearVisible: "Clear visible",
   },

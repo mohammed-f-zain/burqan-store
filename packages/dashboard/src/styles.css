@@ -1840,6 +1840,43 @@ html[data-theme="dark"] .fill-car-delta--added {
   align-self: center;
 }
 
+.rep-area-map-picker__coverage {
+  margin: 10px 0 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line, #e2e8f0);
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.rep-area-map-picker__coverage-title {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.rep-area-map-picker__coverage-list,
+.rep-area-map-picker__search-results {
+  max-height: 180px;
+  overflow: auto;
+  margin-top: 8px;
+}
+
+.rep-area-map-picker__search {
+  margin-bottom: 10px;
+}
+
+.rep-area-map-picker__search label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.rep-area-map-picker__search input {
+  max-width: 420px;
+}
+
 .rep-area-map-picker__map .area-coverage-map {
   height: min(48vh, 400px);
 }

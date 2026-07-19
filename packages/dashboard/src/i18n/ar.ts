@@ -373,6 +373,12 @@ export const ar = {
     areaMapHint: "اضغط على المناطق الملونة في الخريطة لاختيارها أو إلغائها.",
     areaMapSelected: (n: number) => `${n} منطقة محددة`,
     areaMapSelectedInView: (n: number) => `${n} في العرض الحالي`,
+    areaMapGovCoverageTitle: "تغطية المحافظة",
+    areaMapGovCoverageHint:
+      "خلايا التغطية غالباً غير ظاهرة على الخريطة (نفس مركز الحي). اخترها من القائمة — مثال: عجلون — تغطية المحافظة.",
+    areaMapGovCoverageEmpty: "لا توجد مناطق تغطية محافظة في الفلتر الحالي.",
+    areaMapSearchLabel: "بحث عن منطقة بالاسم",
+    areaMapSearchPlaceholder: "مثال: عجلون — تغطية",
     areaMapSelectVisible: "تحديد المعروض",
     areaMapClearVisible: "إلغاء المعروض",
   },
