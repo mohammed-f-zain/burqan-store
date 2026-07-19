@@ -3,6 +3,8 @@ import { areaBboxParams, EXCLUDE_GRID_AREA_SQL, GOVERNORATE_COVERAGE_ACTIVE_SQL 
 import { HttpError } from "./errors.js";
 import { pickAreaFromGps } from "./geoPick.js";
 import { isGoogleGeocodeEnabled, reverseGeocode } from "./googleGeocode.js";
+import { pickFromVoronoi } from "./jordanVoronoi.js";
+import { loadVoronoiAreaRows } from "./loadVoronoiAreaRows.js";
 import { GOVERNORATE_AREA_SUFFIX, matchAreaFromGoogle } from "./matchAreaFromGoogle.js";
 
 const NEARBY_AREA_RADIUS_KM = 36;
@@ -113,6 +115,22 @@ export async function resolveAreaIdFromAllAreas(lat: number, lng: number): Promi
   return resolveWithGoogleThenCircles(lat, lng, rows);
 }
 
+/**
+ * Whether GPS falls in today's route zone using the same full-Jordan Voronoi
+ * as the blue zone map. Nearby-subset / Google resolution can disagree with
+ * those cells (common in sparse governorates like عجلون).
+ */
+export async function gpsInExpandedRouteZone(
+  lat: number,
+  lng: number,
+  expandedAreaIds: number[]
+): Promise<boolean> {
+  if (!expandedAreaIds.length) return false;
+  const rows = await loadVoronoiAreaRows();
+  const pick = pickFromVoronoi(lat, lng, rows);
+  return Boolean(pick && expandedAreaIds.includes(pick.areaId));
+}
+
 /** Prefer today's route zone; fall back to all Jordan when no schedule. */
 export async function resolveAreaForRepRoute(
   lat: number,
@@ -125,17 +143,9 @@ export async function resolveAreaForRepRoute(
     return { ...resolved, assignedToRep: false };
   }
 
-  let assignedToRep = expandedAreaIds.includes(resolved.areaId);
-
-  // When Google geocode labels a neighbor outside the zone, re-check GPS/Voronoi only.
-  if (!assignedToRep) {
-    let nearby = await loadAreasNearPoint(lat, lng, NEARBY_AREA_RADIUS_KM);
-    if (!nearby.length) nearby = await loadAreasNearPoint(lat, lng, 90);
-    if (nearby.length) {
-      const gpsPick = pickAreaFromGps(lat, lng, nearby);
-      assignedToRep = expandedAreaIds.includes(gpsPick.areaId);
-    }
-  }
+  const assignedToRep =
+    expandedAreaIds.includes(resolved.areaId) ||
+    (await gpsInExpandedRouteZone(lat, lng, expandedAreaIds));
 
   return { ...resolved, assignedToRep };
 }

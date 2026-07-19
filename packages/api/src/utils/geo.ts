@@ -4,8 +4,13 @@ import { config } from "../config.js";
 import { HttpError } from "./errors.js";
 import { haversineMeters } from "./geoDistance.js";
 
-import { resolveAreaIdForRep, resolveAreaIdFromAllAreas, resolveAreaForRepRoute, type ResolvedArea } from "./geoResolve.js";
-export { resolveAreaIdForRep, resolveAreaIdFromAllAreas, resolveAreaForRepRoute, type ResolvedArea } from "./geoResolve.js";
+export {
+  resolveAreaIdForRep,
+  resolveAreaIdFromAllAreas,
+  resolveAreaForRepRoute,
+  gpsInExpandedRouteZone,
+  type ResolvedArea,
+} from "./geoResolve.js";
 export { haversineMeters } from "./geoDistance.js";
 
 export const repLocationSchema = z.object({
