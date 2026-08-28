@@ -245,8 +245,7 @@ router.get(
            JOIN orders o ON o.id = ol.order_id
            JOIN products p ON p.id = ol.product_id
            GROUP BY p.id, p.name, p.image_url
-           ORDER BY SUM(ol.quantity) DESC
-           LIMIT 10`
+           ORDER BY SUM(ol.quantity) DESC, p.name ASC`
         ),
         query<{
           store_id: number;
@@ -275,11 +274,10 @@ router.get(
           `SELECT r.id AS rep_id, r.full_name AS name, r.image_url,
                   COUNT(o.id)::text AS order_count,
                   COALESCE(SUM(o.total_amount), 0)::text AS revenue
-           FROM orders o
-           JOIN representatives r ON r.id = o.representative_id
+           FROM representatives r
+           LEFT JOIN orders o ON o.representative_id = r.id
            GROUP BY r.id, r.full_name, r.image_url
-           ORDER BY SUM(o.total_amount) DESC NULLS LAST
-           LIMIT 6`
+           ORDER BY COALESCE(SUM(o.total_amount), 0) DESC NULLS LAST, r.full_name ASC`
         ),
         query<{ total_points: string; month_points: string }>(
           `SELECT

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
@@ -8,6 +8,7 @@ import TableFilterBar from "../components/TableFilterBar";
 import { useTableFilters } from "../hooks/useTableFilters";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
+import { filtersFromSearchParams } from "../lib/filterTableRows";
 import { confirmDanger } from "../lib/swalConfirm";
 import { toastError, toastSuccess } from "../lib/toast";
 import { formatMarketDateTime } from "../utils/formatMarketDateTime";
@@ -28,14 +29,26 @@ type Prospect = {
   created_at: string;
 };
 
+function statusFromParam(raw: string | null): "open" | "converted" | "dismissed" | "all" {
+  if (raw === "open" || raw === "converted" || raw === "dismissed" || raw === "all") return raw;
+  return "open";
+}
+
 export default function PossibleClientsPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { can } = useAuth();
   const { t } = useLocale();
   const canWrite = can("stores.write");
-  const [statusFilter, setStatusFilter] = useState<"open" | "converted" | "dismissed" | "all">("open");
+  const [statusFilter, setStatusFilter] = useState<"open" | "converted" | "dismissed" | "all">(() =>
+    statusFromParam(searchParams.get("status"))
+  );
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [loading, setLoading] = useState(false);
+  const prospectInitialFilters = useMemo(
+    () => filtersFromSearchParams(searchParams, ["dateFrom", "dateTo", "name", "phone", "owner", "area", "rep", "reason"]),
+    [searchParams]
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -89,6 +102,18 @@ export default function PossibleClientsPage() {
         type: "text" as const,
         getValue: (p: Prospect) => prospectReasonText(p, t),
       },
+      {
+        id: "dateFrom",
+        label: t.orders.dateFrom,
+        type: "dateFrom" as const,
+        getValue: (p: Prospect) => p.created_at,
+      },
+      {
+        id: "dateTo",
+        label: t.orders.dateTo,
+        type: "dateTo" as const,
+        getValue: (p: Prospect) => p.created_at,
+      },
     ],
     [areaOptions, t]
   );
@@ -107,6 +132,8 @@ export default function PossibleClientsPage() {
       (p) => prospectReasonText(p, t),
     ],
     fields: filterFields,
+    initialFilters: prospectInitialFilters,
+    initialSearch: searchParams.get("q") ?? "",
   });
   const pgn = table.pagination;
 
@@ -155,13 +182,14 @@ export default function PossibleClientsPage() {
 
         {loading ? <p className="muted">{t.common.loading}</p> : null}
 
-        {!loading && prospects.length > 0 && (
+        {!loading && (prospects.length > 0 || table.hasActiveFilters) && (
           <TableFilterBar
             {...table}
             onSearchChange={table.setSearch}
             onFilterChange={table.setFilter}
             onClear={table.clearFilters}
             onToggleFilters={() => table.setShowFilters((v) => !v)}
+            pinnedFieldIds={["dateFrom", "dateTo"]}
             labels={t.tableFilters}
           />
         )}

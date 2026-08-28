@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { api } from "../api";
 import { NO_BUY_REASONS } from "../constants/noBuyReasons";
@@ -8,6 +8,7 @@ import TableFilterBar from "../components/TableFilterBar";
 import { useTableFilters } from "../hooks/useTableFilters";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
+import { filtersFromSearchParams } from "../lib/filterTableRows";
 import { toastError } from "../lib/toast";
 import { formatMarketDateTime } from "../utils/formatMarketDateTime";
 
@@ -25,9 +26,14 @@ type VisitRow = {
 
 export default function VisitsPage() {
   const { t } = useLocale();
+  const [searchParams] = useSearchParams();
   const [visits, setVisits] = useState<VisitRow[]>([]);
-  const [noBuyOnly, setNoBuyOnly] = useState(true);
+  const [noBuyOnly, setNoBuyOnly] = useState(() => searchParams.get("noBuyOnly") !== "0");
   const [loading, setLoading] = useState(false);
+  const visitInitialFilters = useMemo(
+    () => filtersFromSearchParams(searchParams, ["dateFrom", "dateTo", "store", "area", "rep", "reason", "time"]),
+    [searchParams]
+  );
 
   async function load() {
     setLoading(true);
@@ -56,8 +62,20 @@ export default function VisitsPage() {
       { id: "area", label: t.stores.colArea, type: "text" as const, getValue: (v: VisitRow) => v.areaName },
       { id: "rep", label: t.visits.colRep, type: "text" as const, getValue: (v: VisitRow) => v.repName },
       { id: "reason", label: t.visits.colReason, type: "text" as const, getValue: (v: VisitRow) => v.note },
+      {
+        id: "dateFrom",
+        label: t.orders.dateFrom,
+        type: "dateFrom" as const,
+        getValue: (v: VisitRow) => v.visitedAt,
+      },
+      {
+        id: "dateTo",
+        label: t.orders.dateTo,
+        type: "dateTo" as const,
+        getValue: (v: VisitRow) => v.visitedAt,
+      },
     ],
-    [t.stores.colArea, t.visits.colReason, t.visits.colRep, t.visits.colStore, t.visits.colTime]
+    [t.orders.dateFrom, t.orders.dateTo, t.stores.colArea, t.visits.colReason, t.visits.colRep, t.visits.colStore, t.visits.colTime]
   );
 
   const visitTable = useTableFilters(visits, {
@@ -70,6 +88,7 @@ export default function VisitsPage() {
       "note",
     ],
     fields: visitFilterFields,
+    initialFilters: visitInitialFilters,
   });
   const pgn = visitTable.pagination;
 
@@ -108,13 +127,14 @@ export default function VisitsPage() {
 
         {loading ? <p className="muted">{t.common.loading}</p> : null}
 
-        {!loading && visits.length > 0 && (
+        {!loading && (visits.length > 0 || visitTable.hasActiveFilters) && (
           <TableFilterBar
             {...visitTable}
             onSearchChange={visitTable.setSearch}
             onFilterChange={visitTable.setFilter}
             onClear={visitTable.clearFilters}
             onToggleFilters={() => visitTable.setShowFilters((v) => !v)}
+            pinnedFieldIds={["dateFrom", "dateTo"]}
             labels={t.tableFilters}
           />
         )}

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
@@ -11,6 +11,7 @@ import { pickAxiosErrorMessage } from "../lib/apiError";
 import { ownerFormatMoney } from "../owner/ownerFormat";
 import { confirmDanger } from "../lib/swalConfirm";
 import { toastError, toastSuccess } from "../lib/toast";
+import { filtersFromSearchParams } from "../lib/filterTableRows";
 import { formatMarketDateTime } from "../utils/formatMarketDateTime";
 
 type PageTab = "sales" | "redemptions";
@@ -49,9 +50,14 @@ type RedemptionRow = {
 
 export default function OrdersPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { can } = useAuth();
   const { t, locale } = useLocale();
-  const [pageTab, setPageTab] = useState<PageTab>("sales");
+  const orderInitialFilters = useMemo(
+    () => filtersFromSearchParams(searchParams, ["dateFrom", "dateTo", "type", "rep", "id", "store", "total"]),
+    [searchParams]
+  );
+  const [pageTab, setPageTab] = useState<PageTab>(() => (searchParams.get("tab") === "redemptions" ? "redemptions" : "sales"));
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [redemptions, setRedemptions] = useState<RedemptionRow[]>([]);
   const [summary, setSummary] = useState<OrderSummary | null>(null);
@@ -134,6 +140,8 @@ export default function OrdersPage() {
       (o) => formatMarketDateTime(o.created_at),
     ],
     fields: orderFilterFields,
+    initialFilters: orderInitialFilters,
+    initialSearch: searchParams.get("q") ?? "",
   });
   const orderPgn = orderTable.pagination;
 

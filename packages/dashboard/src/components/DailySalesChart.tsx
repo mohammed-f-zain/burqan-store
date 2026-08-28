@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+
 type DayPoint = {
   date: string;
   revenue: number;
@@ -12,9 +14,18 @@ type Props = {
   revenueLabel: string;
   ordersLabel: string;
   todayLabel: string;
+  dayHref?: (date: string) => string;
 };
 
-export default function DailySalesChart({ days, formatMoney, formatDayLabel, revenueLabel, ordersLabel, todayLabel }: Props) {
+export default function DailySalesChart({
+  days,
+  formatMoney,
+  formatDayLabel,
+  revenueLabel,
+  ordersLabel,
+  todayLabel,
+  dayHref,
+}: Props) {
   if (!days.length) return null;
 
   const maxRevenue = Math.max(...days.map((d) => d.revenue), 1);
@@ -25,8 +36,9 @@ export default function DailySalesChart({ days, formatMoney, formatDayLabel, rev
         {days.map((d) => {
           const heightPct = Math.max(6, Math.round((d.revenue / maxRevenue) * 100));
           const isToday = d.date === days[days.length - 1]?.date;
-          return (
-            <div key={d.date} className="dash-chart-col" title={`${formatDayLabel(d.date)} — ${formatMoney(d.revenue)} · ${d.orderCount} ${ordersLabel}`}>
+          const title = `${formatDayLabel(d.date)} — ${formatMoney(d.revenue)} · ${d.orderCount} ${ordersLabel}`;
+          const bar = (
+            <>
               <div className="dash-chart-bar-wrap">
                 <div
                   className={`dash-chart-bar${isToday ? " dash-chart-bar--today" : ""}`}
@@ -35,6 +47,16 @@ export default function DailySalesChart({ days, formatMoney, formatDayLabel, rev
               </div>
               <div className="dash-chart-value">{d.orderCount > 0 ? formatMoney(d.revenue) : "—"}</div>
               <div className="dash-chart-label">{formatDayLabel(d.date)}</div>
+            </>
+          );
+          const href = dayHref?.(d.date);
+          return href ? (
+            <Link key={d.date} to={href} className="dash-chart-col dash-chart-col--link" title={title}>
+              {bar}
+            </Link>
+          ) : (
+            <div key={d.date} className="dash-chart-col" title={title}>
+              {bar}
             </div>
           );
         })}

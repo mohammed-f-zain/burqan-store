@@ -22,6 +22,33 @@ export function toMarketDateString(value: string | number | Date): string {
   }).format(new Date(value));
 }
 
+export function marketToday(): string {
+  return toMarketDateString(new Date());
+}
+
+export function marketMonthStart(today = marketToday()): string {
+  return `${today.slice(0, 7)}-01`;
+}
+
+/** Shift a YYYY-MM-DD calendar date by whole days (timezone-safe). */
+export function shiftMarketDate(yyyyMmDd: string, days: number): string {
+  const [y, m, d] = yyyyMmDd.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + days));
+  const yyyy = dt.getUTCFullYear();
+  const mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(dt.getUTCDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+export function filtersFromSearchParams(params: URLSearchParams, keys: readonly string[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const key of keys) {
+    const v = params.get(key)?.trim();
+    if (v) out[key] = v;
+  }
+  return out;
+}
+
 function cellText(v: string | number | boolean | null | undefined): string {
   if (v == null) return "";
   if (typeof v === "boolean") return v ? "true" : "false";

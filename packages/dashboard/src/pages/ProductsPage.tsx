@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
@@ -7,6 +8,7 @@ import TableFilterBar from "../components/TableFilterBar";
 import { useTableFilters } from "../hooks/useTableFilters";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
+import { filtersFromSearchParams } from "../lib/filterTableRows";
 import { mediaUrl } from "../lib/mediaUrl";
 import { confirmDanger } from "../lib/swalConfirm";
 import { toastError, toastSuccess } from "../lib/toast";
@@ -27,8 +29,13 @@ type Product = {
 };
 
 export default function ProductsPage() {
+  const [searchParams] = useSearchParams();
   const { can } = useAuth();
   const { t } = useLocale();
+  const productInitialFilters = useMemo(
+    () => filtersFromSearchParams(searchParams, ["name", "designation", "active"]),
+    [searchParams]
+  );
   const [products, setProducts] = useState<Product[]>([]);
   const [edit, setEdit] = useState<Product | null>(null);
   const [form, setForm] = useState({
@@ -82,6 +89,8 @@ export default function ProductsPage() {
       "loyalty_points_per_unit",
     ],
     fields: productFilterFields,
+    initialFilters: productInitialFilters,
+    initialSearch: searchParams.get("q") ?? searchParams.get("name") ?? "",
   });
   const pgn = productTable.pagination;
 

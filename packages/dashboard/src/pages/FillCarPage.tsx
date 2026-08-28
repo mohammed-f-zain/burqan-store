@@ -36,7 +36,11 @@ export default function FillCarPage() {
   const canWrite = can("fill_car.write") || can("reps.write");
   const canExternalSales = Boolean(me) && canWrite;
 
-  const [date, setDate] = useState(() => toMarketDateString(new Date()));
+  const [date, setDate] = useState(() => {
+    const fromUrl = searchParams.get("date");
+    if (fromUrl && /^\d{4}-\d{2}-\d{2}$/.test(fromUrl)) return fromUrl;
+    return toMarketDateString(new Date());
+  });
   const [salesReps, setSalesReps] = useState<RepSales[]>([]);
   const [repId, setRepId] = useState("");
   const [inventory, setInventory] = useState<InvRow[]>([]);

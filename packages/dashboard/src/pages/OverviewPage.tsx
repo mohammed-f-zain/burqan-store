@@ -1,18 +1,18 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 import { api } from "../api";
 import DailySalesChart from "../components/DailySalesChart";
 import DashActionLink from "../components/DashActionLink";
+import DashRankBoard from "../components/DashRankBoard";
 import LoyaltyIcon from "../components/LoyaltyIcon";
 import PaymentMixChart from "../components/PaymentMixChart";
 import SectionTitleWithIcon from "../components/SectionTitleWithIcon";
 import { useAuth } from "../auth/AuthContext";
 import { useLocale } from "../i18n/LocaleContext";
-import { mediaUrl } from "../lib/mediaUrl";
+import { marketMonthStart, marketToday, shiftMarketDate } from "../lib/filterTableRows";
 import { toastError } from "../lib/toast";
 import { ownerFormatMoney } from "../owner/ownerFormat";
-import { formatMarketDateTime } from "../utils/formatMarketDateTime";
 
 type Counts = {
   stores?: number;
@@ -129,6 +129,27 @@ type StatTile = {
   accent?: boolean;
 };
 
+function href(path: string, params?: Record<string, string | undefined | null>): string {
+  if (!params) return path;
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v) q.set(k, v);
+  }
+  const s = q.toString();
+  return s ? `${path}?${s}` : path;
+}
+
+function KpiCard({ to, className, children }: { to?: string; className: string; children: ReactNode }) {
+  if (to) {
+    return (
+      <Link to={to} className={`${className} dash-kpi--link`}>
+        {children}
+      </Link>
+    );
+  }
+  return <div className={className}>{children}</div>;
+}
+
 export default function OverviewPage() {
   const { me, can } = useAuth();
   const { t, locale } = useLocale();
@@ -138,6 +159,19 @@ export default function OverviewPage() {
 
   const currency = t.overview.currency;
   const money = (n: number) => ownerFormatMoney(n, currency);
+  const today = marketToday();
+  const monthStart = marketMonthStart(today);
+  const weekStart = shiftMarketDate(today, -6);
+  const canOrders = can("orders.read");
+  const canStores = can("stores.read");
+  const canFillCar = can("fill_car.read") || can("reps.read");
+  const canProducts = can("products.read");
+  const ordersToday = canOrders ? href("/app/orders", { dateFrom: today, dateTo: today }) : undefined;
+  const ordersMonth = canOrders ? href("/app/orders", { dateFrom: monthStart }) : undefined;
+  const ordersWeek = canOrders ? href("/app/orders", { dateFrom: weekStart }) : undefined;
+  const visitsToday = canStores ? href("/app/visits", { noBuyOnly: "0", dateFrom: today, dateTo: today }) : undefined;
+  const visitsMonth = canStores ? href("/app/visits", { noBuyOnly: "0", dateFrom: monthStart }) : undefined;
+  const noBuyMonth = canStores ? href("/app/visits", { noBuyOnly: "1", dateFrom: monthStart }) : undefined;
 
   const todayLabel = useMemo(
     () =>
@@ -265,7 +299,7 @@ export default function OverviewPage() {
       key: "possibleClients",
       value: counts.possibleClients,
       label: t.overview.possibleClients,
-      to: can("stores.read") ? "/app/possible-clients" : undefined,
+      to: can("stores.read") ? href("/app/possible-clients", { status: "open" }) : undefined,
     },
     { key: "qrUnassigned", value: counts.qrUnassigned, label: t.overview.qrUnassigned, to: can("qr_pool.read") ? "/app/qr-pool" : undefined },
   ].filter((s) => s.value !== undefined);
@@ -342,7 +376,7 @@ export default function OverviewPage() {
           {!analyticsLoading && analytics && (
             <>
               <section className="overview-today-strip">
-                <div className="overview-today-main card-inner">
+                <KpiCard to={ordersToday} className="overview-today-main card-inner">
                   <div className="overview-today-label">{t.overview.todaySales}</div>
                   <div className="overview-today-value">{money(analytics.today.revenue)}</div>
                   {(() => {
@@ -353,29 +387,35 @@ export default function OverviewPage() {
                       </div>
                     ) : null;
                   })()}
-                </div>
+                </KpiCard>
                 <div className="overview-today-grid">
-                  <div className="dash-kpi dash-kpi--compact">
+                  <KpiCard to={ordersToday} className="dash-kpi dash-kpi--compact">
                     <div className="dash-kpi-label">{t.overview.todayOrders}</div>
                     <div className="dash-kpi-value dash-kpi-value--sm">{analytics.today.orderCount}</div>
-                  </div>
-                  <div className="dash-kpi dash-kpi--compact">
+                  </KpiCard>
+                  <KpiCard to={visitsToday} className="dash-kpi dash-kpi--compact">
                     <div className="dash-kpi-label">{t.overview.todayVisits}</div>
                     <div className="dash-kpi-value dash-kpi-value--sm">{analytics.today.visitCount}</div>
-                  </div>
-                  <div className="dash-kpi dash-kpi--compact">
+                  </KpiCard>
+                  <KpiCard
+                    to={canFillCar ? href("/app/fill-car", { date: today }) : ordersToday}
+                    className="dash-kpi dash-kpi--compact"
+                  >
                     <div className="dash-kpi-label">{t.overview.todayActiveReps}</div>
                     <div className="dash-kpi-value dash-kpi-value--sm">{analytics.today.activeReps}</div>
-                  </div>
-                  <div className="dash-kpi dash-kpi--compact">
+                  </KpiCard>
+                  <KpiCard to={ordersToday} className="dash-kpi dash-kpi--compact">
                     <div className="dash-kpi-label">{t.overview.todayAvgOrder}</div>
                     <div className="dash-kpi-value dash-kpi-value--sm">{money(analytics.today.avgOrderValue)}</div>
-                  </div>
-                  {can("stores.read") && (
-                    <div className="dash-kpi dash-kpi--compact">
+                  </KpiCard>
+                  {canStores && (
+                    <KpiCard
+                      to={href("/app/possible-clients", { status: "open", dateFrom: today, dateTo: today })}
+                      className="dash-kpi dash-kpi--compact"
+                    >
                       <div className="dash-kpi-label">{t.overview.todayNewProspects}</div>
                       <div className="dash-kpi-value dash-kpi-value--sm">{analytics.today.newProspectClients}</div>
-                    </div>
+                    </KpiCard>
                   )}
                 </div>
               </section>
@@ -396,6 +436,9 @@ export default function OverviewPage() {
                     revenueLabel={t.overview.chartRevenue}
                     ordersLabel={t.overview.todayOrders}
                     todayLabel={t.overview.chartToday}
+                    dayHref={
+                      canOrders ? (date) => href("/app/orders", { dateFrom: date, dateTo: date }) : undefined
+                    }
                   />
                 </section>
 
@@ -408,88 +451,79 @@ export default function OverviewPage() {
                     cashLabel={t.overview.payCash}
                     deferredLabel={t.overview.payDeferred}
                     title={t.overview.paymentMixTitle}
+                    cashHref={canOrders ? href("/app/orders", { type: "cash", dateFrom: monthStart }) : undefined}
+                    deferredHref={canOrders ? href("/app/orders", { type: "deferred", dateFrom: monthStart }) : undefined}
                   />
                   <div className="overview-monitor-block">
                     <h5 className="overview-monitor-title">{t.overview.monitorTitle}</h5>
                     <div className="overview-monitor-grid">
-                      <div className="overview-monitor-item">
+                      <KpiCard to={visitsToday} className="overview-monitor-item">
                         <span className="muted small">{t.overview.todayConversion}</span>
                         <strong>{(analytics.today.conversionRate * 100).toFixed(0)}%</strong>
-                      </div>
-                      <div className="overview-monitor-item">
+                      </KpiCard>
+                      <KpiCard to={canStores ? "/app/deferred" : undefined} className="overview-monitor-item">
                         <span className="muted small">{t.overview.deferredOutstanding}</span>
                         <strong className="text-danger">{money(analytics.totals.deferredOutstanding)}</strong>
-                        {can("stores.read") && (
-                          <DashActionLink to="/app/deferred" variant="ghost">
-                            {t.overview.deferredViewAll}
-                          </DashActionLink>
-                        )}
-                      </div>
-                      <div className="overview-monitor-item">
+                      </KpiCard>
+                      <KpiCard to={ordersMonth} className="overview-monitor-item">
                         <span className="muted small">{t.overview.monthRevenue}</span>
                         <strong>{money(analytics.period.monthRevenue)}</strong>
-                      </div>
-                      <div className="overview-monitor-item">
+                      </KpiCard>
+                      <KpiCard to={ordersWeek} className="overview-monitor-item">
                         <span className="muted small">{t.overview.weekOrders}</span>
                         <strong>{analytics.period.weekOrderCount}</strong>
-                      </div>
+                      </KpiCard>
                     </div>
                   </div>
                 </section>
               </div>
 
               <div className="overview-kpi-row">
-                <div className="dash-kpi dash-kpi--accent overview-kpi-main">
+                <KpiCard to={ordersMonth} className="dash-kpi dash-kpi--accent overview-kpi-main">
                   <div className="dash-kpi-label">{t.overview.monthRevenue}</div>
                   <div className="dash-kpi-value">{money(analytics.period.monthRevenue)}</div>
                   <div className="overview-kpi-meta muted small">
                     {t.overview.monthOrders}: {analytics.period.monthOrderCount}
                   </div>
-                </div>
+                </KpiCard>
                 <div className="overview-kpi-side">
-                  <div className="dash-kpi dash-kpi--compact">
+                  <KpiCard to={ordersWeek} className="dash-kpi dash-kpi--compact">
                     <div className="dash-kpi-label">{t.overview.weekOrders}</div>
                     <div className="dash-kpi-value dash-kpi-value--sm">{analytics.period.weekOrderCount}</div>
-                  </div>
-                  <div className="dash-kpi dash-kpi--compact">
+                  </KpiCard>
+                  <KpiCard to={visitsMonth} className="dash-kpi dash-kpi--compact">
                     <div className="dash-kpi-label">{t.overview.monthVisits}</div>
                     <div className="dash-kpi-value dash-kpi-value--sm">{analytics.period.monthVisitCount}</div>
-                  </div>
-                  {can("stores.read") ? (
-                    <Link to="/app/deferred" className="dash-kpi dash-kpi--compact dash-kpi--link">
-                      <div className="dash-kpi-label">{t.overview.deferredOutstanding}</div>
-                      <div className="dash-kpi-value dash-kpi-value--sm dash-kpi-value--danger">
-                        {money(analytics.totals.deferredOutstanding)}
-                      </div>
-                    </Link>
-                  ) : (
-                    <div className="dash-kpi dash-kpi--compact">
-                      <div className="dash-kpi-label">{t.overview.deferredOutstanding}</div>
-                      <div className="dash-kpi-value dash-kpi-value--sm dash-kpi-value--danger">
-                        {money(analytics.totals.deferredOutstanding)}
-                      </div>
+                  </KpiCard>
+                  <KpiCard to={canStores ? "/app/deferred" : undefined} className="dash-kpi dash-kpi--compact">
+                    <div className="dash-kpi-label">{t.overview.deferredOutstanding}</div>
+                    <div className="dash-kpi-value dash-kpi-value--sm dash-kpi-value--danger">
+                      {money(analytics.totals.deferredOutstanding)}
                     </div>
-                  )}
+                  </KpiCard>
                 </div>
               </div>
 
               <div className="dash-kpi-grid dash-kpi-grid--sub overview-kpi-sub">
-                <div className="dash-kpi dash-kpi--compact">
+                <KpiCard to={canOrders ? "/app/orders" : undefined} className="dash-kpi dash-kpi--compact">
                   <div className="dash-kpi-label">{t.overview.totalRevenue}</div>
                   <div className="dash-kpi-value dash-kpi-value--sm">{money(analytics.totals.revenue)}</div>
-                </div>
-                <div className="dash-kpi dash-kpi--compact">
+                </KpiCard>
+                <KpiCard to={canOrders ? href("/app/orders", { type: "cash" }) : undefined} className="dash-kpi dash-kpi--compact">
                   <div className="dash-kpi-label">{t.overview.cashSales}</div>
                   <div className="dash-kpi-value dash-kpi-value--sm">{money(analytics.totals.cashRevenue)}</div>
-                </div>
-                <div className="dash-kpi dash-kpi--compact">
+                </KpiCard>
+                <KpiCard
+                  to={canOrders ? href("/app/orders", { type: "deferred" }) : undefined}
+                  className="dash-kpi dash-kpi--compact"
+                >
                   <div className="dash-kpi-label">{t.overview.deferredSales}</div>
                   <div className="dash-kpi-value dash-kpi-value--sm">{money(analytics.totals.deferredRevenue)}</div>
-                </div>
-                <div className="dash-kpi dash-kpi--compact">
+                </KpiCard>
+                <KpiCard to={canStores ? "/app/deferred" : undefined} className="dash-kpi dash-kpi--compact">
                   <div className="dash-kpi-label">{t.overview.paymentsRecorded}</div>
                   <div className="dash-kpi-value dash-kpi-value--sm">{money(analytics.totals.paymentsRecorded)}</div>
-                </div>
+                </KpiCard>
               </div>
 
               {!hasAnalyticsData && <p className="muted">{t.overview.noAnalytics}</p>}
@@ -507,20 +541,20 @@ export default function OverviewPage() {
                     )}
                   </div>
                   <div className="dash-kpi-grid dash-kpi-grid--loyalty">
-                    <div className="dash-kpi dash-kpi--loyalty">
+                    <KpiCard to={canStores ? "/app/loyalty-stores" : undefined} className="dash-kpi dash-kpi--loyalty">
                       <div className="dash-kpi-label">
                         <LoyaltyIcon kind="balance" size={18} />
                         {t.overview.loyaltyTotalIssued}
                       </div>
                       <div className="dash-kpi-value">{t.overview.loyaltyPoints(analytics.loyalty.totalPointsIssued)}</div>
-                    </div>
-                    <div className="dash-kpi dash-kpi--loyalty">
+                    </KpiCard>
+                    <KpiCard to={canStores ? "/app/loyalty-stores" : undefined} className="dash-kpi dash-kpi--loyalty">
                       <div className="dash-kpi-label">
                         <LoyaltyIcon kind="earn" size={18} />
                         {t.overview.loyaltyMonthEarned}
                       </div>
                       <div className="dash-kpi-value">{t.overview.loyaltyPoints(analytics.loyalty.monthPointsEarned)}</div>
-                    </div>
+                    </KpiCard>
                   </div>
                   {analytics.topStoresLoyalty.length > 0 ? (
                     <ul className="dash-rank-list">
@@ -579,102 +613,83 @@ export default function OverviewPage() {
                 <section className="dash-section dash-section--no-buy overview-panel--full">
                   <div className="dash-section-head">
                     <h4 className="dash-section-title">{t.overview.noBuyTitle}</h4>
-                    <DashActionLink to="/app/visits">{t.overview.noBuyViewAll}</DashActionLink>
+                    <DashActionLink to={noBuyMonth ?? "/app/visits"}>{t.overview.noBuyViewAll}</DashActionLink>
                   </div>
                   <p className="muted small">{t.overview.noBuyHint}</p>
                   <div className="dash-kpi-grid dash-kpi-grid--sub" style={{ marginBottom: 12 }}>
-                    <div className="dash-kpi dash-kpi--compact">
+                    <KpiCard to={noBuyMonth} className="dash-kpi dash-kpi--compact">
                       <div className="dash-kpi-label">{t.overview.noBuyMonthCount}</div>
                       <div className="dash-kpi-value dash-kpi-value--sm">{analytics.noBuyVisits.monthCount}</div>
-                    </div>
+                    </KpiCard>
                   </div>
                   <div className="visits-reason-chips visits-reason-chips--overview">
-                    {analytics.noBuyVisits.byReason.map((row) => (
-                      <span key={row.reason} className="visits-reason-chip">
-                        {row.reason}
-                        <span className="visits-reason-chip-count">{row.count}</span>
-                      </span>
-                    ))}
+                    {analytics.noBuyVisits.byReason.map((row) => {
+                      const to = canStores
+                        ? href("/app/visits", { noBuyOnly: "1", dateFrom: monthStart, reason: row.reason })
+                        : undefined;
+                      const chip = (
+                        <>
+                          {row.reason}
+                          <span className="visits-reason-chip-count">{row.count}</span>
+                        </>
+                      );
+                      return to ? (
+                        <Link key={row.reason} to={to} className="visits-reason-chip visits-reason-chip--link">
+                          {chip}
+                        </Link>
+                      ) : (
+                        <span key={row.reason} className="visits-reason-chip">
+                          {chip}
+                        </span>
+                      );
+                    })}
                   </div>
                 </section>
               )}
 
-              <div className="dash-two-col">
-                {analytics.topProducts.length > 0 && (
-                  <section className="dash-section">
-                    <h4 className="dash-section-title">{t.overview.topProducts}</h4>
-                    <ul className="dash-rank-list">
-                      {analytics.topProducts.map((p, i) => {
-                        const img = mediaUrl(p.imageUrl);
-                        return (
-                          <li key={p.productId} className="dash-rank-item">
-                            <span className="dash-rank-num">{i + 1}</span>
-                            {img ? (
-                              <img src={img} alt="" className="dash-rank-thumb" />
-                            ) : (
-                              <div className="dash-rank-thumb dash-rank-thumb--empty" />
-                            )}
-                            <div className="dash-rank-body">
-                              <div className="dash-rank-name">{p.name}</div>
-                              <div className="dash-rank-sub">
-                                {t.overview.qtyUnits(p.quantity)} · {money(p.revenue)}
-                              </div>
-                            </div>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </section>
-                )}
-
-                {analytics.topStores.length > 0 && (
-                  <section className="dash-section">
-                    <h4 className="dash-section-title">{t.overview.topStores}</h4>
-                    <ul className="dash-rank-list">
-                      {analytics.topStores.map((s, i) => (
-                        <li key={s.storeId} className="dash-rank-item">
-                          <span className="dash-rank-num">{i + 1}</span>
-                          <div className="dash-rank-body">
-                            <Link to={`/app/stores/${s.storeId}`} className="dash-rank-name linkish">
-                              {s.name}
-                            </Link>
-                            <div className="dash-rank-sub">
-                              {s.areaName} · {t.overview.ordersCount(s.orderCount)} · {money(s.revenue)}
-                            </div>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
-                )}
+              <div className="overview-rank-grid">
+                <DashRankBoard
+                  title={t.overview.topProducts}
+                  hint={t.overview.topProductsHint}
+                  countLabel={t.overview.topProductsCount(analytics.topProducts.length)}
+                  empty={t.overview.noAnalytics}
+                  items={analytics.topProducts.map((p) => {
+                    const maxQty = analytics.topProducts[0]?.quantity || 1;
+                    return {
+                      id: p.productId,
+                      name: p.name,
+                      imageUrl: p.imageUrl,
+                      to: canProducts ? href("/app/products", { q: p.name }) : undefined,
+                      primary: money(p.revenue),
+                      secondary: t.overview.qtyUnits(p.quantity),
+                      share: p.quantity / maxQty,
+                    };
+                  })}
+                />
+                <DashRankBoard
+                  title={t.overview.topReps}
+                  hint={t.overview.topRepsHint}
+                  countLabel={t.overview.topRepsCount(analytics.topReps.length)}
+                  variant="cards"
+                  items={analytics.topReps.map((r) => {
+                    const maxRev = analytics.topReps[0]?.revenue || 1;
+                    return {
+                      id: r.repId,
+                      name: r.name,
+                      imageUrl: r.imageUrl,
+                      roundImage: true,
+                      to: canOrders
+                        ? href("/app/orders", { rep: r.name })
+                        : canFillCar
+                          ? href("/app/fill-car", { repId: String(r.repId), date: today })
+                          : undefined,
+                      primary: money(r.revenue),
+                      secondary: t.overview.ordersCount(r.orderCount),
+                      share: maxRev > 0 ? r.revenue / maxRev : 0,
+                    };
+                  })}
+                />
               </div>
-
-              {analytics.topReps.length > 0 && (
-                <section className="dash-section">
-                  <h4 className="dash-section-title">{t.overview.topReps}</h4>
-                  <ul className="dash-rank-list dash-rank-list--inline">
-                    {analytics.topReps.map((r, i) => {
-                      const img = mediaUrl(r.imageUrl);
-                      return (
-                        <li key={r.repId} className="dash-rank-item">
-                          <span className="dash-rank-num">{i + 1}</span>
-                          {img ? (
-                            <img src={img} alt="" className="dash-rank-thumb dash-rank-thumb--round" />
-                          ) : (
-                            <div className="dash-rank-thumb dash-rank-thumb--round dash-rank-thumb--empty" />
-                          )}
-                          <div className="dash-rank-body">
-                            <div className="dash-rank-name">{r.name}</div>
-                            <div className="dash-rank-sub">
-                              {t.overview.ordersCount(r.orderCount)} · {money(r.revenue)}
-                            </div>
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </section>
-              )}
             </>
           )}
         </section>

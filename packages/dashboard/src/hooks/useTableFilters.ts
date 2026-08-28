@@ -7,13 +7,17 @@ export type UseTableFiltersConfig<T> = {
   searchAccessors: SearchAccessor<T>[];
   fields: FilterFieldDef<T>[];
   defaultPageSize?: number;
+  initialSearch?: string;
+  initialFilters?: Record<string, string>;
 };
 
 export function useTableFilters<T>(items: readonly T[], config: UseTableFiltersConfig<T>) {
-  const { searchAccessors, fields, defaultPageSize } = config;
-  const [search, setSearch] = useState("");
-  const [filters, setFilters] = useState<Record<string, string>>({});
-  const [showFilters, setShowFilters] = useState(false);
+  const { searchAccessors, fields, defaultPageSize, initialSearch = "", initialFilters } = config;
+  const [search, setSearch] = useState(initialSearch);
+  const [filters, setFilters] = useState<Record<string, string>>(() => initialFilters ?? {});
+  const [showFilters, setShowFilters] = useState(
+    () => initialSearch.trim() !== "" || Object.values(initialFilters ?? {}).some((v) => v !== "")
+  );
 
   const filtersKey = useMemo(() => JSON.stringify(filters), [filters]);
 
