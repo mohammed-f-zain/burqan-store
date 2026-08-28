@@ -35,7 +35,7 @@ jobs:
             cd "${{ secrets.DEPLOY_PATH }}"
             DB_URL=""
             if [[ -f /root/.burqan-db-url ]]; then
-              DB_URL="$(cat /root/.burqan-db-url)"
+              DB_URL="$(cat /root/.burqan-db-url | sed 's/^DATABASE_URL=//')"
             elif [[ -f packages/api/.env ]]; then
               DB_URL="$(grep -E '^DATABASE_URL=' packages/api/.env | head -1 | cut -d= -f2-)"
             fi
