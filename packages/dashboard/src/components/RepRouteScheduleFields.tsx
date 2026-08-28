@@ -1,11 +1,16 @@
+import SearchableSelect from "./SearchableSelect";
 import { useLocale } from "../i18n/LocaleContext";
+import { formatMarketDate } from "../utils/formatMarketDateTime";
 
 export type RouteZoneOption = { id: number; name: string; isActive: boolean };
+export type ZoneLastAssigned = { routeZoneId: number; assignedAt: string };
 export type ScheduleRow = {
   dayOfWeek: number;
   dayName: string;
   routeZoneId: number | null;
   routeZoneName: string | null;
+  assignedAt?: string | null;
+  zoneLastAssigned?: ZoneLastAssigned[];
 };
 
 export function mergeScheduleZones(
@@ -33,7 +38,7 @@ type Props = {
 };
 
 export default function RepRouteScheduleFields({ zones, rows, onChange, loading }: Props) {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
 
   if (loading) {
     return <p className="muted">{t.repSchedule.loading}</p>;
@@ -49,21 +54,21 @@ export default function RepRouteScheduleFields({ zones, rows, onChange, loading 
           <div className="schedule-day">
             <strong>{row.dayName}</strong>
           </div>
-          <select
-            className="schedule-select"
-            value={row.routeZoneId ?? ""}
-            onChange={(e) => {
-              const v = e.target.value;
-              onChange(row.dayOfWeek, v ? Number(v) : null);
-            }}
-          >
-            <option value="">{t.repSchedule.offDay}</option>
-            {zones.map((z) => (
-              <option key={z.id} value={z.id}>
-                {z.name}
-              </option>
-            ))}
-          </select>
+          <SearchableSelect
+            value={row.routeZoneId != null ? String(row.routeZoneId) : ""}
+            onChange={(v) => onChange(row.dayOfWeek, v ? Number(v) : null)}
+            options={zones.map((z) => {
+              const last = row.zoneLastAssigned?.find((a) => a.routeZoneId === z.id)?.assignedAt;
+              return {
+                value: String(z.id),
+                label: z.name,
+                hint: last ? `${t.repSchedule.lastAssigned}: ${formatMarketDate(last, locale)}` : undefined,
+              };
+            })}
+            allLabel={t.repSchedule.offDay}
+            searchPlaceholder={t.tableFilters.selectSearch}
+            ariaLabel={row.dayName}
+          />
         </div>
       ))}
     </div>

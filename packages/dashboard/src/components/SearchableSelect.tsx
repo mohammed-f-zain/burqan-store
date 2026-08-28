@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 
-export type SearchableSelectOption = { value: string; label: string };
+export type SearchableSelectOption = { value: string; label: string; hint?: string };
 
 type Props = {
   value: string;
@@ -25,10 +25,11 @@ export default function SearchableSelect({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
 
+  const selected = useMemo(() => options.find((o) => o.value === value), [options, value]);
   const selectedLabel = useMemo(() => {
     if (!value) return allLabel;
-    return options.find((o) => o.value === value)?.label ?? value;
-  }, [allLabel, options, value]);
+    return selected?.label ?? value;
+  }, [allLabel, selected, value]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -70,7 +71,10 @@ export default function SearchableSelect({
         aria-label={ariaLabel}
         onClick={() => setOpen((v) => !v)}
       >
-        <span className={value ? "" : "muted"}>{selectedLabel}</span>
+        <span className={value ? "searchable-select-trigger-text" : "muted"}>
+          <span>{selectedLabel}</span>
+          {value && selected?.hint ? <span className="searchable-select-option-hint">{selected.hint}</span> : null}
+        </span>
         <span className="searchable-select-caret" aria-hidden>
           ▾
         </span>
@@ -113,7 +117,8 @@ export default function SearchableSelect({
                     className={`searchable-select-option${value === opt.value ? " is-selected" : ""}`}
                     onClick={() => pick(opt.value)}
                   >
-                    {opt.label}
+                    <span>{opt.label}</span>
+                    {opt.hint ? <span className="searchable-select-option-hint">{opt.hint}</span> : null}
                   </button>
                 </li>
               ))

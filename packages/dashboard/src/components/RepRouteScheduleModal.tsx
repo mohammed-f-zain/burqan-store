@@ -53,6 +53,7 @@ export default function RepRouteScheduleModal({ repId, repName, onClose }: Props
               ...r,
               routeZoneId,
               routeZoneName: zones.find((z) => z.id === routeZoneId)?.name ?? null,
+              assignedAt: routeZoneId === r.routeZoneId ? r.assignedAt : null,
             }
           : r
       )

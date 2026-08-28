@@ -106,6 +106,7 @@ export default function RepresentativesPage() {
               ...r,
               routeZoneId,
               routeZoneName: routeZones.find((z) => z.id === routeZoneId)?.name ?? null,
+              assignedAt: routeZoneId === r.routeZoneId ? r.assignedAt : null,
             }
           : r
       )

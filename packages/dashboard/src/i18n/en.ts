@@ -516,6 +516,7 @@ export const en: Messages = {
     loading: "Loading…",
     noZones: "No route zones — create them under Route zones first.",
     offDay: "— No route —",
+    lastAssigned: "Last assigned",
     saveBtn: "Save schedule",
     saving: "Saving…",
     cancel: "Cancel",

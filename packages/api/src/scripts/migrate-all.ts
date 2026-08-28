@@ -28,6 +28,7 @@ const FILES = [
   "016_route_zone_reps.sql",
   "017_prospect_dismiss_reason.sql",
   "018_fill_car_last_fill_external_sales.sql",
+  "019_rep_route_schedule_assigned_at.sql",
 ] as const;
 
 async function main() {

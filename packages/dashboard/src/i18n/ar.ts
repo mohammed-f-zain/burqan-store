@@ -513,6 +513,7 @@ export const ar = {
     loading: "جاري التحميل…",
     noZones: "لا توجد مناطق مسار — أنشئها من «مسارات المناطق» أولاً.",
     offDay: "— بدون مسار —",
+    lastAssigned: "آخر تعيين",
     saveBtn: "حفظ الجدول",
     saving: "جاري الحفظ…",
     cancel: "إلغاء",

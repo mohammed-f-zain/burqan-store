@@ -1906,6 +1906,61 @@ const repRouteSchedulePutSchema = z.object({
   entries: z.array(repRouteScheduleEntrySchema),
 });
 
+type ScheduleDbRow = {
+  day_of_week: number;
+  route_zone_id: number;
+  zone_name: string;
+  assigned_at: Date | string | null;
+};
+
+function jsonScheduleFromRows(
+  rows: ScheduleDbRow[],
+  history: { day_of_week: number; route_zone_id: number; assigned_at: Date | string }[]
+) {
+  const histByDay = new Map<number, { routeZoneId: number; assignedAt: string }[]>();
+  for (const h of history) {
+    const list = histByDay.get(h.day_of_week) ?? [];
+    list.push({
+      routeZoneId: h.route_zone_id,
+      assignedAt: new Date(h.assigned_at).toISOString(),
+    });
+    histByDay.set(h.day_of_week, list);
+  }
+
+  const byDay = new Map(rows.map((r) => [r.day_of_week, r]));
+  return ARABIC_WEEKDAY_NAMES.map((dayName, dayOfWeek) => {
+    const hit = byDay.get(dayOfWeek);
+    return {
+      dayOfWeek,
+      dayName,
+      routeZoneId: hit?.route_zone_id ?? null,
+      routeZoneName: hit?.zone_name ?? null,
+      assignedAt: hit?.assigned_at ? new Date(hit.assigned_at).toISOString() : null,
+      zoneLastAssigned: histByDay.get(dayOfWeek) ?? [],
+    };
+  });
+}
+
+async function loadRepRouteSchedule(repId: number) {
+  const [{ rows }, { rows: history }] = await Promise.all([
+    query<ScheduleDbRow>(
+      `SELECT rs.day_of_week, rs.route_zone_id, rz.name AS zone_name, rs.assigned_at
+       FROM rep_route_schedule rs
+       JOIN route_zones rz ON rz.id = rs.route_zone_id
+       WHERE rs.representative_id = $1
+       ORDER BY rs.day_of_week ASC`,
+      [repId]
+    ),
+    query<{ day_of_week: number; route_zone_id: number; assigned_at: Date | string }>(
+      `SELECT day_of_week, route_zone_id, assigned_at
+       FROM rep_route_assignment_history
+       WHERE representative_id = $1`,
+      [repId]
+    ),
+  ]);
+  return jsonScheduleFromRows(rows, history);
+}
+
 router.get(
   "/representatives/:id/route-schedule",
   adminAuthMiddleware,
@@ -1915,32 +1970,7 @@ router.get(
       const id = z.coerce.number().int().positive().parse(req.params.id);
       const { rows: repRows } = await query(`SELECT id FROM representatives WHERE id = $1`, [id]);
       if (!repRows[0]) throw new HttpError(404, "المندوب غير موجود");
-
-      const { rows } = await query<{
-        day_of_week: number;
-        route_zone_id: number;
-        zone_name: string;
-      }>(
-        `SELECT rs.day_of_week, rs.route_zone_id, rz.name AS zone_name
-         FROM rep_route_schedule rs
-         JOIN route_zones rz ON rz.id = rs.route_zone_id
-         WHERE rs.representative_id = $1
-         ORDER BY rs.day_of_week ASC`,
-        [id]
-      );
-
-      const byDay = new Map(rows.map((r) => [r.day_of_week, r]));
-      res.json({
-        schedule: ARABIC_WEEKDAY_NAMES.map((dayName, dayOfWeek) => {
-          const hit = byDay.get(dayOfWeek);
-          return {
-            dayOfWeek,
-            dayName,
-            routeZoneId: hit?.route_zone_id ?? null,
-            routeZoneName: hit?.zone_name ?? null,
-          };
-        }),
-      });
+      res.json({ schedule: await loadRepRouteSchedule(id) });
     } catch (e) {
       next(e);
     }
@@ -1958,9 +1988,8 @@ router.put(
       const { rows: repRows } = await query(`SELECT id FROM representatives WHERE id = $1`, [id]);
       if (!repRows[0]) throw new HttpError(404, "المندوب غير موجود");
 
-      const zoneIds = body.entries
-        .map((e) => e.routeZoneId)
-        .filter((z): z is number => z != null);
+      const assigned = body.entries.filter((e): e is { dayOfWeek: number; routeZoneId: number } => e.routeZoneId != null);
+      const zoneIds = assigned.map((e) => e.routeZoneId);
       if (zoneIds.length) {
         const { rows: zones } = await query<{ id: number }>(
           `SELECT rz.id FROM route_zones rz
@@ -1976,14 +2005,53 @@ router.put(
       const c = await pool.connect();
       try {
         await c.query("BEGIN");
-        await c.query(`DELETE FROM rep_route_schedule WHERE representative_id = $1`, [id]);
-        for (const entry of body.entries) {
-          if (entry.routeZoneId == null) continue;
+        const { rows: previous } = await c.query<{ day_of_week: number; route_zone_id: number }>(
+          `SELECT day_of_week, route_zone_id FROM rep_route_schedule WHERE representative_id = $1`,
+          [id]
+        );
+        const prevByDay = new Map(previous.map((r) => [r.day_of_week, r.route_zone_id]));
+
+        const assignedDows = assigned.map((e) => e.dayOfWeek);
+        if (assignedDows.length === 0) {
+          await c.query(`DELETE FROM rep_route_schedule WHERE representative_id = $1`, [id]);
+        } else {
           await c.query(
-            `INSERT INTO rep_route_schedule (representative_id, day_of_week, route_zone_id)
-             VALUES ($1, $2, $3)`,
-            [id, entry.dayOfWeek, entry.routeZoneId]
+            `DELETE FROM rep_route_schedule
+             WHERE representative_id = $1
+               AND NOT (day_of_week = ANY($2::smallint[]))`,
+            [id, assignedDows]
           );
+          for (const entry of assigned) {
+            await c.query(
+              `INSERT INTO rep_route_schedule (representative_id, day_of_week, route_zone_id, assigned_at)
+               VALUES ($1, $2, $3, now())
+               ON CONFLICT (representative_id, day_of_week)
+               DO UPDATE SET
+                 route_zone_id = EXCLUDED.route_zone_id,
+                 assigned_at = CASE
+                   WHEN rep_route_schedule.route_zone_id IS DISTINCT FROM EXCLUDED.route_zone_id THEN now()
+                   ELSE rep_route_schedule.assigned_at
+                 END`,
+              [id, entry.dayOfWeek, entry.routeZoneId]
+            );
+            const prevZone = prevByDay.get(entry.dayOfWeek);
+            if (prevZone !== entry.routeZoneId) {
+              await c.query(
+                `INSERT INTO rep_route_assignment_history (representative_id, day_of_week, route_zone_id, assigned_at)
+                 VALUES ($1, $2, $3, now())
+                 ON CONFLICT (representative_id, day_of_week, route_zone_id)
+                 DO UPDATE SET assigned_at = now()`,
+                [id, entry.dayOfWeek, entry.routeZoneId]
+              );
+            } else {
+              await c.query(
+                `INSERT INTO rep_route_assignment_history (representative_id, day_of_week, route_zone_id, assigned_at)
+                 VALUES ($1, $2, $3, now())
+                 ON CONFLICT (representative_id, day_of_week, route_zone_id) DO NOTHING`,
+                [id, entry.dayOfWeek, entry.routeZoneId]
+              );
+            }
+          }
         }
         await c.query("COMMIT");
       } catch (e) {
@@ -1993,30 +2061,7 @@ router.put(
         c.release();
       }
 
-      const { rows } = await query<{
-        day_of_week: number;
-        route_zone_id: number;
-        zone_name: string;
-      }>(
-        `SELECT rs.day_of_week, rs.route_zone_id, rz.name AS zone_name
-         FROM rep_route_schedule rs
-         JOIN route_zones rz ON rz.id = rs.route_zone_id
-         WHERE rs.representative_id = $1
-         ORDER BY rs.day_of_week ASC`,
-        [id]
-      );
-      const byDay = new Map(rows.map((r) => [r.day_of_week, r]));
-      res.json({
-        schedule: ARABIC_WEEKDAY_NAMES.map((dayName, dayOfWeek) => {
-          const hit = byDay.get(dayOfWeek);
-          return {
-            dayOfWeek,
-            dayName,
-            routeZoneId: hit?.route_zone_id ?? null,
-            routeZoneName: hit?.zone_name ?? null,
-          };
-        }),
-      });
+      res.json({ schedule: await loadRepRouteSchedule(id) });
     } catch (e) {
       next(e);
     }
