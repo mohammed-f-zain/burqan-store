@@ -32,6 +32,7 @@ export default function AppLayout() {
     { to: "/app/representatives", label: t.nav.representatives, icon: "representatives", perm: "reps.read" },
     { to: "/app/fill-car", label: t.nav.fillCar, icon: "fillCar", permAny: ["fill_car.read", "reps.read"] },
     { to: "/app/stores", label: t.nav.stores, icon: "stores", perm: "stores.read" },
+    { to: "/app/deferred", label: t.nav.deferredStores, icon: "deferredStores", perm: "stores.read" },
     { to: "/app/loyalty-stores", label: t.nav.loyaltyStores, icon: "loyaltyStores", perm: "stores.read" },
     { to: "/app/possible-clients", label: t.nav.possibleClients, icon: "possibleClients", perm: "stores.read" },
     { to: "/app/visits", label: t.nav.visits, icon: "visits", perm: "stores.read" },

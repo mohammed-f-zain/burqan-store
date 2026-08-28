@@ -2343,6 +2343,78 @@ router.get(
 );
 
 router.get(
+  "/stores/deferred-balances",
+  adminAuthMiddleware,
+  requireAdminPermission("stores.read"),
+  async (_req, res, next) => {
+    try {
+      const { rows } = await query<{
+        id: number;
+        name: string;
+        owner_name: string;
+        phone: string;
+        area_name: string;
+        deferred_total: string;
+        paid_total: string;
+        outstanding: string;
+        deferred_order_count: number;
+        last_payment_at: Date | null;
+      }>(
+        `SELECT s.id, s.name, s.owner_name, s.phone, a.name AS area_name,
+                COALESCE(d.deferred_total, 0)::text AS deferred_total,
+                COALESCE(p.paid_total, 0)::text AS paid_total,
+                GREATEST(COALESCE(d.deferred_total, 0) - COALESCE(p.paid_total, 0), 0)::text AS outstanding,
+                COALESCE(d.deferred_order_count, 0)::int AS deferred_order_count,
+                p.last_payment_at
+         FROM stores s
+         JOIN areas a ON a.id = s.area_id
+         LEFT JOIN (
+           SELECT store_id,
+                  SUM(total_amount) FILTER (WHERE payment_type = 'deferred') AS deferred_total,
+                  COUNT(*) FILTER (WHERE payment_type = 'deferred')::int AS deferred_order_count
+           FROM orders
+           GROUP BY store_id
+         ) d ON d.store_id = s.id
+         LEFT JOIN (
+           SELECT store_id, SUM(amount) AS paid_total, MAX(created_at) AS last_payment_at
+           FROM store_payments
+           GROUP BY store_id
+         ) p ON p.store_id = s.id
+         WHERE COALESCE(d.deferred_total, 0) > 0 OR COALESCE(p.paid_total, 0) > 0
+         ORDER BY GREATEST(COALESCE(d.deferred_total, 0) - COALESCE(p.paid_total, 0), 0) DESC,
+                  s.name ASC`
+      );
+
+      const stores = rows.map((r) => ({
+        storeId: r.id,
+        storeName: r.name,
+        ownerName: r.owner_name,
+        phone: r.phone,
+        areaName: r.area_name,
+        deferredTotal: parseFloat(r.deferred_total) || 0,
+        paidTotal: parseFloat(r.paid_total) || 0,
+        outstanding: parseFloat(r.outstanding) || 0,
+        deferredOrderCount: r.deferred_order_count,
+        lastPaymentAt: r.last_payment_at,
+      }));
+
+      res.json({
+        stores,
+        summary: {
+          storeCount: stores.length,
+          owingCount: stores.filter((s) => s.outstanding > 0).length,
+          deferredTotal: stores.reduce((sum, s) => sum + s.deferredTotal, 0),
+          paidTotal: stores.reduce((sum, s) => sum + s.paidTotal, 0),
+          outstanding: stores.reduce((sum, s) => sum + s.outstanding, 0),
+        },
+      });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+router.get(
   "/stores/:id",
   adminAuthMiddleware,
   requireAdminPermission("stores.read"),

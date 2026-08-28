@@ -419,6 +419,11 @@ export default function OverviewPage() {
                       <div className="overview-monitor-item">
                         <span className="muted small">{t.overview.deferredOutstanding}</span>
                         <strong className="text-danger">{money(analytics.totals.deferredOutstanding)}</strong>
+                        {can("stores.read") && (
+                          <DashActionLink to="/app/deferred" variant="ghost">
+                            {t.overview.deferredViewAll}
+                          </DashActionLink>
+                        )}
                       </div>
                       <div className="overview-monitor-item">
                         <span className="muted small">{t.overview.monthRevenue}</span>
@@ -450,12 +455,21 @@ export default function OverviewPage() {
                     <div className="dash-kpi-label">{t.overview.monthVisits}</div>
                     <div className="dash-kpi-value dash-kpi-value--sm">{analytics.period.monthVisitCount}</div>
                   </div>
-                  <div className="dash-kpi dash-kpi--compact">
-                    <div className="dash-kpi-label">{t.overview.deferredOutstanding}</div>
-                    <div className="dash-kpi-value dash-kpi-value--sm dash-kpi-value--danger">
-                      {money(analytics.totals.deferredOutstanding)}
+                  {can("stores.read") ? (
+                    <Link to="/app/deferred" className="dash-kpi dash-kpi--compact dash-kpi--link">
+                      <div className="dash-kpi-label">{t.overview.deferredOutstanding}</div>
+                      <div className="dash-kpi-value dash-kpi-value--sm dash-kpi-value--danger">
+                        {money(analytics.totals.deferredOutstanding)}
+                      </div>
+                    </Link>
+                  ) : (
+                    <div className="dash-kpi dash-kpi--compact">
+                      <div className="dash-kpi-label">{t.overview.deferredOutstanding}</div>
+                      <div className="dash-kpi-value dash-kpi-value--sm dash-kpi-value--danger">
+                        {money(analytics.totals.deferredOutstanding)}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
 

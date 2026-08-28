@@ -29,6 +29,7 @@ import RolesPage from "./pages/RolesPage";
 import RouteZonesPage from "./pages/RouteZonesPage";
 import StoreDetailPage from "./pages/StoreDetailPage";
 import StoresPage from "./pages/StoresPage";
+import DeferredStoresPage from "./pages/DeferredStoresPage";
 import VisitsPage from "./pages/VisitsPage";
 
 export default function App() {
@@ -58,6 +59,7 @@ export default function App() {
                 <Route path="fill-car" element={<FillCarPage />} />
                 <Route path="rep-sales" element={<Navigate to="/app/fill-car" replace />} />
                 <Route path="stores" element={<StoresPage />} />
+                  <Route path="deferred" element={<DeferredStoresPage />} />
                   <Route path="loyalty-stores" element={<LoyaltyStoresPage />} />
                   <Route path="stores/:id" element={<StoreDetailPage />} />
                   <Route path="possible-clients" element={<PossibleClientsPage />} />

@@ -11,6 +11,7 @@ export type NavIconName =
   | "fillCar"
   | "stores"
   | "loyaltyStores"
+  | "deferredStores"
   | "possibleClients"
   | "visits"
   | "orders"
@@ -121,6 +122,13 @@ export default function NavIcon({ name, size = 20, className = "" }: Props) {
       return (
         <svg {...common}>
           <path d="M12 3l2.2 4.5 5 .7-3.6 3.5.85 5L12 14.8 7.55 16.7l.85-5L4.8 8.2l5-.7L12 3z" stroke="currentColor" strokeWidth="1.75" strokeLinejoin="round" />
+        </svg>
+      );
+    case "deferredStores":
+      return (
+        <svg {...common}>
+          <rect x="5" y="4" width="14" height="16" rx="2" stroke="currentColor" strokeWidth="1.75" />
+          <path d="M9 9h6M9 13h6M9 17h3" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
         </svg>
       );
     case "possibleClients":
