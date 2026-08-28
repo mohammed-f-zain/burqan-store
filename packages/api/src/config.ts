@@ -1,7 +1,10 @@
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import dotenv from "dotenv";
 
+const apiRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+dotenv.config({ path: path.join(apiRoot, ".env") });
 dotenv.config();
 
 function required(name: string, fallback?: string): string {
@@ -46,4 +49,8 @@ export const config = {
   adminResetTokenMinutes: parseInt(process.env.ADMIN_RESET_TOKEN_MINUTES ?? "60", 10),
   /** Google Maps Geocoding API key — accurate area from GPS (optional; falls back to circles). */
   googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY?.trim() || undefined,
+  /** Odoo sale webhook. Default is production ERP; skipped when ODOO_WEBHOOK_SECRET is unset. */
+  odooWebhookUrl:
+    process.env.ODOO_WEBHOOK_URL?.trim() || "https://erp.burqan.tech/burqan/webhook/sale",
+  odooWebhookSecret: process.env.ODOO_WEBHOOK_SECRET?.trim() || undefined,
 };

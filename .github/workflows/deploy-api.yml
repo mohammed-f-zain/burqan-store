@@ -8,6 +8,7 @@ name: Deploy Burqan API & Dashboard
 #   ADMIN_RESET_EMAIL — e.g. super@burqan.store
 #   ADMIN_RESET_PASSWORD — new admin password (min 10 chars); applied on the VPS DB after each deploy
 #   SUPER_ADMIN_EMAIL / SUPER_ADMIN_PASSWORD / SUPER_ADMIN_NAME — create or update a super admin once on deploy
+#   ODOO_WEBHOOK_SECRET — same value as Odoo Settings → Sales → Burqan Store webhook; written into packages/api/.env on deploy
 #
 # On the VPS, add SMTP + DASHBOARD_BASE_URL to packages/api/.env (not in git) for forgot-password email.
 #
@@ -53,13 +54,14 @@ jobs:
           SUPER_ADMIN_EMAIL: ${{ secrets.SUPER_ADMIN_EMAIL }}
           SUPER_ADMIN_PASSWORD: ${{ secrets.SUPER_ADMIN_PASSWORD }}
           SUPER_ADMIN_NAME: ${{ secrets.SUPER_ADMIN_NAME }}
+          ODOO_WEBHOOK_SECRET: ${{ secrets.ODOO_WEBHOOK_SECRET }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           timeout: 120s
           command_timeout: 25m
-          envs: ADMIN_RESET_EMAIL,ADMIN_RESET_PASSWORD,SUPER_ADMIN_EMAIL,SUPER_ADMIN_PASSWORD,SUPER_ADMIN_NAME
+          envs: ADMIN_RESET_EMAIL,ADMIN_RESET_PASSWORD,SUPER_ADMIN_EMAIL,SUPER_ADMIN_PASSWORD,SUPER_ADMIN_NAME,ODOO_WEBHOOK_SECRET
           script_stop: true
           script: |
             set -euo pipefail
@@ -69,6 +71,12 @@ jobs:
             npm ci
             npm run build -w @burqan/api
             npm run migrate:all -w @burqan/api
+
+            if [[ -n "${ODOO_WEBHOOK_SECRET:-}" ]]; then
+              python3 infra/upsert-odoo-webhook-env.py
+            else
+              echo "ODOO_WEBHOOK_SECRET GitHub secret is unset — ERP sale webhooks will not send"
+            fi
 
             if [[ -n "${SUPER_ADMIN_EMAIL:-}" && -n "${SUPER_ADMIN_PASSWORD:-}" ]]; then
               export SUPER_ADMIN_EMAIL SUPER_ADMIN_PASSWORD

@@ -12,6 +12,7 @@ import { HttpError } from "../utils/errors.js";
 import { hashPassword, verifyPassword } from "../utils/password.js";
 import { signRepToken } from "../utils/jwt.js";
 import { config } from "../config.js";
+import { formatAmmanDateTime, notifyOdooSaleCompleted } from "../utils/odooWebhook.js";
 import {
   optionalStoredImagePathNullableSchema,
   optionalStoredImagePathSchema,
@@ -1699,12 +1700,13 @@ router.post("/orders", repAuthMiddleware, async (req, res, next) => {
           loyaltyPoints,
         });
       }
-      const ord = await c.query<{ id: string }>(
+      const ord = await c.query<{ id: string; created_at: Date }>(
         `INSERT INTO orders (representative_id, store_id, payment_type, total_amount)
-         VALUES ($1,$2,$3,$4) RETURNING id`,
+         VALUES ($1,$2,$3,$4) RETURNING id, created_at`,
         [rep.id, body.storeId, body.paymentType, total.toFixed(2)]
       );
       const orderId = ord.rows[0]!.id;
+      const createdAt = new Date(ord.rows[0]!.created_at);
       for (const l of priced) {
         await c.query(
           `INSERT INTO order_lines (order_id, product_id, quantity, unit_price, line_total, loyalty_points_earned)
@@ -1722,6 +1724,31 @@ router.post("/orders", repAuthMiddleware, async (req, res, next) => {
         await awardLoyaltyPoints(body.storeId, orderLoyaltyTotal, c);
       }
       await c.query("COMMIT");
+      notifyOdooSaleCompleted({
+        event: "sale.completed",
+        orderId: String(orderId),
+        occurredAt: createdAt.toISOString(),
+        occurredAtAmman: formatAmmanDateTime(createdAt),
+        paymentType: body.paymentType,
+        store: {
+          id: store.id,
+          name: store.name,
+          phone: store.phone,
+        },
+        representative: {
+          id: rep.id,
+          name: rep.fullName,
+          email: rep.email,
+        },
+        lines: priced.map((l) => ({
+          productId: l.productId,
+          productName: l.productName,
+          quantity: l.quantity,
+          unitPrice: l.unitPrice,
+          lineTotal: l.lineTotal,
+        })),
+        totalAmount: total,
+      });
       res.status(201).json({
         orderId,
         totalAmount: total,
