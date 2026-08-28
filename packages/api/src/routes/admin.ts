@@ -1469,14 +1469,25 @@ router.get(
         total_sales: string;
       }>(
         `SELECT r.id, r.full_name, r.email, r.is_active,
-                COUNT(o.id)::int AS order_count,
-                COALESCE(SUM(o.total_amount), 0)::text AS total_sales
+                COUNT(s.sale_id)::int AS order_count,
+                COALESCE(SUM(s.total_amount), 0)::text AS total_sales
          FROM representatives r
-         LEFT JOIN orders o ON o.representative_id = r.id
-           AND (o.created_at AT TIME ZONE 'Asia/Amman')::date = $1::date
-           AND (r.car_fill_at IS NULL OR o.created_at >= r.car_fill_at)
+         LEFT JOIN (
+           SELECT o.representative_id, o.id AS sale_id, o.total_amount, o.created_at
+           FROM orders o
+           WHERE (o.created_at AT TIME ZONE 'Asia/Amman')::date = $1::date
+           UNION ALL
+           SELECT e.representative_id, e.id AS sale_id, e.total_amount, e.created_at
+           FROM external_sales e
+           WHERE (e.created_at AT TIME ZONE 'Asia/Amman')::date = $1::date
+         ) s ON s.representative_id = r.id
+           AND (
+             $1::date <> (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Amman')::date
+             OR r.car_fill_at IS NULL
+             OR s.created_at >= r.car_fill_at
+           )
          GROUP BY r.id
-         ORDER BY COALESCE(SUM(o.total_amount), 0) DESC NULLS LAST, r.full_name ASC`,
+         ORDER BY COALESCE(SUM(s.total_amount), 0) DESC NULLS LAST, r.full_name ASC`,
         [date]
       );
 
@@ -1487,17 +1498,35 @@ router.get(
         quantity: number;
         line_total: string;
       }>(
-        `SELECT o.representative_id AS rep_id, p.id AS product_id, p.name AS product_name,
-                SUM(ol.quantity)::int AS quantity,
-                COALESCE(SUM(ol.line_total), 0)::text AS line_total
-         FROM orders o
-         INNER JOIN representatives r ON r.id = o.representative_id
-         INNER JOIN order_lines ol ON ol.order_id = o.id
-         INNER JOIN products p ON p.id = ol.product_id
-         WHERE (o.created_at AT TIME ZONE 'Asia/Amman')::date = $1::date
-           AND (r.car_fill_at IS NULL OR o.created_at >= r.car_fill_at)
-         GROUP BY o.representative_id, p.id, p.name
-         ORDER BY o.representative_id, p.name`,
+        `SELECT x.representative_id AS rep_id, p.id AS product_id, p.name AS product_name,
+                SUM(x.quantity)::int AS quantity,
+                COALESCE(SUM(x.line_total), 0)::text AS line_total
+         FROM (
+           SELECT o.representative_id, ol.product_id, ol.quantity, ol.line_total, o.created_at
+           FROM orders o
+           INNER JOIN representatives r ON r.id = o.representative_id
+           INNER JOIN order_lines ol ON ol.order_id = o.id
+           WHERE (o.created_at AT TIME ZONE 'Asia/Amman')::date = $1::date
+             AND (
+               $1::date <> (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Amman')::date
+               OR r.car_fill_at IS NULL
+               OR o.created_at >= r.car_fill_at
+             )
+           UNION ALL
+           SELECT e.representative_id, el.product_id, el.quantity, el.line_total, e.created_at
+           FROM external_sales e
+           INNER JOIN representatives r ON r.id = e.representative_id
+           INNER JOIN external_sale_lines el ON el.external_sale_id = e.id
+           WHERE (e.created_at AT TIME ZONE 'Asia/Amman')::date = $1::date
+             AND (
+               $1::date <> (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Amman')::date
+               OR r.car_fill_at IS NULL
+               OR e.created_at >= r.car_fill_at
+             )
+         ) x
+         INNER JOIN products p ON p.id = x.product_id
+         GROUP BY x.representative_id, p.id, p.name
+         ORDER BY x.representative_id, p.name`,
         [date]
       );
 
@@ -1684,7 +1713,8 @@ router.get(
                 p.price AS catalog_price,
                 COALESCE(ri.price, p.price) AS price,
                 ri.price AS rep_price,
-                COALESCE(ri.quantity, 0) AS quantity
+                COALESCE(ri.quantity, 0) AS quantity,
+                COALESCE(ri.last_fill_quantity, 0) AS last_fill_quantity
          FROM products p
          LEFT JOIN representative_inventory ri
            ON ri.product_id = p.id AND ri.representative_id = $1
@@ -1711,7 +1741,6 @@ router.put(
       if (!repCheck.rows[0]) throw new HttpError(404, "المندوب غير موجود");
 
       const c = await pool.connect();
-      let salesReset = false;
       try {
         await c.query("BEGIN");
         const { rows: beforeRows } = await c.query<{ product_id: number; quantity: number }>(
@@ -1719,28 +1748,29 @@ router.put(
           [id]
         );
         const beforeQty = new Map(beforeRows.map((row) => [row.product_id, row.quantity]));
+        const isFill = body.items.some((item) => item.quantity > (beforeQty.get(item.productId) ?? 0));
 
         for (const item of body.items) {
           const repPrice =
             item.price === undefined ? null : item.price === null ? null : item.price.toFixed(2);
           await c.query(
-            `INSERT INTO representative_inventory (representative_id, product_id, quantity, price, updated_at)
-             VALUES ($1, $2, $3, $4, now())
+            `INSERT INTO representative_inventory
+               (representative_id, product_id, quantity, price, last_fill_quantity, updated_at)
+             VALUES ($1, $2, $3, $4, $3, now())
              ON CONFLICT (representative_id, product_id)
              DO UPDATE SET
                quantity = EXCLUDED.quantity,
+               last_fill_quantity = CASE
+                 WHEN $6::boolean THEN EXCLUDED.quantity
+                 ELSE representative_inventory.last_fill_quantity
+               END,
                price = CASE
                  WHEN $5::boolean THEN EXCLUDED.price
                  ELSE representative_inventory.price
                END,
                updated_at = now()`,
-            [id, item.productId, item.quantity, repPrice, item.price !== undefined]
+            [id, item.productId, item.quantity, repPrice, item.price !== undefined, isFill]
           );
-        }
-
-        salesReset = body.items.some((item) => item.quantity > (beforeQty.get(item.productId) ?? 0));
-        if (salesReset) {
-          await c.query(`UPDATE representatives SET car_fill_at = now() WHERE id = $1`, [id]);
         }
 
         await c.query("COMMIT");
@@ -1751,10 +1781,118 @@ router.put(
         c.release();
       }
       const { rows } = await query(
-        `SELECT product_id, quantity FROM representative_inventory WHERE representative_id = $1`,
+        `SELECT product_id, quantity, last_fill_quantity FROM representative_inventory WHERE representative_id = $1`,
         [id]
       );
-      res.json({ inventory: rows, salesReset });
+      res.json({ inventory: rows });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+router.post(
+  "/representatives/:id/sales-reset",
+  adminAuthMiddleware,
+  requireAnyAdminPermission("fill_car.write", "reps.write"),
+  async (req, res, next) => {
+    try {
+      const id = z.coerce.number().int().positive().parse(req.params.id);
+      const { rowCount } = await query(`UPDATE representatives SET car_fill_at = now() WHERE id = $1`, [id]);
+      if (!rowCount) throw new HttpError(404, "المندوب غير موجود");
+      res.json({ ok: true, carFillAt: new Date().toISOString() });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+const externalSaleLineSchema = z.object({
+  productId: z.number().int().positive(),
+  quantity: z.number().int().positive(),
+});
+
+const externalSalePostSchema = z.object({
+  paymentType: z.enum(["cash", "deferred"]),
+  note: z.string().max(500).optional(),
+  lines: z.array(externalSaleLineSchema).min(1),
+});
+
+router.post(
+  "/representatives/:id/external-sales",
+  adminAuthMiddleware,
+  requireAnyAdminPermission("fill_car.write", "reps.write"),
+  async (req, res, next) => {
+    try {
+      const id = z.coerce.number().int().positive().parse(req.params.id);
+      const body = externalSalePostSchema.parse(req.body);
+      const adminId = req.admin!.id;
+
+      const repCheck = await query(`SELECT id FROM representatives WHERE id = $1`, [id]);
+      if (!repCheck.rows[0]) throw new HttpError(404, "المندوب غير موجود");
+
+      const c = await pool.connect();
+      try {
+        await c.query("BEGIN");
+        const priced: { productId: number; quantity: number; unitPrice: number; lineTotal: number }[] = [];
+        let total = 0;
+        for (const line of body.lines) {
+          const { rows: prodRows } = await c.query<{
+            id: number;
+            unit_price: string;
+          }>(
+            `SELECT p.id, COALESCE(ri.price, p.price)::text AS unit_price
+             FROM products p
+             LEFT JOIN representative_inventory ri
+               ON ri.product_id = p.id AND ri.representative_id = $1
+             WHERE p.id = $2 AND p.is_active = true`,
+            [id, line.productId]
+          );
+          const p = prodRows[0];
+          if (!p) throw new HttpError(400, "منتج غير صالح");
+          const unitPrice = parseFloat(p.unit_price);
+          if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+            throw new HttpError(400, "سعر المنتج غير صالح");
+          }
+          const lineTotal = unitPrice * line.quantity;
+          total += lineTotal;
+          priced.push({
+            productId: line.productId,
+            quantity: line.quantity,
+            unitPrice,
+            lineTotal,
+          });
+        }
+
+        const sale = await c.query<{ id: string }>(
+          `INSERT INTO external_sales
+             (representative_id, payment_type, total_amount, note, recorded_by_admin_id)
+           VALUES ($1, $2, $3, $4, $5)
+           RETURNING id`,
+          [id, body.paymentType, total.toFixed(2), body.note?.trim() || null, adminId]
+        );
+        const saleId = sale.rows[0]!.id;
+        for (const line of priced) {
+          await c.query(
+            `INSERT INTO external_sale_lines
+               (external_sale_id, product_id, quantity, unit_price, line_total)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [saleId, line.productId, line.quantity, line.unitPrice.toFixed(2), line.lineTotal.toFixed(2)]
+          );
+        }
+        await c.query("COMMIT");
+        res.status(201).json({
+          id: saleId,
+          totalAmount: total.toFixed(2),
+          paymentType: body.paymentType,
+          lines: priced,
+        });
+      } catch (e) {
+        await c.query("ROLLBACK");
+        throw e;
+      } finally {
+        c.release();
+      }
     } catch (e) {
       next(e);
     }

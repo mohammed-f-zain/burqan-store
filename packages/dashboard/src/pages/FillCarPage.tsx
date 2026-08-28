@@ -7,9 +7,11 @@ import TableFilterBar from "../components/TableFilterBar";
 import { useTableFilters } from "../hooks/useTableFilters";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
+import { toMarketDateString } from "../lib/filterTableRows";
 import { mediaUrl } from "../lib/mediaUrl";
-import { confirmSave } from "../lib/swalConfirm";
+import { confirmDanger, confirmSave } from "../lib/swalConfirm";
 import { toastError, toastSuccess } from "../lib/toast";
+import { ownerFormatMoney } from "../owner/ownerFormat";
 
 type Rep = { id: number; full_name: string; email: string; is_active: boolean };
 type SalesLine = { product_id: number; product_name: string; quantity: number; line_total: string };
@@ -21,33 +23,38 @@ type InvRow = {
   catalog_price?: string;
   rep_price?: string | null;
   quantity: number;
+  last_fill_quantity?: number;
   designation?: string | null;
   image_url?: string | null;
 };
 
-function todayLocal(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
 export default function FillCarPage() {
   const [searchParams] = useSearchParams();
-  const { can } = useAuth();
+  const { me, can } = useAuth();
   const { t } = useLocale();
   const canRead = can("fill_car.read") || can("reps.read");
   const canWrite = can("fill_car.write") || can("reps.write");
+  const canExternalSales = Boolean(me) && canWrite;
 
-  const [date, setDate] = useState(todayLocal);
+  const [date, setDate] = useState(() => toMarketDateString(new Date()));
   const [salesReps, setSalesReps] = useState<RepSales[]>([]);
   const [repId, setRepId] = useState("");
   const [inventory, setInventory] = useState<InvRow[]>([]);
   const [salesLoading, setSalesLoading] = useState(false);
   const [invLoading, setInvLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [baselineQty, setBaselineQty] = useState<Record<number, number>>({});
+  const [extOpen, setExtOpen] = useState(false);
+  const [extSaving, setExtSaving] = useState(false);
+  const [extPay, setExtPay] = useState<"cash" | "deferred">("cash");
+  const [extNote, setExtNote] = useState("");
+  const [extQty, setExtQty] = useState<Record<number, string>>({});
+
+  const todayAmman = toMarketDateString(new Date());
+  const viewingToday = date === todayAmman;
+  const currency = t.overview.currency;
+  const money = (n: string | number) => ownerFormatMoney(typeof n === "number" ? n : parseFloat(n) || 0, currency);
 
   const loadSales = useCallback(async () => {
     if (!canRead) return;
@@ -186,20 +193,77 @@ export default function FillCarPage() {
     if (!ok) return;
     setSaving(true);
     try {
-      const { data } = await api.put<{ salesReset?: boolean }>(`/representatives/${repId}/inventory`, {
+      await api.put(`/representatives/${repId}/inventory`, {
         items: inventory.map((row) => ({
           productId: row.product_id,
           quantity: row.quantity,
           price: parseRepPriceForSave(row),
         })),
       });
-      setBaselineQty(Object.fromEntries(inventory.map((row) => [row.product_id, row.quantity])));
+      const { data } = await api.get<{ inventory: InvRow[] }>(`/representatives/${repId}/inventory`);
+      const inv = data.inventory ?? [];
+      setInventory(inv);
+      setBaselineQty(Object.fromEntries(inv.map((row) => [row.product_id, row.quantity])));
       await loadSales();
-      toastSuccess(data.salesReset ? t.fillCar.savedWithSalesReset : t.fillCar.saved);
+      toastSuccess(t.fillCar.saved);
     } catch (e) {
       toastError(pickAxiosErrorMessage(e, t.fillCar.saveFailed));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function resetSales() {
+    if (!canWrite || !repId || !viewingToday) return;
+    const ok = await confirmDanger({
+      title: t.fillCar.resetSalesConfirmTitle,
+      text: t.fillCar.resetSalesConfirmText,
+      confirmText: t.fillCar.resetSales,
+      cancelText: t.fillCar.cancelSave,
+    });
+    if (!ok) return;
+    setResetting(true);
+    try {
+      await api.post(`/representatives/${repId}/sales-reset`);
+      await loadSales();
+      toastSuccess(t.fillCar.resetSalesDone);
+    } catch (e) {
+      toastError(pickAxiosErrorMessage(e, t.fillCar.resetSalesFailed));
+    } finally {
+      setResetting(false);
+    }
+  }
+
+  function openExternalSales() {
+    setExtQty({});
+    setExtPay("cash");
+    setExtNote("");
+    setExtOpen(true);
+  }
+
+  async function submitExternalSales() {
+    if (!canExternalSales || !repId) return;
+    const lines = Object.entries(extQty)
+      .map(([productId, raw]) => ({ productId: Number(productId), quantity: parseInt(raw, 10) }))
+      .filter((l) => Number.isFinite(l.productId) && Number.isFinite(l.quantity) && l.quantity > 0);
+    if (lines.length === 0) {
+      toastError(t.fillCar.externalSalesEmpty);
+      return;
+    }
+    setExtSaving(true);
+    try {
+      await api.post(`/representatives/${repId}/external-sales`, {
+        paymentType: extPay,
+        note: extNote.trim() || undefined,
+        lines,
+      });
+      setExtOpen(false);
+      await loadSales();
+      toastSuccess(t.fillCar.externalSalesSaved);
+    } catch (e) {
+      toastError(pickAxiosErrorMessage(e, t.fillCar.externalSalesFailed));
+    } finally {
+      setExtSaving(false);
     }
   }
 
@@ -266,7 +330,7 @@ export default function FillCarPage() {
                       <div className="muted small">{r.email}</div>
                     </td>
                     <td>{r.order_count}</td>
-                    <td>{r.total_sales}</td>
+                    <td>{money(r.total_sales)}</td>
                     <td>{r.is_active ? t.reps.active : t.reps.disabled}</td>
                   </tr>
                 ))}
@@ -289,9 +353,28 @@ export default function FillCarPage() {
             </div>
             <div className="stat-pill">
               <span className="muted small">{t.fillCar.colSold}</span>
-              <strong>{selected.total_sales}</strong>
+              <strong>{money(selected.total_sales)}</strong>
             </div>
           </div>
+          {(canWrite && (viewingToday || canExternalSales)) && (
+            <div className="fill-car-rep-actions">
+              {viewingToday && (
+                <button
+                  type="button"
+                  className="ghost danger"
+                  disabled={resetting || salesLoading}
+                  onClick={() => void resetSales()}
+                >
+                  {resetting ? t.common.loading : t.fillCar.resetSales}
+                </button>
+              )}
+              {canExternalSales && (
+                <button type="button" className="secondary" onClick={openExternalSales}>
+                  {t.fillCar.externalSales}
+                </button>
+              )}
+            </div>
+          )}
 
           <h4 className="strong" style={{ marginTop: 20 }}>
             {t.fillCar.soldThatDay}
@@ -322,7 +405,7 @@ export default function FillCarPage() {
                     <tr key={l.product_id}>
                       <td>{l.product_name}</td>
                       <td>{l.quantity}</td>
-                      <td>{l.line_total}</td>
+                      <td>{money(l.line_total)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -443,6 +526,9 @@ export default function FillCarPage() {
                       ) : null}
                     </p>
                     <p className="muted small">
+                      {t.fillCar.lastFillQty}: {row.last_fill_quantity ?? 0}
+                    </p>
+                    <p className="muted small">
                       {t.fillCar.onCar}:{" "}
                       {canWrite ? (
                         <input
@@ -482,6 +568,79 @@ export default function FillCarPage() {
             </button>
           )}
           {!canWrite && <p className="muted small">{t.fillCar.readOnly}</p>}
+        </div>
+      )}
+
+      {extOpen && selected && (
+        <div className="modal-backdrop" onClick={() => !extSaving && setExtOpen(false)} role="presentation">
+          <div className="modal card wide" onClick={(e) => e.stopPropagation()} role="dialog">
+            <h3>{t.fillCar.externalSales}</h3>
+            <p className="muted small">{t.fillCar.externalSalesHint}</p>
+            <p className="muted small">
+              {t.fillCar.selectedRep}: {selected.full_name}
+            </p>
+            <form
+              className="form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void submitExternalSales();
+              }}
+            >
+              <label>
+                {t.fillCar.externalSalesPay}
+                <select value={extPay} onChange={(e) => setExtPay(e.target.value as "cash" | "deferred")}>
+                  <option value="cash">{t.overview.payCash}</option>
+                  <option value="deferred">{t.overview.payDeferred}</option>
+                </select>
+              </label>
+              <label>
+                {t.fillCar.externalSalesNote}
+                <input value={extNote} onChange={(e) => setExtNote(e.target.value)} maxLength={500} />
+              </label>
+              <div className="fill-car-ext-lines">
+                {inventory.map((row) => (
+                  <label key={row.product_id} className="fill-car-ext-line">
+                    <span>
+                      <strong>{row.name}</strong>
+                      <span className="muted small"> · {money(row.price)}</span>
+                    </span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={extQty[row.product_id] ?? ""}
+                      placeholder="0"
+                      onChange={(e) =>
+                        setExtQty((prev) => ({ ...prev, [row.product_id]: e.target.value }))
+                      }
+                    />
+                  </label>
+                ))}
+              </div>
+              <p className="strong">
+                {t.fillCar.colSold}:{" "}
+                {money(
+                  inventory.reduce((sum, row) => {
+                    const q = parseInt(extQty[row.product_id] || "0", 10);
+                    if (!Number.isFinite(q) || q <= 0) return sum;
+                    return sum + q * (parseFloat(row.price) || 0);
+                  }, 0)
+                )}
+              </p>
+              <div className="row spread">
+                <button
+                  type="button"
+                  className="ghost"
+                  disabled={extSaving}
+                  onClick={() => setExtOpen(false)}
+                >
+                  {t.fillCar.externalSalesCancel}
+                </button>
+                <button type="submit" className="primary" disabled={extSaving}>
+                  {extSaving ? t.fillCar.externalSalesSaving : t.fillCar.externalSalesSubmit}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

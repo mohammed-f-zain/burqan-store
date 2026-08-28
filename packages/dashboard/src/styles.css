@@ -1595,6 +1595,34 @@ html[data-theme="dark"] .orders-page-tab--on {
   margin-bottom: 4px;
 }
 
+.fill-car-rep-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.fill-car-ext-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 320px;
+  overflow: auto;
+  padding: 4px 0;
+}
+
+.fill-car-ext-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.fill-car-ext-line input {
+  width: 88px;
+  flex-shrink: 0;
+}
+
 .fill-car-price-row {
   display: flex;
   flex-wrap: wrap;
