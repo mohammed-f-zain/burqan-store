@@ -2,7 +2,7 @@ import { useEffect } from "react";
 
 import LoyaltyBadge from "./LoyaltyBadge";
 import { mediaUrl } from "../lib/mediaUrl";
-import { ownerFormatMoney } from "../owner/ownerFormat";
+import { formatLatinNumber, ownerFormatMoney } from "../owner/ownerFormat";
 import type { ar } from "../i18n/ar";
 
 export type OwnerCatalogProduct = {
@@ -30,7 +30,7 @@ function formatWeight(value: string | number | null | undefined): string | null 
   if (value == null || String(value).trim() === "") return null;
   const n = parseFloat(String(value));
   if (Number.isNaN(n)) return String(value);
-  return n.toLocaleString("ar-JO", { maximumFractionDigits: 3 });
+  return formatLatinNumber(n, { maximumFractionDigits: 3 });
 }
 
 export default function OwnerProductDetailSheet({ product, strings: o, onClose }: Props) {

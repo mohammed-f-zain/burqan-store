@@ -147,6 +147,7 @@ export default function OverviewPage() {
         month: "long",
         day: "numeric",
         timeZone: "Asia/Amman",
+        numberingSystem: "latn",
       }).format(new Date()),
     [locale]
   );
@@ -157,6 +158,7 @@ export default function OverviewPage() {
       day: "numeric",
       month: "short",
       timeZone: "Asia/Amman",
+      numberingSystem: "latn",
     }).format(new Date(`${date}T12:00:00`));
 
   function formatDelta(current: number, previous: number): { text: string; up: boolean } | null {

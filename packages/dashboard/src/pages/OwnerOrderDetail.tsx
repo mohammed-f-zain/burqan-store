@@ -7,6 +7,7 @@ import { ar } from "../i18n/ar";
 import { mediaUrl } from "../lib/mediaUrl";
 import { useOwnerArabic } from "../owner/useOwnerArabic";
 import { formatMarketDateTime } from "../utils/formatMarketDateTime";
+import { ownerFormatMoney } from "../owner/ownerFormat";
 import { publicApi } from "../publicApi";
 
 type OrderDetail = {
@@ -30,10 +31,6 @@ type OrderDetail = {
   }[];
   loyaltyPointsEarned?: number;
 };
-
-function formatMoney(n: number, currency: string) {
-  return `${n.toLocaleString("ar-JO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
-}
 
 export default function OwnerOrderDetail() {
   const { orderId } = useParams<{ orderId: string }>();
@@ -119,7 +116,7 @@ export default function OwnerOrderDetail() {
               {isCash ? o.payCash : o.payDeferred}
             </span>
           </div>
-          <p className="owner-detail-total">{formatMoney(order.totalAmount, o.currency)}</p>
+          <p className="owner-detail-total">{ownerFormatMoney(order.totalAmount, o.currency)}</p>
         </section>
 
         <section className="owner-detail-rep">
@@ -156,11 +153,11 @@ export default function OwnerOrderDetail() {
                     {line.designation ? <p className="owner-line-desc">{line.designation}</p> : null}
                     {line.unitLabel ? <p className="owner-line-unit">{line.unitLabel}</p> : null}
                     <p className="owner-line-qty">
-                      {o.lineQty(line.quantity)} × {formatMoney(line.unitPrice, o.currency)}
+                      {o.lineQty(line.quantity)} × {ownerFormatMoney(line.unitPrice, o.currency)}
                     </p>
                   </div>
                   <div className="owner-line-end">
-                    <p className="owner-line-total">{formatMoney(line.lineTotal, o.currency)}</p>
+                    <p className="owner-line-total">{ownerFormatMoney(line.lineTotal, o.currency)}</p>
                     {line.loyaltyPointsEarned > 0 ? (
                       <LoyaltyBadge
                         text={o.loyaltyLinePoints(line.loyaltyPointsEarned)}
@@ -175,7 +172,7 @@ export default function OwnerOrderDetail() {
           </ul>
           <div className="owner-detail-sum">
             <span>{o.orderTotal}</span>
-            <strong>{formatMoney(order.totalAmount, o.currency)}</strong>
+            <strong>{ownerFormatMoney(order.totalAmount, o.currency)}</strong>
           </div>
           {(order.loyaltyPointsEarned ?? 0) > 0 ? (
             <div className="owner-detail-sum owner-detail-sum--loyalty">
