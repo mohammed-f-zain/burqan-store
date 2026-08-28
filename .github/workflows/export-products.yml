@@ -1,0 +1,52 @@
+name: Export Burqan products (Odoo mapping)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check secrets
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          ok=0
+          [[ -n "$VPS_HOST" ]] || { echo "::error::Missing VPS_HOST"; ok=1; }
+          [[ -n "$VPS_USER" ]] || { echo "::error::Missing VPS_USER"; ok=1; }
+          [[ -n "$VPS_SSH_KEY" ]] || { echo "::error::Missing VPS_SSH_KEY"; ok=1; }
+          [[ -n "$DEPLOY_PATH" ]] || { echo "::error::Missing DEPLOY_PATH"; ok=1; }
+          exit "$ok"
+
+      - name: Export products from production DB
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          timeout: 60s
+          command_timeout: 2m
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.DEPLOY_PATH }}"
+            DB_URL=""
+            if [[ -f /root/.burqan-db-url ]]; then
+              DB_URL="$(cat /root/.burqan-db-url)"
+            elif [[ -f packages/api/.env ]]; then
+              DB_URL="$(grep -E '^DATABASE_URL=' packages/api/.env | head -1 | cut -d= -f2-)"
+            fi
+            if [[ -z "$DB_URL" ]]; then
+              echo "::error::DATABASE_URL not found"
+              exit 1
+            fi
+            echo "=== Burqan products (id | name | price | active) ==="
+            psql "$DB_URL" -P pager=off -c \
+              "SELECT id, name, price::text AS price, is_active FROM products ORDER BY id;"
+            echo ""
+            echo "=== Active only (for Odoo x_integration_id mapping) ==="
+            psql "$DB_URL" -P pager=off -t -A -F $'\t' -c \
+              "SELECT id, name, price::text FROM products WHERE is_active = true ORDER BY id;"

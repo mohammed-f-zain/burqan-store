@@ -24,6 +24,7 @@
     "create-super-admin": "tsx src/scripts/create-super-admin.ts",
     "migrate:auth": "tsx src/scripts/migrate-auth.ts",
     "migrate:all": "tsx src/scripts/migrate-all.ts",
+    "export-products": "tsx src/scripts/export-products.ts",
     "test": "tsx --test src/utils/geoPick.test.ts"
   },
   "dependencies": {
