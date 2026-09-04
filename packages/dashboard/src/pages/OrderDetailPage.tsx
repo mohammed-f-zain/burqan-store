@@ -14,13 +14,15 @@ import { formatMarketDateTime } from "../utils/formatMarketDateTime";
 
 type OrderDetail = {
   id: string;
+  source?: "store" | "external";
   representative_id: number;
-  store_id: number;
+  store_id: number | null;
   store_name: string;
   rep_name: string;
   payment_type: string;
   total_amount: string;
   created_at: string;
+  note?: string | null;
   lines: { productId: number; quantity: number; unitPrice: string; lineTotal: string; productName: string }[];
 };
 
@@ -124,10 +126,23 @@ export default function OrderDetailPage() {
           <div>
             <dt className="muted small">{t.orders.colStore}</dt>
             <dd>
-              <Link to={`/app/stores/${order.store_id}`} className="linkish">
-                {order.store_name}
-              </Link>
+              {order.source === "external" || order.store_id == null ? (
+                <>
+                  {order.store_name}
+                  <span className="muted small" style={{ display: "block", marginTop: 4 }}>
+                    {t.orders.externalStoreHint}
+                  </span>
+                </>
+              ) : (
+                <Link to={`/app/stores/${order.store_id}`} className="linkish">
+                  {order.store_name}
+                </Link>
+              )}
             </dd>
+          </div>
+          <div>
+            <dt className="muted small">{t.orders.colSource}</dt>
+            <dd>{order.source === "external" ? t.orders.sourceExternal : t.orders.sourceStore}</dd>
           </div>
           <div>
             <dt className="muted small">{t.orders.colRep}</dt>
@@ -145,6 +160,12 @@ export default function OrderDetailPage() {
             <dt className="muted small">{t.orders.colWhen}</dt>
             <dd>{formatMarketDateTime(order.created_at)}</dd>
           </div>
+          {order.note ? (
+            <div>
+              <dt className="muted small">{t.orders.note}</dt>
+              <dd>{order.note}</dd>
+            </div>
+          ) : null}
         </dl>
 
         <h3 className="strong" style={{ marginTop: 24 }}>

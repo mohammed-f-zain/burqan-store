@@ -18,8 +18,9 @@ type PageTab = "sales" | "redemptions";
 
 type OrderRow = {
   id: string;
+  source?: "store" | "external";
   representative_id: number;
-  store_id: number;
+  store_id: number | null;
   store_name: string;
   rep_name: string;
   payment_type: string;
@@ -85,10 +86,25 @@ export default function OrdersPage() {
     [t.overview.payCash, t.overview.payDeferred]
   );
 
+  const sourceOptions = useMemo(
+    () => [
+      { value: "store", label: t.orders.sourceStore },
+      { value: "external", label: t.orders.sourceExternal },
+    ],
+    [t.orders.sourceExternal, t.orders.sourceStore]
+  );
+
   const orderFilterFields = useMemo(
     () => [
       { id: "id", label: t.orders.colId, type: "text" as const, getValue: (o: OrderRow) => o.id },
       { id: "store", label: t.orders.colStore, type: "text" as const, getValue: (o: OrderRow) => o.store_name },
+      {
+        id: "source",
+        label: t.orders.colSource,
+        type: "select" as const,
+        getValue: (o: OrderRow) => o.source ?? "store",
+        options: sourceOptions,
+      },
       {
         id: "rep",
         label: t.orders.colRep,
@@ -120,8 +136,10 @@ export default function OrdersPage() {
     [
       paymentTypeOptions,
       repFilterOptions,
+      sourceOptions,
       t.orders.colId,
       t.orders.colRep,
+      t.orders.colSource,
       t.orders.colStore,
       t.orders.colTotal,
       t.orders.colType,
@@ -137,6 +155,7 @@ export default function OrdersPage() {
       "rep_name",
       "payment_type",
       "total_amount",
+      (o) => o.source ?? "store",
       (o) => formatMarketDateTime(o.created_at),
     ],
     fields: orderFilterFields,
@@ -384,6 +403,7 @@ export default function OrdersPage() {
                   <tr>
                     <th>{t.orders.colId}</th>
                     <th>{t.orders.colStore}</th>
+                    <th>{t.orders.colSource}</th>
                     <th>{t.orders.colRep}</th>
                     <th>{t.orders.colType}</th>
                     <th>{t.orders.colTotal}</th>
@@ -408,6 +428,7 @@ export default function OrdersPage() {
                     >
                       <td className="strong">#{o.id}</td>
                       <td>{o.store_name}</td>
+                      <td>{(o.source ?? "store") === "external" ? t.orders.sourceExternal : t.orders.sourceStore}</td>
                       <td>{o.rep_name}</td>
                       <td>{paymentTypeLabel(o.payment_type)}</td>
                       <td>{formatMoney(parseFloat(o.total_amount) || 0)}</td>

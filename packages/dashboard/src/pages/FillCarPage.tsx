@@ -53,6 +53,7 @@ export default function FillCarPage() {
   const [extSaving, setExtSaving] = useState(false);
   const [extPay, setExtPay] = useState<"cash" | "deferred">("cash");
   const [extNote, setExtNote] = useState("");
+  const [extStoreName, setExtStoreName] = useState("");
   const [extQty, setExtQty] = useState<Record<number, string>>({});
 
   const todayAmman = toMarketDateString(new Date());
@@ -242,11 +243,17 @@ export default function FillCarPage() {
     setExtQty({});
     setExtPay("cash");
     setExtNote("");
+    setExtStoreName("");
     setExtOpen(true);
   }
 
   async function submitExternalSales() {
     if (!canExternalSales || !repId) return;
+    const storeName = extStoreName.trim();
+    if (!storeName) {
+      toastError(t.fillCar.externalSalesStoreNameRequired);
+      return;
+    }
     const lines = Object.entries(extQty)
       .map(([productId, raw]) => ({ productId: Number(productId), quantity: parseInt(raw, 10) }))
       .filter((l) => Number.isFinite(l.productId) && Number.isFinite(l.quantity) && l.quantity > 0);
@@ -258,6 +265,7 @@ export default function FillCarPage() {
     try {
       await api.post(`/representatives/${repId}/external-sales`, {
         paymentType: extPay,
+        storeName,
         note: extNote.trim() || undefined,
         lines,
       });
@@ -590,6 +598,16 @@ export default function FillCarPage() {
                 void submitExternalSales();
               }}
             >
+              <label>
+                {t.fillCar.externalSalesStoreName}
+                <input
+                  value={extStoreName}
+                  onChange={(e) => setExtStoreName(e.target.value)}
+                  maxLength={200}
+                  required
+                  placeholder={t.fillCar.externalSalesStoreNameHint}
+                />
+              </label>
               <label>
                 {t.fillCar.externalSalesPay}
                 <select value={extPay} onChange={(e) => setExtPay(e.target.value as "cash" | "deferred")}>

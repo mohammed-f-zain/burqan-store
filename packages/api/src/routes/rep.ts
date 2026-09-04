@@ -1726,6 +1726,7 @@ router.post("/orders", repAuthMiddleware, async (req, res, next) => {
       await c.query("COMMIT");
       notifyOdooSaleCompleted({
         event: "sale.completed",
+        source: "store",
         orderId: String(orderId),
         occurredAt: createdAt.toISOString(),
         occurredAtAmman: formatAmmanDateTime(createdAt),

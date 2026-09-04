@@ -32,8 +32,23 @@ import { importGooglePlaces } from "../utils/importGooglePlaces.js";
 import { isGooglePlacesEnabled } from "../utils/googlePlaces.js";
 import { GOVERNORATE_AREA_SUFFIX } from "../utils/matchAreaFromGoogle.js";
 import { getLoyaltyExpiryDays, getLoyaltyPeriodAudit, syncLoyaltyPeriodsFromFirstPurchase } from "../utils/loyaltyExpiry.js";
+import { formatAmmanDateTime, notifyOdooSaleCompleted } from "../utils/odooWebhook.js";
 
 const router = Router();
+
+function externalOrderPublicId(id: string | number): string {
+  return `ext-${id}`;
+}
+
+function parseOrderRouteId(raw: string): { source: "store" | "external"; id: number } | null {
+  const value = raw.trim();
+  if (/^ext-\d+$/i.test(value)) {
+    const id = Number(value.slice(4));
+    return Number.isInteger(id) && id > 0 ? { source: "external", id } : null;
+  }
+  const id = Number(value);
+  return Number.isInteger(id) && id > 0 ? { source: "store", id } : null;
+}
 
 /** URL-safe role slug: lowercase, a-z, 0-9, hyphens only. */
 function normalizeRoleSlug(input: string): string {
@@ -1812,6 +1827,8 @@ const externalSaleLineSchema = z.object({
 
 const externalSalePostSchema = z.object({
   paymentType: z.enum(["cash", "deferred"]),
+  /** Free-text label only — not linked to the stores table. */
+  storeName: z.string().trim().min(1).max(200),
   note: z.string().max(500).optional(),
   lines: z.array(externalSaleLineSchema).min(1),
 });
@@ -1825,21 +1842,34 @@ router.post(
       const id = z.coerce.number().int().positive().parse(req.params.id);
       const body = externalSalePostSchema.parse(req.body);
       const adminId = req.admin!.id;
+      const storeName = body.storeName.trim();
 
-      const repCheck = await query(`SELECT id FROM representatives WHERE id = $1`, [id]);
-      if (!repCheck.rows[0]) throw new HttpError(404, "المندوب غير موجود");
+      const { rows: repRows } = await query<{
+        id: number;
+        full_name: string;
+        email: string;
+      }>(`SELECT id, full_name, email FROM representatives WHERE id = $1`, [id]);
+      const rep = repRows[0];
+      if (!rep) throw new HttpError(404, "المندوب غير موجود");
 
       const c = await pool.connect();
       try {
         await c.query("BEGIN");
-        const priced: { productId: number; quantity: number; unitPrice: number; lineTotal: number }[] = [];
+        const priced: {
+          productId: number;
+          productName: string;
+          quantity: number;
+          unitPrice: number;
+          lineTotal: number;
+        }[] = [];
         let total = 0;
         for (const line of body.lines) {
           const { rows: prodRows } = await c.query<{
             id: number;
+            name: string;
             unit_price: string;
           }>(
-            `SELECT p.id, COALESCE(ri.price, p.price)::text AS unit_price
+            `SELECT p.id, p.name, COALESCE(ri.price, p.price)::text AS unit_price
              FROM products p
              LEFT JOIN representative_inventory ri
                ON ri.product_id = p.id AND ri.representative_id = $1
@@ -1856,20 +1886,22 @@ router.post(
           total += lineTotal;
           priced.push({
             productId: line.productId,
+            productName: p.name,
             quantity: line.quantity,
             unitPrice,
             lineTotal,
           });
         }
 
-        const sale = await c.query<{ id: string }>(
+        const sale = await c.query<{ id: string; created_at: Date }>(
           `INSERT INTO external_sales
-             (representative_id, payment_type, total_amount, note, recorded_by_admin_id)
-           VALUES ($1, $2, $3, $4, $5)
-           RETURNING id`,
-          [id, body.paymentType, total.toFixed(2), body.note?.trim() || null, adminId]
+             (representative_id, payment_type, total_amount, note, recorded_by_admin_id, store_name)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           RETURNING id, created_at`,
+          [id, body.paymentType, total.toFixed(2), body.note?.trim() || null, adminId, storeName]
         );
         const saleId = sale.rows[0]!.id;
+        const createdAt = new Date(sale.rows[0]!.created_at);
         for (const line of priced) {
           await c.query(
             `INSERT INTO external_sale_lines
@@ -1879,8 +1911,35 @@ router.post(
           );
         }
         await c.query("COMMIT");
+        notifyOdooSaleCompleted({
+          event: "sale.completed",
+          source: "external",
+          orderId: externalOrderPublicId(saleId),
+          occurredAt: createdAt.toISOString(),
+          occurredAtAmman: formatAmmanDateTime(createdAt),
+          paymentType: body.paymentType,
+          store: {
+            id: null,
+            name: storeName,
+            phone: null,
+          },
+          representative: {
+            id: rep.id,
+            name: rep.full_name,
+            email: rep.email,
+          },
+          lines: priced.map((l) => ({
+            productId: l.productId,
+            productName: l.productName,
+            quantity: l.quantity,
+            unitPrice: l.unitPrice,
+            lineTotal: l.lineTotal,
+          })),
+          totalAmount: total,
+        });
         res.status(201).json({
-          id: saleId,
+          id: externalOrderPublicId(saleId),
+          storeName,
           totalAmount: total.toFixed(2),
           paymentType: body.paymentType,
           lines: priced,
@@ -2756,23 +2815,35 @@ router.get(
       const monthStart = `date_trunc('month', timezone('Asia/Amman', now()))`;
 
       const [ordersResult, summaryResult] = await Promise.all([
-        query(
-          storeId
-            ? `SELECT o.id, o.representative_id, o.store_id, o.payment_type, o.total_amount, o.created_at,
+        storeId
+          ? query(
+              `SELECT o.id::text AS id, 'store'::text AS source, o.representative_id, o.store_id,
+                      o.payment_type, o.total_amount, o.created_at,
                       s.name AS store_name, r.full_name AS rep_name
                FROM orders o
                INNER JOIN stores s ON s.id = o.store_id
                INNER JOIN representatives r ON r.id = o.representative_id
                WHERE o.store_id = $1
-               ORDER BY o.id DESC`
-            : `SELECT o.id, o.representative_id, o.store_id, o.payment_type, o.total_amount, o.created_at,
-                      s.name AS store_name, r.full_name AS rep_name
-               FROM orders o
-               INNER JOIN stores s ON s.id = o.store_id
-               INNER JOIN representatives r ON r.id = o.representative_id
-               ORDER BY o.id DESC`,
-          storeId ? [storeId] : []
-        ),
+               ORDER BY o.created_at DESC, o.id DESC`,
+              [storeId]
+            )
+          : query(
+              `SELECT * FROM (
+                 SELECT o.id::text AS id, 'store'::text AS source, o.representative_id, o.store_id,
+                        o.payment_type, o.total_amount, o.created_at,
+                        s.name AS store_name, r.full_name AS rep_name
+                 FROM orders o
+                 INNER JOIN stores s ON s.id = o.store_id
+                 INNER JOIN representatives r ON r.id = o.representative_id
+                 UNION ALL
+                 SELECT ('ext-' || e.id::text) AS id, 'external'::text AS source, e.representative_id,
+                        NULL::int AS store_id, e.payment_type, e.total_amount, e.created_at,
+                        e.store_name, r.full_name AS rep_name
+                 FROM external_sales e
+                 INNER JOIN representatives r ON r.id = e.representative_id
+               ) x
+               ORDER BY x.created_at DESC, x.id DESC`
+            ),
         storeId
           ? query<{
               total_count: number;
@@ -2800,7 +2871,11 @@ router.get(
                  COALESCE(SUM(total_amount), 0)::text AS total_revenue,
                  COUNT(*) FILTER (WHERE created_at >= ${monthStart})::int AS month_count,
                  COALESCE(SUM(total_amount) FILTER (WHERE created_at >= ${monthStart}), 0)::text AS month_revenue
-               FROM orders`
+               FROM (
+                 SELECT total_amount, created_at FROM orders
+                 UNION ALL
+                 SELECT total_amount, created_at FROM external_sales
+               ) sales`
             ),
       ]);
 
@@ -2826,17 +2901,60 @@ router.get(
   requireAdminPermission("orders.read"),
   async (req, res, next) => {
     try {
-      const id = z.coerce.number().int().positive().parse(req.params.id);
+      const parsed = parseOrderRouteId(String(req.params.id ?? ""));
+      if (!parsed) throw new HttpError(400, "رقم الطلب غير صالح");
+
+      if (parsed.source === "external") {
+        const { rows } = await query<{
+          id: string;
+          representative_id: number;
+          store_id: number | null;
+          store_name: string;
+          rep_name: string;
+          payment_type: string;
+          total_amount: string;
+          created_at: Date;
+          note: string | null;
+          lines: unknown;
+        }>(
+          `SELECT ('ext-' || e.id::text) AS id, e.representative_id, NULL::int AS store_id,
+                  e.store_name, r.full_name AS rep_name, e.payment_type, e.total_amount, e.created_at,
+                  e.note,
+            COALESCE(
+              (SELECT json_agg(json_build_object(
+                'productId', el.product_id,
+                'quantity', el.quantity,
+                'unitPrice', el.unit_price,
+                'lineTotal', el.line_total,
+                'productName', p.name
+              ))
+              FROM external_sale_lines el
+              JOIN products p ON p.id = el.product_id
+              WHERE el.external_sale_id = e.id),
+              '[]'::json
+            ) AS lines
+           FROM external_sales e
+           INNER JOIN representatives r ON r.id = e.representative_id
+           WHERE e.id = $1`,
+          [parsed.id]
+        );
+        if (!rows[0]) throw new HttpError(404, "Order not found");
+        res.json({ order: { ...rows[0], source: "external" as const } });
+        return;
+      }
+
       const { rows } = await query<{
         id: string;
         representative_id: number;
         store_id: number;
+        store_name: string;
+        rep_name: string;
         payment_type: string;
         total_amount: string;
         created_at: Date;
         lines: unknown;
       }>(
-        `SELECT o.id, o.representative_id, o.store_id, o.payment_type, o.total_amount, o.created_at,
+        `SELECT o.id::text AS id, o.representative_id, o.store_id, o.payment_type, o.total_amount, o.created_at,
                 s.name AS store_name, r.full_name AS rep_name,
           COALESCE(
             (SELECT json_agg(json_build_object(
@@ -2855,10 +2973,10 @@ router.get(
          INNER JOIN stores s ON s.id = o.store_id
          INNER JOIN representatives r ON r.id = o.representative_id
          WHERE o.id = $1`,
-        [id]
+        [parsed.id]
       );
       if (!rows[0]) throw new HttpError(404, "Order not found");
-      res.json({ order: rows[0] });
+      res.json({ order: { ...rows[0], source: "store" as const, note: null } });
     } catch (e) {
       next(e);
     }
@@ -2871,20 +2989,32 @@ router.delete(
   requireAdminPermission("orders.delete"),
   async (req, res, next) => {
     try {
-      const id = z.coerce.number().int().positive().parse(req.params.id);
+      const parsed = parseOrderRouteId(String(req.params.id ?? ""));
+      if (!parsed) throw new HttpError(400, "رقم الطلب غير صالح");
+
+      if (parsed.source === "external") {
+        const { rows } = await query<{ id: string }>(
+          `DELETE FROM external_sales WHERE id = $1 RETURNING id`,
+          [parsed.id]
+        );
+        if (!rows[0]) throw new HttpError(404, "Order not found");
+        res.json({ deleted: true, id: externalOrderPublicId(rows[0].id) });
+        return;
+      }
+
       const c = await pool.connect();
       try {
         await c.query("BEGIN");
         const { rows: orderRows } = await c.query<{ id: string; representative_id: number }>(
           `SELECT id, representative_id FROM orders WHERE id = $1 FOR UPDATE`,
-          [id]
+          [parsed.id]
         );
         const order = orderRows[0];
         if (!order) throw new HttpError(404, "Order not found");
 
         const { rows: lines } = await c.query<{ product_id: number; quantity: number }>(
           `SELECT product_id, quantity FROM order_lines WHERE order_id = $1`,
-          [id]
+          [parsed.id]
         );
 
         for (const line of lines) {
@@ -2899,7 +3029,7 @@ router.delete(
           );
         }
 
-        await c.query(`DELETE FROM orders WHERE id = $1`, [id]);
+        await c.query(`DELETE FROM orders WHERE id = $1`, [parsed.id]);
         await c.query("COMMIT");
         res.json({ deleted: true, id: order.id });
       } catch (e) {

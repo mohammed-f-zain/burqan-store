@@ -13,17 +13,20 @@ export type OdooSaleLinePayload = {
   lineTotal: number;
 };
 
-/** POST body sent to Odoo when a rep completes a store sale. Field names are the contract. */
+/** POST body sent to Odoo when a sale is completed. Field names are the contract. */
 export type OdooSaleCompletedPayload = {
   event: "sale.completed";
+  /** "store" = rep app order linked to a real store; "external" = admin Fill Car external sale. */
+  source: "store" | "external";
   orderId: string;
   occurredAt: string;
   occurredAtAmman: string;
   paymentType: "cash" | "deferred";
   store: {
-    id: number;
+    /** Null for external sales (free-text name only, not a Burqan store row). */
+    id: number | null;
     name: string;
-    phone: string;
+    phone: string | null;
   };
   representative?: {
     id: number;
