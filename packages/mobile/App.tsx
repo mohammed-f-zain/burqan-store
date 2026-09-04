@@ -62,11 +62,6 @@ import DailyStoresByArea from "./DailyStoresByArea";
 import PossibleClientsSection from "./PossibleClientsSection";
 import RepZoneMapCard from "./RepZoneMapCard";
 import { dailyStoresToPins } from "./zoneMapTypes";
-import GooglePlacesByArea, { type GooglePlaceAreaSummary } from "./GooglePlacesByArea";
-import {
-  groupRawGooglePlacesByArea,
-  type RawGooglePlace,
-} from "./groupGooglePlacesByArea";
 import EndVisitModal, { type EndVisitReasonKind } from "./EndVisitModal";
 import EndVisitBar from "./EndVisitBar";
 import OrderInvoiceModal from "./OrderInvoiceModal";
@@ -246,23 +241,25 @@ const t = {
   dailyStoresVisited: "تمت زيارته",
   dailyStoresUnknownArea: "منطقة غير محددة",
   dailyStoresAreaCount: (n: number) => `${n} متجر`,
-  dailyStoresPendingCount: (n: number) => `${n} باقٍ`,
-  dailyStoresPending: "باقٍ",
+  dailyStoresPendingCount: (n: number) => `${n} لم تتم زيارته بعد`,
+  dailyStoresPending: "لم تتم زيارته بعد",
   dailyStoresSearchPlaceholder: "بحث عن متجر أو صاحب…",
   dailyStoresFilterAll: "الكل",
-  dailyStoresFilterPending: "باقي زيارات",
-  dailyStoresFilterDone: "تمت",
+  dailyStoresFilterPending: "لم تتم زيارته بعد",
+  dailyStoresFilterDone: "تمت زيارته",
   dailyStoresExpandAll: "فتح الكل",
   dailyStoresCollapseAll: "إغلاق الكل",
   dailyStoresNoSearchResults: "لا نتائج — جرّب بحثاً آخر",
   dailyStoresVisitQr: "زيارة",
+  dailyStoresLastVisit: (date: string) => `آخر زيارة: ${date}`,
+  dailyStoresLastVisitNever: "آخر زيارة: لا توجد",
   prospectsTitle: "عملاء محتملون",
   prospectsHint: "عملاء محتملون في مناطق مسار اليوم فقط",
   prospectsEmpty: "لا يوجد عملاء محتملون",
   prospectsAdd: "إضافة",
   prospectsLinkQr: "ربط رمز QR",
   prospectsVisited: "تمت زيارته",
-  prospectsPending: "باقٍ",
+  prospectsPending: "لم تتم زيارته بعد",
   prospectsSearch: "بحث…",
   prospectsPill: "محتمل",
   prospectsLoadMore: (n: number) => `عرض المزيد (${n})`,
@@ -288,20 +285,6 @@ const t = {
   prospectNotRegisterReasonRequired: "يرجى اختيار سبب أو كتابة سبب يدوي (حرفان على الأقل)",
   prospectCoords: "الإحداثيات",
   prospectMapFallback: "معاينة الخريطة غير متاحة — اضغط فتح على الخريطة",
-  navGoogle: "خرائط Google",
-  googleTabTitle: "سوبرماركت ومتاجر المنطقة",
-  googleTabHint: "نتائج البحث من Google Maps في مناطق عملك",
-  googleTabLazyHint: "اضغط على منطقة لتحميل متاجرها — أو ابحث بالاسم",
-  googleTabLoadingArea: "جاري التحميل…",
-  googleTabEmpty: "لا متاجر من Google في مناطقك بعد.",
-  googleTabNotReady:
-    "لم يُفعَّل استيراد Google على الخادم. اطلب من المشرف: migrate ثم استيراد من لوحة المتاجر.",
-  googleTabLoadFailed: "تعذّر تحميل متاجر Google — اسحب للتحديث",
-  googleTabSearchPlaceholder: "بحث عن متجر أو عنوان…",
-  googleTabPill: "Google",
-  googleTabOpenMaps: "فتح على الخريطة",
-  googleTabTruncated: (shown: number, total: number) =>
-    `عرض ${shown} من ${total} — استخدم البحث أو افتح منطقة محددة`,
   storeOwner: "صاحب المتجر",
   callStore: "اتصال بالمتجر",
   productsBadge: (n: number) => String(n),
@@ -370,7 +353,7 @@ type Area = { id: number; name: string };
 
 export type { StoreBrief } from "./storeTypes";
 
-type BottomTab = "home" | "route" | "google" | "inventory" | "store" | "profile";
+type BottomTab = "home" | "route" | "inventory" | "store" | "profile";
 function formatStoreLocation(
   store: Pick<StoreBrief, "addressText" | "areaName">,
   unknownLabel: string
@@ -494,12 +477,10 @@ export default function App() {
   const [cart, setCart] = useState<Record<number, number>>({});
   const [paymentType, setPaymentType] = useState<"cash" | "deferred">("cash");
   const [homeRefreshing, setHomeRefreshing] = useState(false);
-  const [googleRefreshing, setGoogleRefreshing] = useState(false);
   const [dailyStores, setDailyStores] = useState<DailyStoreCard[]>([]);
   const [prospects, setProspects] = useState<ProspectCard[]>([]);
   const [prospectsLoading, setProspectsLoading] = useState(false);
   const [convertingProspectId, setConvertingProspectId] = useState<number | null>(null);
-  const [googlePlacesReady, setGooglePlacesReady] = useState(true);
   const [dailyStoresLoading, setDailyStoresLoading] = useState(false);
   const [dailyMeta, setDailyMeta] = useState<{
     zoneName?: string;
@@ -507,15 +488,6 @@ export default function App() {
     message?: string;
     nearestFirst?: boolean;
   } | null>(null);
-  const [googlePlacesLoading, setGooglePlacesLoading] = useState(false);
-  const [googlePlacesTotal, setGooglePlacesTotal] = useState(0);
-  const [googleAreaSummaries, setGoogleAreaSummaries] = useState<GooglePlaceAreaSummary[]>([]);
-  const [googlePlacesByArea, setGooglePlacesByArea] = useState<Record<number, DailyStoreCard[]>>({});
-  const [googleAreaLoading, setGoogleAreaLoading] = useState<Record<number, boolean>>({});
-  const [googleSearchResults, setGoogleSearchResults] = useState<DailyStoreCard[] | null>(null);
-  const [googleSearchLoading, setGoogleSearchLoading] = useState(false);
-  const [googleLazyApi, setGoogleLazyApi] = useState(true);
-  const googleRawByAreaRef = useRef<Record<number, RawGooglePlace[]>>({});
   const [peekStore, setPeekStore] = useState<DailyStoreCard | null>(null);
   const [peekProspect, setPeekProspect] = useState<ProspectCard | null>(null);
   const [prospectReasonSaving, setProspectReasonSaving] = useState(false);
@@ -674,35 +646,6 @@ export default function App() {
 
   const zoneStorePins = useMemo(() => dailyStoresToPins(dailyStores), [dailyStores]);
 
-  const mapGoogleProspects = useCallback(
-    (
-      prospects: {
-        id: number;
-        name: string;
-        addressText?: string | null;
-        location: { lat: number; lng: number };
-        areaName?: string | null;
-        googleMapsUrl?: string | null;
-        googlePlaceId?: string | null;
-      }[]
-    ): DailyStoreCard[] =>
-      prospects.map((p) => ({
-        id: p.id,
-        source: "google",
-        name: p.name,
-        phone: "",
-        ownerName: t.googleTabPill,
-        location: p.location,
-        addressText: p.addressText ?? null,
-        areaName: p.areaName ?? null,
-        deferredPaymentEnabled: false,
-        visitedToday: false,
-        googleMapsUrl: p.googleMapsUrl ?? null,
-        googlePlaceId: p.googlePlaceId ?? null,
-      })),
-    []
-  );
-
   const loadProspects = useCallback(async () => {
     if (!token) return;
     setProspectsLoading(true);
@@ -756,7 +699,6 @@ export default function App() {
       }
       const data = (await apiGet("/api/v1/rep/stores/daily")) as {
         stores?: DailyStoreCard[];
-        googlePlacesReady?: boolean;
         routeToday?: { dayName?: string; zoneName?: string } | null;
         message?: string;
       };
@@ -771,9 +713,6 @@ export default function App() {
         message: data.message,
         nearestFirst,
       });
-      if (typeof data.googlePlacesReady === "boolean") {
-        setGooglePlacesReady(data.googlePlacesReady);
-      }
     } catch {
       setDailyStores([]);
       setDailyMeta(null);
@@ -858,121 +797,6 @@ export default function App() {
     }
   }, [apiGet, showToast, token]);
 
-  const loadGooglePlaces = useCallback(async () => {
-    if (!token) return;
-    setGooglePlacesLoading(true);
-    setGoogleSearchResults(null);
-    setGooglePlacesByArea({});
-    setGoogleAreaLoading({});
-    googleRawByAreaRef.current = {};
-    try {
-      const data = await apiGet("/api/v1/rep/google-places?summary=1", 45_000);
-      setGooglePlacesReady(data.googlePlacesReady !== false);
-      setGooglePlacesTotal(typeof data.total === "number" ? data.total : 0);
-
-      const areas = Array.isArray(data.areas) ? (data.areas as GooglePlaceAreaSummary[]) : [];
-      if (areas.length > 0) {
-        setGoogleLazyApi(true);
-        setGoogleAreaSummaries(areas);
-        return;
-      }
-
-      const raw = (data.places ?? []) as RawGooglePlace[];
-      if (raw.length > 0) {
-        const grouped = groupRawGooglePlacesByArea(raw);
-        setGoogleLazyApi(false);
-        setGoogleAreaSummaries(grouped.summaries);
-        googleRawByAreaRef.current = grouped.rawByAreaId;
-        return;
-      }
-
-      setGoogleLazyApi(true);
-      setGoogleAreaSummaries([]);
-    } catch (e) {
-      setGoogleAreaSummaries([]);
-      setGooglePlacesTotal(0);
-      setGooglePlacesReady(false);
-      setGoogleLazyApi(true);
-      googleRawByAreaRef.current = {};
-      const msg = e instanceof Error ? e.message : "";
-      showToast(
-        msg === "network_timeout" ? t.networkTimeout : msg || t.googleTabLoadFailed,
-        "error"
-      );
-    } finally {
-      setGooglePlacesLoading(false);
-    }
-  }, [apiGet, showToast, token]);
-
-  const loadGoogleArea = useCallback(
-    async (areaId: number) => {
-      if (!token) return;
-      setGoogleAreaLoading((prev) => ({ ...prev, [areaId]: true }));
-      try {
-        if (!googleLazyApi) {
-          const raw = googleRawByAreaRef.current[areaId] ?? [];
-          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-          setGooglePlacesByArea((prev) =>
-            prev[areaId]?.length ? prev : { ...prev, [areaId]: mapGoogleProspects(raw) }
-          );
-          return;
-        }
-        const data = await apiGet(`/api/v1/rep/google-places?areaId=${areaId}`, 30_000);
-        const raw = (data.places ?? []) as RawGooglePlace[];
-        setGooglePlacesByArea((prev) =>
-          prev[areaId]?.length ? prev : { ...prev, [areaId]: mapGoogleProspects(raw) }
-        );
-      } catch {
-        setGooglePlacesByArea((prev) => (prev[areaId] ? prev : { ...prev, [areaId]: [] }));
-      } finally {
-        setGoogleAreaLoading((prev) => ({ ...prev, [areaId]: false }));
-      }
-    },
-    [apiGet, googleLazyApi, mapGoogleProspects, token]
-  );
-
-  const searchGooglePlaces = useCallback(
-    async (query: string) => {
-      if (!token) return;
-      const q = query.trim();
-      if (q.length < 2) {
-        setGoogleSearchResults(null);
-        setGoogleSearchLoading(false);
-        return;
-      }
-      setGoogleSearchLoading(true);
-      try {
-        if (!googleLazyApi) {
-          const needle = q.toLowerCase();
-          const allRaw = Object.values(googleRawByAreaRef.current).flat();
-          const hits = allRaw.filter(
-            (p) =>
-              p.name.toLowerCase().includes(needle) ||
-              (p.addressText ?? "").toLowerCase().includes(needle)
-          );
-          setGoogleSearchResults(mapGoogleProspects(hits.slice(0, 200)));
-          return;
-        }
-        const data = await apiGet(`/api/v1/rep/google-places?q=${encodeURIComponent(q)}`, 20_000);
-        const raw = (data.places ?? []) as {
-          id: number;
-          name: string;
-          addressText?: string | null;
-          location: { lat: number; lng: number };
-          areaName?: string | null;
-          googleMapsUrl?: string | null;
-          googlePlaceId?: string | null;
-        }[];
-        setGoogleSearchResults(mapGoogleProspects(raw));
-      } catch {
-        setGoogleSearchResults([]);
-      } finally {
-        setGoogleSearchLoading(false);
-      }
-    },
-    [apiGet, googleLazyApi, mapGoogleProspects, token]
-  );
-
   const clearSession = useCallback(() => {
     cancelSystemQrScanSession();
     void clearRepToken();
@@ -982,14 +806,6 @@ export default function App() {
     setProfileLoading(false);
     setActiveStore(null);
     setDailyStores([]);
-    setGoogleAreaSummaries([]);
-    setGooglePlacesByArea({});
-    setGoogleAreaLoading({});
-    setGoogleSearchResults(null);
-    setGooglePlacesTotal(0);
-    setGoogleLazyApi(true);
-    googleRawByAreaRef.current = {};
-    setGooglePlacesReady(true);
     setPeekStore(null);
     setMode("home");
     setBottomTab("home");
@@ -1280,22 +1096,6 @@ export default function App() {
       void loadRouteStores();
     }
   }, [token, bottomTab, mode, loadRouteStores]);
-
-  useEffect(() => {
-    if (token && bottomTab === "google" && mode !== "store" && mode !== "register") {
-      void loadGooglePlaces();
-    }
-  }, [token, bottomTab, mode, loadGooglePlaces]);
-
-  const onGoogleRefresh = useCallback(async () => {
-    if (!token) return;
-    setGoogleRefreshing(true);
-    try {
-      await loadGooglePlaces();
-    } finally {
-      setGoogleRefreshing(false);
-    }
-  }, [token, loadGooglePlaces]);
 
   useEffect(() => {
     if (token) void loadInventory();
@@ -1700,11 +1500,6 @@ export default function App() {
                   <Text style={styles.headerGreeting}>{t.routeDayTitle}</Text>
                   <Text style={styles.headerSub}>{t.routeDaySubtitle}</Text>
                 </View>
-              ) : bottomTab === "google" ? (
-                <View style={styles.headerText}>
-                  <Text style={styles.headerGreeting}>{t.navGoogle}</Text>
-                  <Text style={styles.headerSub}>{t.googleTabLazyHint}</Text>
-                </View>
               ) : null}
             </View>
             <Pressable
@@ -1787,6 +1582,8 @@ export default function App() {
                   loadFailed: t.routeDayLoadFailed,
                   visited: t.dailyStoresVisited,
                   pending: t.dailyStoresPending,
+                  lastVisit: t.dailyStoresLastVisit,
+                  lastVisitNever: t.dailyStoresLastVisitNever,
                   searchPlaceholder: t.dailyStoresSearchPlaceholder,
                   filterAll: t.dailyStoresFilterAll,
                   filterPending: t.dailyStoresFilterPending,
@@ -1829,8 +1626,6 @@ export default function App() {
           refreshControl={
             bottomTab === "home" && mode === "home" ? (
               <RefreshControl refreshing={homeRefreshing} onRefresh={onHomeRefresh} tintColor={accent} colors={[accent]} />
-            ) : bottomTab === "google" ? (
-              <RefreshControl refreshing={googleRefreshing} onRefresh={onGoogleRefresh} tintColor="#ea580c" colors={["#ea580c"]} />
             ) : mode === "store" && activeStore ? (
               <RefreshControl
                 refreshing={storeRefreshing}
@@ -1926,6 +1721,8 @@ export default function App() {
               count: t.dailyStoresCount,
               visited: t.dailyStoresVisited,
               pending: t.dailyStoresPending,
+              lastVisit: t.dailyStoresLastVisit,
+              lastVisitNever: t.dailyStoresLastVisitNever,
               unknownArea: t.dailyStoresUnknownArea,
               storeCount: t.dailyStoresAreaCount,
               pendingCount: t.dailyStoresPendingCount,
@@ -1945,40 +1742,6 @@ export default function App() {
             onSelectStore={setPeekStore}
           />
         </>
-      )}
-
-      {bottomTab === "google" && mode !== "store" && mode !== "register" && (
-        <GooglePlacesByArea
-          areaSummaries={googleAreaSummaries}
-          placesByAreaId={googlePlacesByArea}
-          loadingAreaIds={googleAreaLoading}
-          searchResults={googleSearchResults}
-          searchLoading={googleSearchLoading}
-          repAreaNames={repAreaNames}
-          loading={googlePlacesLoading}
-          notReady={!googlePlacesReady}
-          totalCount={googlePlacesTotal}
-          title={t.googleTabTitle}
-          labels={{
-            hint: t.googleTabHint,
-            lazyHint: t.googleTabLazyHint,
-            empty: t.googleTabEmpty,
-            notReady: t.googleTabNotReady,
-            truncated: t.googleTabTruncated,
-            unknownArea: t.dailyStoresUnknownArea,
-            storeCount: t.dailyStoresAreaCount,
-            searchPlaceholder: t.googleTabSearchPlaceholder,
-            expandAll: t.dailyStoresExpandAll,
-            collapseAll: t.dailyStoresCollapseAll,
-            noSearchResults: t.dailyStoresNoSearchResults,
-            googlePill: t.googleTabPill,
-            openMaps: t.googleTabOpenMaps,
-            loadingArea: t.googleTabLoadingArea,
-          }}
-          onSelectPlace={setPeekStore}
-          onExpandArea={loadGoogleArea}
-          onSearch={searchGooglePlaces}
-        />
       )}
 
       {bottomTab === "home" && activeStore && mode !== "store" && mode !== "register" && (
@@ -2431,19 +2194,6 @@ export default function App() {
               setBottomTab("route");
               if (mode === "store") setMode("home");
               void loadRouteStores();
-            }}
-          />
-          <BottomNavItem
-            active={bottomTab === "google"}
-            label={t.navGoogle}
-            icon="map-outline"
-            iconActive="map"
-            activeColor="#ea580c"
-            activeBg="#ffedd5"
-            onPress={() => {
-              setBottomTab("google");
-              if (mode === "store") setMode("home");
-              void loadGooglePlaces();
             }}
           />
           <BottomNavItem

@@ -11,6 +11,7 @@ import {
 
 import { theme } from "./theme";
 import type { DailyStoreCard } from "./storeTypes";
+import { formatMarketDate } from "./formatMarketDateTime";
 
 const { card, text, muted, line, accent, accentSoft, accentSoftCyan, radius, shadow } = theme;
 
@@ -32,6 +33,8 @@ export type DailyStoresLabels = {
   collapseAll: string;
   noSearchResults: string;
   visitQr: string;
+  lastVisit: (date: string) => string;
+  lastVisitNever: string;
   nearestFirst?: string;
   refreshLocation?: string;
 };
@@ -418,6 +421,8 @@ export default function DailyStoresByArea({
                         rank={nearestFirst && isZoneGroup ? idx + 1 : undefined}
                         visitedLabel={labels.visited}
                         visitQrLabel={labels.visitQr}
+                        lastVisitLabel={labels.lastVisit}
+                        lastVisitNever={labels.lastVisitNever}
                         onPress={() => onSelectStore(s)}
                       />
                     ))
@@ -437,6 +442,8 @@ function StoreRow({
   rank,
   visitedLabel,
   visitQrLabel,
+  lastVisitLabel,
+  lastVisitNever,
   onPress,
 }: {
   store: DailyStoreCard;
@@ -444,9 +451,14 @@ function StoreRow({
   rank?: number;
   visitedLabel: string;
   visitQrLabel: string;
+  lastVisitLabel: (date: string) => string;
+  lastVisitNever: string;
   onPress: () => void;
 }) {
   const done = !!store.visitedToday;
+  const lastVisitText = store.lastVisitedAt
+    ? lastVisitLabel(formatMarketDate(store.lastVisitedAt))
+    : lastVisitNever;
   return (
     <Pressable
       style={({ pressed }) => [
@@ -483,6 +495,9 @@ function StoreRow({
         </View>
         <Text style={styles.storeMeta} numberOfLines={1}>
           {store.ownerName}
+        </Text>
+        <Text style={styles.storeLastVisit} numberOfLines={1}>
+          {lastVisitText}
         </Text>
         {done && store.visitNote ? (
           <Text style={styles.storeNote} numberOfLines={2}>
@@ -745,6 +760,7 @@ const styles = StyleSheet.create({
   },
   rankText: { color: accent, fontSize: 12, fontWeight: "800" },
   storeMeta: { color: muted, fontSize: 13, marginTop: 3, textAlign: "right" },
+  storeLastVisit: { color: muted, fontSize: 12, marginTop: 4, textAlign: "right" },
   storeNote: { color: muted, fontSize: 12, marginTop: 6, textAlign: "right", fontStyle: "italic" },
   visitedPill: {
     flexDirection: "row-reverse",

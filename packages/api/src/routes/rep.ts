@@ -972,6 +972,7 @@ router.get("/stores/route", repAuthMiddleware, async (req, res, next) => {
       governorate: string | null;
       visited_today: boolean;
       visit_note: string | null;
+      last_visited_at: Date | string | null;
     }>(
       `SELECT s.id, s.name, s.phone, s.owner_name, s.location_lat, s.location_lng,
               s.address_text, s.image_url, s.deferred_payment_enabled,
@@ -991,7 +992,10 @@ router.get("/stores/route", repAuthMiddleware, async (req, res, next) => {
                       (NOW() AT TIME ZONE 'Asia/Amman')::date
                 ORDER BY v.visited_at DESC
                 LIMIT 1
-              ) AS visit_note
+              ) AS visit_note,
+              (
+                SELECT MAX(v.visited_at) FROM visits v WHERE v.store_id = s.id
+              ) AS last_visited_at
        FROM stores s
        JOIN areas a ON a.id = s.area_id
        WHERE s.area_id = ANY($1::int[])
@@ -1025,6 +1029,9 @@ router.get("/stores/route", repAuthMiddleware, async (req, res, next) => {
         deferredPaymentEnabled: s.deferred_payment_enabled,
         visitedToday: s.visited_today,
         visitNote: s.visit_note,
+        lastVisitedAt: s.last_visited_at
+          ? new Date(s.last_visited_at).toISOString()
+          : null,
         distanceM: Math.round(s.distance_m),
         distanceLabel: formatDistanceM(s.distance_m),
       })),
@@ -1065,6 +1072,7 @@ router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
       governorate: string | null;
       visited_today: boolean;
       visit_note: string | null;
+      last_visited_at: Date | string | null;
     }>(
       `SELECT s.id, s.name, s.phone, s.owner_name, s.location_lat, s.location_lng,
               s.address_text, s.image_url, s.deferred_payment_enabled,
@@ -1084,7 +1092,10 @@ router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
                       (NOW() AT TIME ZONE 'Asia/Amman')::date
                 ORDER BY v.visited_at DESC
                 LIMIT 1
-              ) AS visit_note
+              ) AS visit_note,
+              (
+                SELECT MAX(v.visited_at) FROM visits v WHERE v.store_id = s.id
+              ) AS last_visited_at
        FROM stores s
        JOIN areas a ON a.id = s.area_id
        WHERE s.area_id = ANY($1::int[])
@@ -1115,6 +1126,9 @@ router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
         deferredPaymentEnabled: s.deferred_payment_enabled,
         visitedToday: s.visited_today,
         visitNote: s.visit_note,
+        lastVisitedAt: s.last_visited_at
+          ? new Date(s.last_visited_at).toISOString()
+          : null,
       })),
       googlePlacesReady,
       googlePlacesTotal,

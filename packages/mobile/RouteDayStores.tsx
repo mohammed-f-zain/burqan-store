@@ -16,6 +16,7 @@ import { theme } from "./theme";
 import type { DailyStoreCard } from "./storeTypes";
 import type { MapRegion } from "./registerMapConfig";
 import { dailyStoresToPins } from "./zoneMapTypes";
+import { formatMarketDate } from "./formatMarketDateTime";
 
 export type RouteDayLabels = {
   title: string;
@@ -34,6 +35,8 @@ export type RouteDayLabels = {
   loadFailed: string;
   visited: string;
   pending: string;
+  lastVisit: (date: string) => string;
+  lastVisitNever: string;
   searchPlaceholder: string;
   filterAll: string;
   filterPending: string;
@@ -254,6 +257,11 @@ export default function RouteDayStores(props: Props) {
                   {s.ownerName?.trim() || s.addressText?.trim() || "—"}
                 </Text>
               </View>
+              <Text style={styles.storeLastVisit} numberOfLines={1}>
+                {s.lastVisitedAt
+                  ? labels.lastVisit(formatMarketDate(s.lastVisitedAt))
+                  : labels.lastVisitNever}
+              </Text>
               {s.visitedToday ? (
                 <View style={styles.donePill}>
                   <Text style={styles.donePillText}>{labels.visited}</Text>
@@ -432,6 +440,7 @@ const styles = StyleSheet.create({
   },
   distText: { color: theme.accentDark, fontSize: 11, fontWeight: "800" },
   storeMeta: { color: theme.muted, fontSize: 13, textAlign: "right", flex: 1 },
+  storeLastVisit: { color: theme.muted, fontSize: 12, marginTop: 4, textAlign: "right" },
   donePill: {
     alignSelf: "flex-end",
     marginTop: 8,

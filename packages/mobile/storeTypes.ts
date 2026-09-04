@@ -23,6 +23,8 @@ export type DailyStoreCard = {
   deferredPaymentEnabled: boolean;
   visitedToday?: boolean;
   visitNote?: string | null;
+  /** ISO timestamp of the most recent visit to this store (any rep), if any. */
+  lastVisitedAt?: string | null;
   googleMapsUrl?: string | null;
   googlePlaceId?: string | null;
   /** Nearest-first route tab (meters from rep GPS). */
