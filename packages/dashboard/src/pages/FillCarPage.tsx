@@ -518,7 +518,7 @@ export default function FillCarPage() {
                                 )
                               );
                             }}
-                            style={{ width: 96, display: "inline-block" }}
+                            style={{ width: 120, display: "inline-block" }}
                           />
                         ) : (
                           row.rep_price ?? row.catalog_price ?? row.price
