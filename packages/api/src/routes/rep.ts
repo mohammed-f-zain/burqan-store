@@ -1703,7 +1703,7 @@ router.post("/orders", repAuthMiddleware, async (req, res, next) => {
       const ord = await c.query<{ id: string; created_at: Date }>(
         `INSERT INTO orders (representative_id, store_id, payment_type, total_amount)
          VALUES ($1,$2,$3,$4) RETURNING id, created_at`,
-        [rep.id, body.storeId, body.paymentType, total.toFixed(2)]
+        [rep.id, body.storeId, body.paymentType, total.toFixed(4)]
       );
       const orderId = ord.rows[0]!.id;
       const createdAt = new Date(ord.rows[0]!.created_at);
@@ -1711,7 +1711,7 @@ router.post("/orders", repAuthMiddleware, async (req, res, next) => {
         await c.query(
           `INSERT INTO order_lines (order_id, product_id, quantity, unit_price, line_total, loyalty_points_earned)
            VALUES ($1,$2,$3,$4,$5,$6)`,
-          [orderId, l.productId, l.quantity, l.unitPrice, l.lineTotal.toFixed(2), l.loyaltyPoints]
+          [orderId, l.productId, l.quantity, Number(l.unitPrice.toFixed(4)), l.lineTotal.toFixed(4), l.loyaltyPoints]
         );
         await c.query(
           `UPDATE representative_inventory

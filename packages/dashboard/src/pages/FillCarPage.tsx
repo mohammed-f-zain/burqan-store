@@ -501,7 +501,7 @@ export default function FillCarPage() {
                           <input
                             type="number"
                             min={0}
-                            step="0.01"
+                            step="0.0001"
                             placeholder={t.fillCar.repPricePlaceholder}
                             value={row.rep_price ?? ""}
                             onChange={(e) => {

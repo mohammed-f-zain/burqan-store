@@ -30,6 +30,7 @@ const FILES = [
   "018_fill_car_last_fill_external_sales.sql",
   "019_rep_route_schedule_assigned_at.sql",
   "020_external_sales_store_name.sql",
+  "021_price_four_decimals.sql",
 ] as const;
 
 async function main() {

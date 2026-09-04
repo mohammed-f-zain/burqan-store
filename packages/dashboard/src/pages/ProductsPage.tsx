@@ -218,7 +218,7 @@ export default function ProductsPage() {
             </label>
             <label>
               {t.products.price}
-              <input value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} type="number" step="0.01" />
+              <input value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} type="number" step="0.0001" />
             </label>
             <label>
               {t.products.loyaltyPoints}
@@ -365,7 +365,7 @@ export default function ProductsPage() {
                   value={edit.price}
                   onChange={(e) => setEdit({ ...edit, price: e.target.value })}
                   type="number"
-                  step="0.01"
+                  step="0.0001"
                   min={0}
                 />
               </label>

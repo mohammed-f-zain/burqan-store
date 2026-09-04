@@ -1765,7 +1765,7 @@ router.put(
 
         for (const item of body.items) {
           const repPrice =
-            item.price === undefined ? null : item.price === null ? null : item.price.toFixed(2);
+            item.price === undefined ? null : item.price === null ? null : item.price.toFixed(4);
           await c.query(
             `INSERT INTO representative_inventory
                (representative_id, product_id, quantity, price, last_fill_quantity, updated_at)
@@ -1898,7 +1898,7 @@ router.post(
              (representative_id, payment_type, total_amount, note, recorded_by_admin_id, store_name)
            VALUES ($1, $2, $3, $4, $5, $6)
            RETURNING id, created_at`,
-          [id, body.paymentType, total.toFixed(2), body.note?.trim() || null, adminId, storeName]
+          [id, body.paymentType, total.toFixed(4), body.note?.trim() || null, adminId, storeName]
         );
         const saleId = sale.rows[0]!.id;
         const createdAt = new Date(sale.rows[0]!.created_at);
@@ -1907,7 +1907,7 @@ router.post(
             `INSERT INTO external_sale_lines
                (external_sale_id, product_id, quantity, unit_price, line_total)
              VALUES ($1, $2, $3, $4, $5)`,
-            [saleId, line.productId, line.quantity, line.unitPrice.toFixed(2), line.lineTotal.toFixed(2)]
+            [saleId, line.productId, line.quantity, line.unitPrice.toFixed(4), line.lineTotal.toFixed(4)]
           );
         }
         await c.query("COMMIT");
@@ -1940,7 +1940,7 @@ router.post(
         res.status(201).json({
           id: externalOrderPublicId(saleId),
           storeName,
-          totalAmount: total.toFixed(2),
+          totalAmount: total.toFixed(4),
           paymentType: body.paymentType,
           lines: priced,
         });
