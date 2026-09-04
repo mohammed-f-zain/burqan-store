@@ -377,6 +377,8 @@ button.ghost {
   padding: 22px;
   max-width: 1200px;
   width: 100%;
+  /* Slightly larger content type/UI; sidebar is outside this node and stays the same. */
+  zoom: 1.1;
 }
 
 .grid2 {
