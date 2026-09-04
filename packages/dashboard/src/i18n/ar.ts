@@ -88,7 +88,7 @@ export const ar = {
     possibleClients: "عملاء محتملون (نشطون)",
     qrUnassigned: "رموز QR غير مربوطة",
     analyticsTitle: "تحليلات",
-    monthRevenue: "مشتريات هذا الشهر",
+    monthRevenue: "مبيعات هذا الشهر",
     monthOrders: "طلبات هذا الشهر",
     weekOrders: "طلبات (7 أيام)",
     monthVisits: "زيارات هذا الشهر",
