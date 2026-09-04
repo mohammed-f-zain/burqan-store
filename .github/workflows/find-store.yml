@@ -1,0 +1,67 @@
+name: Find store by name
+
+on:
+  workflow_dispatch:
+    inputs:
+      q:
+        description: Name fragment to search
+        required: true
+        default: Compat
+
+jobs:
+  find:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check secrets
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          ok=0
+          [[ -n "$VPS_HOST" ]] || { echo "::error::Missing VPS_HOST"; ok=1; }
+          [[ -n "$VPS_USER" ]] || { echo "::error::Missing VPS_USER"; ok=1; }
+          [[ -n "$VPS_SSH_KEY" ]] || { echo "::error::Missing VPS_SSH_KEY"; ok=1; }
+          [[ -n "$DEPLOY_PATH" ]] || { echo "::error::Missing DEPLOY_PATH"; ok=1; }
+          exit "$ok"
+
+      - name: Search stores and sales
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          SEARCH_Q: ${{ inputs.q }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          envs: SEARCH_Q
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.DEPLOY_PATH }}"
+            DB_URL=""
+            if [[ -f /root/.burqan-db-url ]]; then
+              DB_URL="$(cat /root/.burqan-db-url | sed 's/^DATABASE_URL=//')"
+            elif [[ -f packages/api/.env ]]; then
+              DB_URL="$(grep -E '^DATABASE_URL=' packages/api/.env | head -1 | cut -d= -f2-)"
+            fi
+            Q="%${SEARCH_Q}%"
+            echo "=== stores ==="
+            psql "$DB_URL" -P pager=off -c \
+              "SELECT id, name, phone, created_at FROM stores WHERE name ILIKE '$Q' ORDER BY id;"
+            echo "=== external_sales ==="
+            psql "$DB_URL" -P pager=off -c \
+              "SELECT e.id, e.store_name, e.representative_id, r.email, r.full_name, e.total_amount, e.created_at
+               FROM external_sales e
+               JOIN representatives r ON r.id = e.representative_id
+               WHERE e.store_name ILIKE '$Q'
+               ORDER BY e.id;"
+            echo "=== orders (registered stores) ==="
+            psql "$DB_URL" -P pager=off -c \
+              "SELECT o.id, s.name, r.email, r.full_name, o.total_amount, o.created_at
+               FROM orders o
+               JOIN stores s ON s.id = o.store_id
+               JOIN representatives r ON r.id = o.representative_id
+               WHERE s.name ILIKE '$Q'
+               ORDER BY o.id DESC
+               LIMIT 20;"
