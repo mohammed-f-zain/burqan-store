@@ -70,8 +70,8 @@ import StoreCartPanel from "./StoreCartPanel";
 import StorePeekModal from "./StorePeekModal";
 import RegisterErrorBoundary from "./RegisterErrorBoundary";
 import type { ReceiptData } from "./receiptFormat";
+import { normalizeStoreBrief, normalizeDailyStoreCard } from "./storeTypes";
 import type { DailyStoreCard, PrizeProduct, ProspectCard, StoreBrief } from "./storeTypes";
-import { normalizeStoreBrief } from "./storeTypes";
 import { sortDailyStoreCardsByDistance } from "./geoDistance";
 
 /** Lazy: keeps react-native-maps out of the register screen chunk on Android. */
@@ -698,11 +698,11 @@ export default function App() {
         // load without nearest-first sort
       }
       const data = (await apiGet("/api/v1/rep/stores/daily")) as {
-        stores?: DailyStoreCard[];
+        stores?: Record<string, unknown>[];
         routeToday?: { dayName?: string; zoneName?: string } | null;
         message?: string;
       };
-      let burqan = (data.stores ?? []) as DailyStoreCard[];
+      let burqan = (data.stores ?? []).map((s) => normalizeDailyStoreCard(s));
       if (nearestFirst && burqan.length > 0) {
         burqan = sortDailyStoreCardsByDistance(burqan, repLat, repLng);
       }
@@ -734,7 +734,7 @@ export default function App() {
           dayName?: string;
           routeZone?: { id: number; name: string; notes?: string | null; areas?: string[] };
           message?: string;
-          stores?: DailyStoreCard[];
+          stores?: Record<string, unknown>[];
         }>,
         apiGet("/api/v1/rep/prospect-stores") as Promise<{
           prospects?: Array<{
@@ -747,6 +747,7 @@ export default function App() {
             areaName?: string | null;
             visitedToday?: boolean;
             todayVisitNote?: string | null;
+            lastVisitedAt?: string | null;
           }>;
         }>,
       ]);
@@ -756,7 +757,9 @@ export default function App() {
         routeZone: routeData.routeZone,
         message: routeData.message,
       });
-      const burqan = Array.isArray(routeData.stores) ? routeData.stores : [];
+      const burqan = (Array.isArray(routeData.stores) ? routeData.stores : []).map((s) =>
+        normalizeDailyStoreCard(s)
+      );
       const prospects: DailyStoreCard[] = (prospectData.prospects ?? []).map((p) => ({
         id: p.id,
         source: "prospect" as const,
@@ -769,6 +772,7 @@ export default function App() {
         deferredPaymentEnabled: false,
         visitedToday: p.visitedToday,
         visitNote: p.todayVisitNote ?? null,
+        lastVisitedAt: p.lastVisitedAt ?? null,
       }));
       setRouteStores(sortDailyStoreCardsByDistance([...burqan, ...prospects], pos.lat, pos.lng));
     } catch (e) {

@@ -458,7 +458,9 @@ function StoreRow({
   const done = !!store.visitedToday;
   const lastVisitText = store.lastVisitedAt
     ? lastVisitLabel(formatMarketDate(store.lastVisitedAt))
-    : lastVisitNever;
+    : done
+      ? lastVisitLabel(formatMarketDate(new Date()))
+      : lastVisitNever;
   return (
     <Pressable
       style={({ pressed }) => [

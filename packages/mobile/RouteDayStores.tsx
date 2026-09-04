@@ -260,7 +260,9 @@ export default function RouteDayStores(props: Props) {
               <Text style={styles.storeLastVisit} numberOfLines={1}>
                 {s.lastVisitedAt
                   ? labels.lastVisit(formatMarketDate(s.lastVisitedAt))
-                  : labels.lastVisitNever}
+                  : s.visitedToday
+                    ? labels.lastVisit(formatMarketDate(new Date()))
+                    : labels.lastVisitNever}
               </Text>
               {s.visitedToday ? (
                 <View style={styles.donePill}>

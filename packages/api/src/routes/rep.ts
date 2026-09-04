@@ -313,6 +313,25 @@ function formatAreaLabel(name: string, governorate: string | null): string {
   return gov ? `${name} · ${gov}` : name;
 }
 
+/** ISO timestamp or null — never throw on odd pg date values. */
+function toIsoOrNull(value: unknown): string | null {
+  if (value == null || value === "") return null;
+  const d = value instanceof Date ? value : new Date(String(value));
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+/**
+ * Latest store activity: QR/rep visits, else last order (same-day sales still count).
+ * Correlated subquery kept as a fragment for daily + route list endpoints.
+ */
+const STORE_LAST_VISITED_AT_SQL = `(
+  SELECT MAX(ts) FROM (
+    SELECT v.visited_at AS ts FROM visits v WHERE v.store_id = s.id
+    UNION ALL
+    SELECT o.created_at AS ts FROM orders o WHERE o.store_id = s.id
+  ) activity
+)`;
+
 async function loadStoreForRep(storeId: number, rep: { id: number }) {
   const today = await getRepTodayWorkAreaIds(rep.id);
   const { rows } = await query<{
@@ -544,6 +563,7 @@ router.get("/prospect-stores", repAuthMiddleware, async (req, res, next) => {
       created_at: string;
       visited_today: boolean;
       today_visit_note: string | null;
+      last_visited_at: Date | string | null;
     }>(
       `SELECT ps.id, ps.name, ps.phone, ps.owner_name, ps.location_lat, ps.location_lng,
               ps.address_text, ps.image_url, ps.area_id, ps.status, ps.converted_store_id,
@@ -563,7 +583,11 @@ router.get("/prospect-stores", repAuthMiddleware, async (req, res, next) => {
                       (NOW() AT TIME ZONE 'Asia/Amman')::date
                 ORDER BY pv.visited_at DESC
                 LIMIT 1
-              ) AS today_visit_note
+              ) AS today_visit_note,
+              (
+                SELECT MAX(pv.visited_at) FROM prospect_visits pv
+                WHERE pv.prospect_store_id = ps.id
+              ) AS last_visited_at
        FROM prospect_stores ps
        JOIN areas a ON a.id = ps.area_id
        WHERE ps.status = 'open'
@@ -576,6 +600,7 @@ router.get("/prospect-stores", repAuthMiddleware, async (req, res, next) => {
         ...mapProspectRow(r),
         visitedToday: r.visited_today,
         todayVisitNote: r.today_visit_note,
+        lastVisitedAt: toIsoOrNull(r.last_visited_at),
       })),
     });
   } catch (e) {
@@ -993,9 +1018,7 @@ router.get("/stores/route", repAuthMiddleware, async (req, res, next) => {
                 ORDER BY v.visited_at DESC
                 LIMIT 1
               ) AS visit_note,
-              (
-                SELECT MAX(v.visited_at) FROM visits v WHERE v.store_id = s.id
-              ) AS last_visited_at
+              ${STORE_LAST_VISITED_AT_SQL} AS last_visited_at
        FROM stores s
        JOIN areas a ON a.id = s.area_id
        WHERE s.area_id = ANY($1::int[])
@@ -1029,9 +1052,7 @@ router.get("/stores/route", repAuthMiddleware, async (req, res, next) => {
         deferredPaymentEnabled: s.deferred_payment_enabled,
         visitedToday: s.visited_today,
         visitNote: s.visit_note,
-        lastVisitedAt: s.last_visited_at
-          ? new Date(s.last_visited_at).toISOString()
-          : null,
+        lastVisitedAt: toIsoOrNull(s.last_visited_at),
         distanceM: Math.round(s.distance_m),
         distanceLabel: formatDistanceM(s.distance_m),
       })),
@@ -1093,9 +1114,7 @@ router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
                 ORDER BY v.visited_at DESC
                 LIMIT 1
               ) AS visit_note,
-              (
-                SELECT MAX(v.visited_at) FROM visits v WHERE v.store_id = s.id
-              ) AS last_visited_at
+              ${STORE_LAST_VISITED_AT_SQL} AS last_visited_at
        FROM stores s
        JOIN areas a ON a.id = s.area_id
        WHERE s.area_id = ANY($1::int[])
@@ -1126,9 +1145,7 @@ router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
         deferredPaymentEnabled: s.deferred_payment_enabled,
         visitedToday: s.visited_today,
         visitNote: s.visit_note,
-        lastVisitedAt: s.last_visited_at
-          ? new Date(s.last_visited_at).toISOString()
-          : null,
+        lastVisitedAt: toIsoOrNull(s.last_visited_at),
       })),
       googlePlacesReady,
       googlePlacesTotal,

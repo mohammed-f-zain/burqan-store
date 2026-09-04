@@ -70,6 +70,38 @@ export function normalizeStoreBrief(raw: Record<string, unknown>): StoreBrief {
   };
 }
 
+/** Normalize daily/route store payloads from the API (camelCase or snake_case). */
+export function normalizeDailyStoreCard(raw: Record<string, unknown>): DailyStoreCard {
+  const loc = (raw.location as { lat?: number; lng?: number } | undefined) ?? {};
+  const lastRaw = raw.lastVisitedAt ?? raw.last_visited_at ?? null;
+  let lastVisitedAt: string | null = null;
+  if (lastRaw != null && lastRaw !== "") {
+    const d = new Date(String(lastRaw));
+    if (!Number.isNaN(d.getTime())) lastVisitedAt = d.toISOString();
+  }
+  return {
+    id: Number(raw.id),
+    source: (raw.source as DailyStoreCard["source"]) ?? "burqan",
+    name: String(raw.name ?? ""),
+    phone: String(raw.phone ?? ""),
+    ownerName: String(raw.ownerName ?? raw.owner_name ?? ""),
+    location: {
+      lat: Number(loc.lat ?? raw.location_lat ?? 0),
+      lng: Number(loc.lng ?? raw.location_lng ?? 0),
+    },
+    addressText: (raw.addressText ?? raw.address_text ?? null) as string | null,
+    areaName: (raw.areaName ?? raw.area_name ?? null) as string | null,
+    deferredPaymentEnabled: Boolean(raw.deferredPaymentEnabled ?? raw.deferred_payment_enabled ?? false),
+    visitedToday: Boolean(raw.visitedToday ?? raw.visited_today ?? false),
+    visitNote: (raw.visitNote ?? raw.visit_note ?? raw.todayVisitNote ?? null) as string | null,
+    lastVisitedAt,
+    googleMapsUrl: (raw.googleMapsUrl ?? raw.google_maps_url ?? null) as string | null,
+    googlePlaceId: (raw.googlePlaceId ?? raw.google_place_id ?? null) as string | null,
+    distanceM: raw.distanceM != null ? Number(raw.distanceM) : undefined,
+    distanceLabel: raw.distanceLabel != null ? String(raw.distanceLabel) : undefined,
+  };
+}
+
 export type PrizeProduct = {
   id: number;
   name: string;
