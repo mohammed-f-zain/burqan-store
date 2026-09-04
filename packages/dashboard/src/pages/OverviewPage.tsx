@@ -659,7 +659,11 @@ export default function OverviewPage() {
                       id: p.productId,
                       name: p.name,
                       imageUrl: p.imageUrl,
-                      to: canProducts ? href("/app/products", { q: p.name }) : undefined,
+                      to: canOrders
+                        ? href("/app/orders", { productId: String(p.productId), product: p.name })
+                        : canProducts
+                          ? href("/app/products", { q: p.name })
+                          : undefined,
                       primary: money(p.revenue),
                       secondary: t.overview.qtyUnits(p.quantity),
                       share: p.quantity / maxQty,

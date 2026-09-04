@@ -26,6 +26,8 @@ type OrderRow = {
   payment_type: string;
   total_amount: string;
   created_at: string;
+  product_names?: string;
+  product_ids?: string;
 };
 
 type OrderSummary = {
@@ -54,10 +56,25 @@ export default function OrdersPage() {
   const [searchParams] = useSearchParams();
   const { can } = useAuth();
   const { t, locale } = useLocale();
-  const orderInitialFilters = useMemo(
-    () => filtersFromSearchParams(searchParams, ["dateFrom", "dateTo", "type", "rep", "id", "store", "total"]),
-    [searchParams]
-  );
+  const orderInitialFilters = useMemo(() => {
+    const filters = filtersFromSearchParams(searchParams, [
+      "dateFrom",
+      "dateTo",
+      "type",
+      "rep",
+      "id",
+      "store",
+      "total",
+      "product",
+      "productId",
+      "source",
+    ]);
+    // Pad product id so "27" matches "|27|" and not "|127|".
+    if (filters.productId && !filters.productId.includes("|")) {
+      filters.productId = `|${filters.productId}|`;
+    }
+    return filters;
+  }, [searchParams]);
   const [pageTab, setPageTab] = useState<PageTab>(() => (searchParams.get("tab") === "redemptions" ? "redemptions" : "sales"));
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [redemptions, setRedemptions] = useState<RedemptionRow[]>([]);
@@ -99,6 +116,21 @@ export default function OrdersPage() {
       { id: "id", label: t.orders.colId, type: "text" as const, getValue: (o: OrderRow) => o.id },
       { id: "store", label: t.orders.colStore, type: "text" as const, getValue: (o: OrderRow) => o.store_name },
       {
+        id: "product",
+        label: t.orders.colProducts,
+        type: "text" as const,
+        getValue: (o: OrderRow) => o.product_names ?? "",
+      },
+      {
+        id: "productId",
+        label: t.orders.product,
+        type: "text" as const,
+        getValue: (o: OrderRow) => {
+          const ids = (o.product_ids ?? "").split("|").filter(Boolean);
+          return ids.length ? `|${ids.join("|")}|` : "";
+        },
+      },
+      {
         id: "source",
         label: t.orders.colSource,
         type: "select" as const,
@@ -138,6 +170,7 @@ export default function OrdersPage() {
       repFilterOptions,
       sourceOptions,
       t.orders.colId,
+      t.orders.colProducts,
       t.orders.colRep,
       t.orders.colSource,
       t.orders.colStore,
@@ -145,6 +178,7 @@ export default function OrdersPage() {
       t.orders.colType,
       t.orders.dateFrom,
       t.orders.dateTo,
+      t.orders.product,
     ]
   );
 
@@ -155,6 +189,7 @@ export default function OrdersPage() {
       "rep_name",
       "payment_type",
       "total_amount",
+      "product_names",
       (o) => o.source ?? "store",
       (o) => formatMarketDateTime(o.created_at),
     ],
@@ -352,7 +387,7 @@ export default function OrdersPage() {
               onFilterChange={orderTable.setFilter}
               onClear={orderTable.clearFilters}
               onToggleFilters={() => orderTable.setShowFilters((v) => !v)}
-              pinnedFieldIds={["dateFrom", "dateTo", "type", "rep"]}
+              pinnedFieldIds={["dateFrom", "dateTo", "type", "rep", "product"]}
               labels={t.tableFilters}
             />
             {summary && (
@@ -403,6 +438,7 @@ export default function OrdersPage() {
                   <tr>
                     <th>{t.orders.colId}</th>
                     <th>{t.orders.colStore}</th>
+                    <th>{t.orders.colProducts}</th>
                     <th>{t.orders.colSource}</th>
                     <th>{t.orders.colRep}</th>
                     <th>{t.orders.colType}</th>
@@ -428,6 +464,7 @@ export default function OrdersPage() {
                     >
                       <td className="strong">#{o.id}</td>
                       <td>{o.store_name}</td>
+                      <td className="small">{o.product_names || "—"}</td>
                       <td>{(o.source ?? "store") === "external" ? t.orders.sourceExternal : t.orders.sourceStore}</td>
                       <td>{o.rep_name}</td>
                       <td>{paymentTypeLabel(o.payment_type)}</td>
