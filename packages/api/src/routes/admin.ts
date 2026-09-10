@@ -32,7 +32,12 @@ import { expandRepAreaIds } from "../utils/expandRepAreaIds.js";
 import { importGooglePlaces } from "../utils/importGooglePlaces.js";
 import { isGooglePlacesEnabled } from "../utils/googlePlaces.js";
 import { GOVERNORATE_AREA_SUFFIX } from "../utils/matchAreaFromGoogle.js";
-import { getLoyaltyExpiryDays, getLoyaltyPeriodAudit, syncLoyaltyPeriodsFromFirstPurchase } from "../utils/loyaltyExpiry.js";
+import {
+  adjustStoreLoyaltyPoints,
+  getLoyaltyExpiryDays,
+  getLoyaltyPeriodAudit,
+  syncLoyaltyPeriodsFromFirstPurchase,
+} from "../utils/loyaltyExpiry.js";
 import { formatAmmanDateTime, notifyOdooSaleCompleted } from "../utils/odooWebhook.js";
 
 const router = Router();
@@ -2493,6 +2498,48 @@ router.post(
       const result = await syncLoyaltyPeriodsFromFirstPurchase();
       const audit = await getLoyaltyPeriodAudit();
       res.json({ ...result, audit });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+const adjustLoyaltyPointsSchema = z.object({
+  delta: z.coerce.number().int().refine((n) => n !== 0, { message: "delta must be non-zero" }),
+});
+
+router.post(
+  "/loyalty/stores/:id/adjust-points",
+  adminAuthMiddleware,
+  requireAdminPermission("stores.write"),
+  async (req, res, next) => {
+    try {
+      const storeId = z.coerce.number().int().positive().parse(req.params.id);
+      const body = adjustLoyaltyPointsSchema.parse(req.body);
+      const c = await pool.connect();
+      try {
+        await c.query("BEGIN");
+        const result = await adjustStoreLoyaltyPoints(storeId, body.delta, c);
+        if (!result) throw new HttpError(404, "المتجر غير موجود");
+        await c.query("COMMIT");
+        res.json({
+          storeId,
+          delta: body.delta,
+          previousBalance: result.previousBalance,
+          newBalance: result.newBalance,
+        });
+      } catch (e) {
+        await c.query("ROLLBACK");
+        if (e instanceof Error && e.message === "INSUFFICIENT_BALANCE") {
+          throw new HttpError(400, "رصيد النقاط غير كافٍ");
+        }
+        if (e instanceof Error && e.message === "delta must be a non-zero integer") {
+          throw new HttpError(400, "قيمة التعديل غير صالحة");
+        }
+        throw e;
+      } finally {
+        c.release();
+      }
     } catch (e) {
       next(e);
     }

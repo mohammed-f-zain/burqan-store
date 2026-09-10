@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { api } from "../api";
+import { useAuth } from "../auth/AuthContext";
 import LoyaltyIcon from "../components/LoyaltyIcon";
 import PaginationBar from "../components/PaginationBar";
 import TableFilterBar from "../components/TableFilterBar";
@@ -29,6 +30,8 @@ type SortKey = "balance" | "name" | "owner" | "phone" | "area" | "daysLeft" | "f
 
 export default function LoyaltyStoresPage() {
   const { t, locale } = useLocale();
+  const { can } = useAuth();
+  const canWrite = can("stores.write");
   const navigate = useNavigate();
   const [stores, setStores] = useState<LoyaltyStore[]>([]);
   const [expiryDays, setExpiryDays] = useState(120);
@@ -39,6 +42,10 @@ export default function LoyaltyStoresPage() {
   const [loading, setLoading] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>("balance");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [editStore, setEditStore] = useState<LoyaltyStore | null>(null);
+  const [editMode, setEditMode] = useState<"increase" | "decrease">("increase");
+  const [editAmount, setEditAmount] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -168,6 +175,53 @@ export default function LoyaltyStoresPage() {
       toastError(pickAxiosErrorMessage(err, t.loyaltyStores.syncPeriodsFailed));
     } finally {
       setSyncing(false);
+    }
+  }
+
+  function openEditPoints(store: LoyaltyStore) {
+    setEditStore(store);
+    setEditMode("increase");
+    setEditAmount("");
+  }
+
+  function closeEditPoints() {
+    if (editSaving) return;
+    setEditStore(null);
+  }
+
+  const editAmountNum = parseInt(editAmount, 10);
+  const editDelta =
+    editStore && Number.isFinite(editAmountNum) && editAmountNum > 0
+      ? editMode === "increase"
+        ? editAmountNum
+        : -editAmountNum
+      : null;
+  const editPreview =
+    editStore && editDelta != null ? editStore.loyalty_points_balance + editDelta : null;
+
+  async function saveEditPoints(e: FormEvent) {
+    e.preventDefault();
+    if (!editStore || !canWrite) return;
+    if (editDelta == null) {
+      toastError(t.loyaltyStores.editPointsInvalid);
+      return;
+    }
+    if (editPreview != null && editPreview < 0) {
+      toastError(t.loyaltyStores.editPointsInsufficient);
+      return;
+    }
+    setEditSaving(true);
+    try {
+      await api.post(`/loyalty/stores/${editStore.id}/adjust-points`, {
+        delta: editDelta,
+      });
+      toastSuccess(t.loyaltyStores.editPointsSaved);
+      setEditStore(null);
+      await load();
+    } catch (err) {
+      toastError(pickAxiosErrorMessage(err, t.loyaltyStores.editPointsFailed));
+    } finally {
+      setEditSaving(false);
     }
   }
 
@@ -414,6 +468,7 @@ export default function LoyaltyStoresPage() {
                         {sortIndicator("daysLeft")}
                       </button>
                     </th>
+                    {canWrite ? <th>{t.loyaltyStores.colActions}</th> : null}
                   </tr>
                 </thead>
                 <tbody>
@@ -463,6 +518,17 @@ export default function LoyaltyStoresPage() {
                           "—"
                         )}
                       </td>
+                      {canWrite ? (
+                        <td onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            className="ghost"
+                            onClick={() => openEditPoints(s)}
+                          >
+                            {t.loyaltyStores.editPoints}
+                          </button>
+                        </td>
+                      ) : null}
                     </tr>
                   ))}
                 </tbody>
@@ -472,6 +538,64 @@ export default function LoyaltyStoresPage() {
           </>
         )}
       </div>
+
+      {editStore ? (
+        <div className="modal-backdrop" onClick={closeEditPoints} role="presentation">
+          <div className="modal card" onClick={(e) => e.stopPropagation()} role="dialog" aria-labelledby="edit-loyalty-title">
+            <h3 id="edit-loyalty-title">{t.loyaltyStores.editPointsTitle}</h3>
+            <p className="muted">
+              {editStore.name} — {t.loyaltyStores.editPointsCurrent}:{" "}
+              <strong>{t.overview.loyaltyPoints(editStore.loyalty_points_balance)}</strong>
+            </p>
+            <form onSubmit={(e) => void saveEditPoints(e)} className="form">
+              <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  className={editMode === "increase" ? "btn btn-primary" : "btn btn-secondary"}
+                  onClick={() => setEditMode("increase")}
+                  disabled={editSaving}
+                >
+                  {t.loyaltyStores.editPointsIncrease}
+                </button>
+                <button
+                  type="button"
+                  className={editMode === "decrease" ? "btn btn-primary" : "btn btn-secondary"}
+                  onClick={() => setEditMode("decrease")}
+                  disabled={editSaving}
+                >
+                  {t.loyaltyStores.editPointsDecrease}
+                </button>
+              </div>
+              <label>
+                {t.loyaltyStores.editPointsAmount}
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  inputMode="numeric"
+                  value={editAmount}
+                  onChange={(e) => setEditAmount(e.target.value)}
+                  required
+                  disabled={editSaving}
+                />
+              </label>
+              {editPreview != null ? (
+                <p className={editPreview < 0 ? "muted" : undefined} style={editPreview < 0 ? { color: "var(--danger, #b91c1c)" } : undefined}>
+                  {t.loyaltyStores.editPointsPreview(editPreview)}
+                </p>
+              ) : null}
+              <div className="row spread">
+                <button type="button" className="ghost" onClick={closeEditPoints} disabled={editSaving}>
+                  {t.loyaltyStores.editPointsCancel}
+                </button>
+                <button type="submit" className="primary" disabled={editSaving || editPreview == null || editPreview < 0}>
+                  {editSaving ? t.common.loading : t.loyaltyStores.editPointsSave}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

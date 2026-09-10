@@ -117,6 +117,60 @@ export async function awardLoyaltyPoints(
   );
 }
 
+/** Admin manual adjust. Positive delta adds points; negative subtracts. Balance never goes below 0. */
+export async function adjustStoreLoyaltyPoints(
+  storeId: number,
+  delta: number,
+  client?: Queryable
+): Promise<{ previousBalance: number; newBalance: number } | null> {
+  if (!Number.isInteger(delta) || delta === 0) {
+    throw new Error("delta must be a non-zero integer");
+  }
+  const db = q(client);
+  const { rows } = await db.query<{ loyalty_points_balance: number }>(
+    `SELECT loyalty_points_balance FROM stores WHERE id = $1 FOR UPDATE`,
+    [storeId]
+  );
+  const row = rows[0];
+  if (!row) return null;
+
+  const previousBalance = Number(row.loyalty_points_balance);
+  const newBalance = previousBalance + delta;
+  if (newBalance < 0) {
+    throw new Error("INSUFFICIENT_BALANCE");
+  }
+
+  if (newBalance === 0) {
+    await db.query(
+      `UPDATE stores SET
+         loyalty_points_balance = 0,
+         loyalty_period_started_at = NULL,
+         updated_at = now()
+       WHERE id = $1`,
+      [storeId]
+    );
+  } else if (delta > 0) {
+    await db.query(
+      `UPDATE stores SET
+         loyalty_points_balance = $1,
+         loyalty_period_started_at = COALESCE(loyalty_period_started_at, now()),
+         updated_at = now()
+       WHERE id = $2`,
+      [newBalance, storeId]
+    );
+  } else {
+    await db.query(
+      `UPDATE stores SET
+         loyalty_points_balance = $1,
+         updated_at = now()
+       WHERE id = $2`,
+      [newBalance, storeId]
+    );
+  }
+
+  return { previousBalance, newBalance };
+}
+
 const FIRST_LOYALTY_PURCHASE_SQL = `
   SELECT o.store_id, MIN(o.created_at) AS first_loyalty_at
   FROM orders o
