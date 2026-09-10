@@ -27,6 +27,8 @@ Admin dashboard page for daily rep sales and van inventory.
 
 Permissions: `fill_car.read` / `fill_car.write` (or `reps.read` / `reps.write`).
 
+External sales: choose a registered store via searchable dropdown (`GET /stores/options`, `POST .../external-sales` with `storeId`). Still does not deduct van stock.
+
 ## Product card deltas
 
 On each van inventory card show:

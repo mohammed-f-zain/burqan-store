@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 
 import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
+import SearchableSelect from "../components/SearchableSelect";
 import TableFilterBar from "../components/TableFilterBar";
 import { useTableFilters } from "../hooks/useTableFilters";
 import { useLocale } from "../i18n/LocaleContext";
@@ -27,6 +28,7 @@ type InvRow = {
   designation?: string | null;
   image_url?: string | null;
 };
+type StoreOption = { id: number; name: string; phone: string; areaName: string };
 
 export default function FillCarPage() {
   const [searchParams] = useSearchParams();
@@ -53,7 +55,9 @@ export default function FillCarPage() {
   const [extSaving, setExtSaving] = useState(false);
   const [extPay, setExtPay] = useState<"cash" | "deferred">("cash");
   const [extNote, setExtNote] = useState("");
-  const [extStoreName, setExtStoreName] = useState("");
+  const [extStoreId, setExtStoreId] = useState("");
+  const [extStores, setExtStores] = useState<StoreOption[]>([]);
+  const [extStoresLoading, setExtStoresLoading] = useState(false);
   const [extQty, setExtQty] = useState<Record<number, string>>({});
 
   const todayAmman = toMarketDateString(new Date());
@@ -243,15 +247,34 @@ export default function FillCarPage() {
     setExtQty({});
     setExtPay("cash");
     setExtNote("");
-    setExtStoreName("");
+    setExtStoreId("");
     setExtOpen(true);
+    setExtStoresLoading(true);
+    void api
+      .get<{ stores: StoreOption[] }>("/stores/options")
+      .then((r) => setExtStores(r.data.stores ?? []))
+      .catch((e) => {
+        setExtStores([]);
+        toastError(pickAxiosErrorMessage(e, t.fillCar.externalSalesStoresLoadFailed));
+      })
+      .finally(() => setExtStoresLoading(false));
   }
+
+  const extStoreOptions = useMemo(
+    () =>
+      extStores.map((s) => ({
+        value: String(s.id),
+        label: s.name,
+        hint: [s.areaName, s.phone].filter(Boolean).join(" · "),
+      })),
+    [extStores]
+  );
 
   async function submitExternalSales() {
     if (!canExternalSales || !repId) return;
-    const storeName = extStoreName.trim();
-    if (!storeName) {
-      toastError(t.fillCar.externalSalesStoreNameRequired);
+    const storeId = parseInt(extStoreId, 10);
+    if (!Number.isFinite(storeId) || storeId <= 0) {
+      toastError(t.fillCar.externalSalesStoreRequired);
       return;
     }
     const lines = Object.entries(extQty)
@@ -265,7 +288,7 @@ export default function FillCarPage() {
     try {
       await api.post(`/representatives/${repId}/external-sales`, {
         paymentType: extPay,
-        storeName,
+        storeId,
         note: extNote.trim() || undefined,
         lines,
       });
@@ -599,14 +622,20 @@ export default function FillCarPage() {
               }}
             >
               <label>
-                {t.fillCar.externalSalesStoreName}
-                <input
-                  value={extStoreName}
-                  onChange={(e) => setExtStoreName(e.target.value)}
-                  maxLength={200}
-                  required
-                  placeholder={t.fillCar.externalSalesStoreNameHint}
-                />
+                {t.fillCar.externalSalesStore}
+                {extStoresLoading ? (
+                  <p className="muted small">{t.common.loading}</p>
+                ) : (
+                  <SearchableSelect
+                    value={extStoreId}
+                    onChange={setExtStoreId}
+                    options={extStoreOptions}
+                    allLabel={t.fillCar.externalSalesStorePlaceholder}
+                    searchPlaceholder={t.fillCar.externalSalesStoreSearch}
+                    ariaLabel={t.fillCar.externalSalesStore}
+                    allowEmpty={false}
+                  />
+                )}
               </label>
               <label>
                 {t.fillCar.externalSalesPay}

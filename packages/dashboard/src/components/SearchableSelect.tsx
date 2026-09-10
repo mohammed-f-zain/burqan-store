@@ -9,6 +9,8 @@ type Props = {
   allLabel: string;
   searchPlaceholder: string;
   ariaLabel: string;
+  /** When false, hides the empty “all” option (use for required picks). Default true. */
+  allowEmpty?: boolean;
 };
 
 export default function SearchableSelect({
@@ -18,6 +20,7 @@ export default function SearchableSelect({
   allLabel,
   searchPlaceholder,
   ariaLabel,
+  allowEmpty = true,
 }: Props) {
   const listId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -35,7 +38,10 @@ export default function SearchableSelect({
     const q = query.trim().toLowerCase();
     if (!q) return options;
     return options.filter(
-      (o) => o.label.toLowerCase().includes(q) || o.value.toLowerCase().includes(q)
+      (o) =>
+        o.label.toLowerCase().includes(q) ||
+        o.value.toLowerCase().includes(q) ||
+        (o.hint?.toLowerCase().includes(q) ?? false)
     );
   }, [options, query]);
 
@@ -98,15 +104,17 @@ export default function SearchableSelect({
             }}
           />
           <ul className="searchable-select-list">
-            <li>
-              <button
-                type="button"
-                className={`searchable-select-option${value === "" ? " is-selected" : ""}`}
-                onClick={() => pick("")}
-              >
-                {allLabel}
-              </button>
-            </li>
+            {allowEmpty ? (
+              <li>
+                <button
+                  type="button"
+                  className={`searchable-select-option${value === "" ? " is-selected" : ""}`}
+                  onClick={() => pick("")}
+                >
+                  {allLabel}
+                </button>
+              </li>
+            ) : null}
             {filtered.length === 0 ? (
               <li className="searchable-select-empty muted small">—</li>
             ) : (
@@ -114,7 +122,7 @@ export default function SearchableSelect({
                 <li key={opt.value}>
                   <button
                     type="button"
-                    className={`searchable-select-option${value === opt.value ? " is-selected" : ""}`}
+                    className={`searchable-select-option${opt.value === value ? " is-selected" : ""}`}
                     onClick={() => pick(opt.value)}
                   >
                     <span>{opt.label}</span>

@@ -31,6 +31,7 @@ const FILES = [
   "019_rep_route_schedule_assigned_at.sql",
   "020_external_sales_store_name.sql",
   "021_price_four_decimals.sql",
+  "022_external_sales_store_id.sql",
 ] as const;
 
 async function main() {

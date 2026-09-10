@@ -1891,8 +1891,7 @@ const externalSaleLineSchema = z.object({
 
 const externalSalePostSchema = z.object({
   paymentType: z.enum(["cash", "deferred"]),
-  /** Free-text label only — not linked to the stores table. */
-  storeName: z.string().trim().min(1).max(200),
+  storeId: z.number().int().positive(),
   note: z.string().max(500).optional(),
   lines: z.array(externalSaleLineSchema).min(1),
 });
@@ -1906,7 +1905,6 @@ router.post(
       const id = z.coerce.number().int().positive().parse(req.params.id);
       const body = externalSalePostSchema.parse(req.body);
       const adminId = req.admin!.id;
-      const storeName = body.storeName.trim();
 
       const { rows: repRows } = await query<{
         id: number;
@@ -1915,6 +1913,15 @@ router.post(
       }>(`SELECT id, full_name, email FROM representatives WHERE id = $1`, [id]);
       const rep = repRows[0];
       if (!rep) throw new HttpError(404, "المندوب غير موجود");
+
+      const { rows: storeRows } = await query<{
+        id: number;
+        name: string;
+        phone: string | null;
+      }>(`SELECT id, name, phone FROM stores WHERE id = $1`, [body.storeId]);
+      const store = storeRows[0];
+      if (!store) throw new HttpError(400, "المتجر غير موجود");
+      const storeName = store.name;
 
       const c = await pool.connect();
       try {
@@ -1949,7 +1956,7 @@ router.post(
           const lineTotal = unitPrice * line.quantity;
           total += lineTotal;
           priced.push({
-            productId: line.productId,
+            productId: p.id,
             productName: p.name,
             quantity: line.quantity,
             unitPrice,
@@ -1959,10 +1966,10 @@ router.post(
 
         const sale = await c.query<{ id: string; created_at: Date }>(
           `INSERT INTO external_sales
-             (representative_id, payment_type, total_amount, note, recorded_by_admin_id, store_name)
-           VALUES ($1, $2, $3, $4, $5, $6)
+             (representative_id, payment_type, total_amount, note, recorded_by_admin_id, store_name, store_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
            RETURNING id, created_at`,
-          [id, body.paymentType, total.toFixed(4), body.note?.trim() || null, adminId, storeName]
+          [id, body.paymentType, total.toFixed(4), body.note?.trim() || null, adminId, storeName, store.id]
         );
         const saleId = sale.rows[0]!.id;
         const createdAt = new Date(sale.rows[0]!.created_at);
@@ -1983,9 +1990,9 @@ router.post(
           occurredAtAmman: formatAmmanDateTime(createdAt),
           paymentType: body.paymentType,
           store: {
-            id: null,
+            id: store.id,
             name: storeName,
-            phone: null,
+            phone: store.phone,
           },
           representative: {
             id: rep.id,
@@ -2003,6 +2010,7 @@ router.post(
         });
         res.status(201).json({
           id: externalOrderPublicId(saleId),
+          storeId: store.id,
           storeName,
           totalAmount: total.toFixed(4),
           paymentType: body.paymentType,
@@ -2540,6 +2548,37 @@ router.post(
       } finally {
         c.release();
       }
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+router.get(
+  "/stores/options",
+  adminAuthMiddleware,
+  requireAnyAdminPermission("stores.read", "fill_car.write", "reps.write"),
+  async (_req, res, next) => {
+    try {
+      const { rows } = await query<{
+        id: number;
+        name: string;
+        phone: string;
+        area_name: string;
+      }>(`
+        SELECT s.id, s.name, s.phone, a.name AS area_name
+        FROM stores s
+        JOIN areas a ON a.id = s.area_id
+        ORDER BY s.name ASC
+      `);
+      res.json({
+        stores: rows.map((r) => ({
+          id: r.id,
+          name: r.name,
+          phone: r.phone,
+          areaName: r.area_name,
+        })),
+      });
     } catch (e) {
       next(e);
     }
