@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import RepRouteScheduleFields, {
   mergeScheduleZones,
+  sanitizeScheduleForAllowedZones,
   type RouteZoneOption,
   type ScheduleRow,
 } from "./RepRouteScheduleFields";
@@ -34,8 +35,12 @@ export default function RepRouteScheduleModal({ repId, repName, onClose }: Props
           api.get<{ schedule: ScheduleRow[] }>(`/representatives/${repId}/route-schedule`),
         ]);
         const schedule = s.data.schedule;
-        setZones(mergeScheduleZones(z.data.routeZones.filter((x) => x.isActive), schedule));
-        setRows(schedule);
+        const allowed = mergeScheduleZones(
+          z.data.routeZones.filter((x) => x.isActive),
+          schedule
+        );
+        setZones(allowed);
+        setRows(sanitizeScheduleForAllowedZones(schedule, allowed));
       } catch (e) {
         toastError(pickAxiosErrorMessage(e, t.repSchedule.loadFailed));
         onClose();

@@ -2050,14 +2050,32 @@ router.put(
       const assigned = body.entries.filter((e): e is { dayOfWeek: number; routeZoneId: number } => e.routeZoneId != null);
       const zoneIds = assigned.map((e) => e.routeZoneId);
       if (zoneIds.length) {
-        const { rows: zones } = await query<{ id: number }>(
+        const uniqueIds = [...new Set(zoneIds)];
+        const { rows: zones } = await query<{ id: number; name: string; is_active: boolean }>(
+          `SELECT rz.id, rz.name, rz.is_active FROM route_zones rz
+           WHERE rz.id = ANY($1::int[])`,
+          [uniqueIds]
+        );
+        const byId = new Map(zones.map((z) => [z.id, z]));
+        const { rows: allowed } = await query<{ id: number }>(
           `SELECT rz.id FROM route_zones rz
            WHERE rz.id = ANY($1::int[]) AND rz.is_active = true
            AND ${routeZoneVisibleToRepSql("rz.id", "$2")}`,
-          [zoneIds, id]
+          [uniqueIds, id]
         );
-        if (zones.length !== new Set(zoneIds).size) {
-          throw new HttpError(400, "منطقة مسار غير موجودة أو غير مفعّلة أو غير مخصّصة لهذا المندوب");
+        const allowedSet = new Set(allowed.map((z) => z.id));
+        const bad = uniqueIds.filter((zid) => !allowedSet.has(zid));
+        if (bad.length) {
+          const labels = bad.map((zid) => {
+            const z = byId.get(zid);
+            if (!z) return `#${zid} (غير موجودة)`;
+            if (!z.is_active) return `«${z.name}» (غير مفعّلة)`;
+            return `«${z.name}» (غير مخصّصة لهذا المندوب)`;
+          });
+          throw new HttpError(
+            400,
+            `لا يمكن جدولة منطقة المسار: ${labels.join("، ")}. عدّل المسار من «مسارات المناطق» أو اختر مساراً آخر.`
+          );
         }
       }
 

@@ -5,6 +5,7 @@ import { api } from "../api";
 import RepRouteScheduleModal from "../components/RepRouteScheduleModal";
 import RepRouteScheduleFields, {
   mergeScheduleZones,
+  sanitizeScheduleForAllowedZones,
   type RouteZoneOption,
   type ScheduleRow,
 } from "../components/RepRouteScheduleFields";
@@ -82,13 +83,15 @@ export default function RepresentativesPage() {
     setScheduleLoading(true);
     try {
       const { data } = await api.get<{ schedule: ScheduleRow[] }>(`/representatives/${repId}/route-schedule`);
-      setScheduleRows(data.schedule);
       const { data: zonesData } = await api.get<{ routeZones: RouteZoneOption[] }>("/route-zones", {
         params: { representativeId: repId },
       });
-      setRouteZones(
-        mergeScheduleZones(zonesData.routeZones.filter((x) => x.isActive), data.schedule)
+      const allowed = mergeScheduleZones(
+        zonesData.routeZones.filter((x) => x.isActive),
+        data.schedule
       );
+      setRouteZones(allowed);
+      setScheduleRows(sanitizeScheduleForAllowedZones(data.schedule, allowed));
     } catch (e) {
       toastError(pickAxiosErrorMessage(e, t.repSchedule.loadFailed));
       setScheduleRows([]);

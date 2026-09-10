@@ -15,19 +15,26 @@ export type ScheduleRow = {
 
 export function mergeScheduleZones(
   filtered: RouteZoneOption[],
-  schedule: ScheduleRow[]
+  _schedule?: ScheduleRow[]
 ): RouteZoneOption[] {
-  const byId = new Map(filtered.map((z) => [z.id, z]));
-  for (const row of schedule) {
-    if (row.routeZoneId != null && !byId.has(row.routeZoneId)) {
-      byId.set(row.routeZoneId, {
-        id: row.routeZoneId,
-        name: row.routeZoneName ?? String(row.routeZoneId),
-        isActive: true,
-      });
-    }
-  }
-  return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name, "ar"));
+  return [...filtered].sort((a, b) => a.name.localeCompare(b.name, "ar"));
+}
+
+/** Drop day assignments that are inactive or not allowed for this rep (would fail on save). */
+export function sanitizeScheduleForAllowedZones(
+  schedule: ScheduleRow[],
+  allowedZones: RouteZoneOption[]
+): ScheduleRow[] {
+  const allowedIds = new Set(allowedZones.map((z) => z.id));
+  return schedule.map((row) => {
+    if (row.routeZoneId == null || allowedIds.has(row.routeZoneId)) return row;
+    return {
+      ...row,
+      routeZoneId: null,
+      routeZoneName: null,
+      assignedAt: null,
+    };
+  });
 }
 
 type Props = {
