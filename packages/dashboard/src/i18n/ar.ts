@@ -572,6 +572,7 @@ export const ar = {
     colQr: "رمز البطاقة",
     colDeferred: "البيع الآجل",
     colRegisteredBy: "سجّله المندوب",
+    colRouteRep: "المندوب (المسار)",
     open: "مفتوح",
     closed: "مغلق",
     pay: "دفعة",

@@ -31,17 +31,33 @@ type Store = {
   registered_by_rep_name: string | null;
 };
 
+type RepRouteAreas = {
+  id: number;
+  fullName: string;
+  areaNames: string[];
+};
+
 export default function StoresPage() {
   const { can } = useAuth();
   const { t } = useLocale();
   const navigate = useNavigate();
   const [stores, setStores] = useState<Store[]>([]);
+  const [repRoutes, setRepRoutes] = useState<RepRouteAreas[]>([]);
+  const [selectedRep, setSelectedRep] = useState("");
   const [payStoreId, setPayStoreId] = useState<number | null>(null);
   const [payAmount, setPayAmount] = useState("");
   const [payNote, setPayNote] = useState("");
   const [editStore, setEditStore] = useState<EditableStore | null>(null);
 
-  const areaFilterOptions = useMemo(() => {
+  const areasByRepName = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const r of repRoutes) {
+      map.set(r.fullName, new Set(r.areaNames.map((n) => n.trim()).filter(Boolean)));
+    }
+    return map;
+  }, [repRoutes]);
+
+  const allAreaFilterOptions = useMemo(() => {
     const names = new Set<string>();
     for (const s of stores) {
       const n = s.area_name?.trim();
@@ -52,7 +68,7 @@ export default function StoresPage() {
       .map((name) => ({ value: name, label: name }));
   }, [stores]);
 
-  const repFilterOptions = useMemo(() => {
+  const registeredByOptions = useMemo(() => {
     const names = new Set<string>();
     for (const s of stores) {
       const n = s.registered_by_rep_name?.trim();
@@ -63,10 +79,39 @@ export default function StoresPage() {
       .map((name) => ({ value: name, label: name }));
   }, [stores]);
 
+  const repFilterOptions = useMemo(
+    () =>
+      [...repRoutes]
+        .sort((a, b) => a.fullName.localeCompare(b.fullName, "ar"))
+        .map((r) => ({ value: r.fullName, label: r.fullName })),
+    [repRoutes]
+  );
+
+  const areaFilterOptions = useMemo(() => {
+    if (!selectedRep) return allAreaFilterOptions;
+    const routeAreas = areasByRepName.get(selectedRep);
+    if (!routeAreas?.size) return [];
+    return [...routeAreas]
+      .sort((a, b) => a.localeCompare(b, "ar"))
+      .map((name) => ({ value: name, label: name }));
+  }, [selectedRep, allAreaFilterOptions, areasByRepName]);
+
   const storeFilterFields = useMemo(
     () => [
       { id: "name", label: t.stores.colStore, type: "text" as const, getValue: (s: Store) => s.name },
       { id: "phone", label: t.storeDetail.phone, type: "text" as const, getValue: (s: Store) => s.phone },
+      {
+        id: "rep",
+        label: t.stores.colRouteRep,
+        type: "searchableSelect" as const,
+        getValue: (s: Store) => s.area_name,
+        matches: (s: Store, repName: string) => {
+          const areas = areasByRepName.get(repName);
+          if (!areas?.size) return false;
+          return areas.has(s.area_name?.trim() ?? "");
+        },
+        options: repFilterOptions,
+      },
       {
         id: "area",
         label: t.stores.colArea,
@@ -76,11 +121,11 @@ export default function StoresPage() {
       },
       { id: "owner", label: t.stores.colOwner, type: "text" as const, getValue: (s: Store) => s.owner_name },
       {
-        id: "rep",
+        id: "registeredBy",
         label: t.stores.colRegisteredBy,
         type: "searchableSelect" as const,
         getValue: (s: Store) => s.registered_by_rep_name,
-        options: repFilterOptions,
+        options: registeredByOptions,
       },
       { id: "qr", label: t.stores.colQr, type: "text" as const, getValue: (s: Store) => s.qr_public_token },
       {
@@ -92,6 +137,8 @@ export default function StoresPage() {
     ],
     [
       areaFilterOptions,
+      areasByRepName,
+      registeredByOptions,
       repFilterOptions,
       t.storeDetail.phone,
       t.stores.colArea,
@@ -99,6 +146,7 @@ export default function StoresPage() {
       t.stores.colOwner,
       t.stores.colQr,
       t.stores.colRegisteredBy,
+      t.stores.colRouteRep,
       t.stores.colStore,
     ]
   );
@@ -119,9 +167,35 @@ export default function StoresPage() {
   const storePgn = storeTable.pagination;
   const canWrite = can("stores.write");
 
+  function onFilterChange(id: string, value: string) {
+    storeTable.setFilter(id, value);
+    if (id === "rep") {
+      setSelectedRep(value.trim());
+      const areas = value.trim() ? areasByRepName.get(value.trim()) : null;
+      const currentArea = (storeTable.filters.area ?? "").trim();
+      if (currentArea && areas && !areas.has(currentArea)) {
+        storeTable.setFilter("area", "");
+      }
+      if (currentArea && value.trim() && !areas?.size) {
+        storeTable.setFilter("area", "");
+      }
+    }
+  }
+
+  function onClearFilters() {
+    setSelectedRep("");
+    storeTable.clearFilters();
+  }
+
   async function load() {
-    const { data } = await api.get<{ stores: Store[] }>("/stores");
-    setStores(data.stores);
+    const [storesRes, routeAreasRes] = await Promise.all([
+      api.get<{ stores: Store[] }>("/stores"),
+      api
+        .get<{ representatives: RepRouteAreas[] }>("/representatives/route-areas")
+        .catch(() => ({ data: { representatives: [] as RepRouteAreas[] } })),
+    ]);
+    setStores(storesRes.data.stores);
+    setRepRoutes(routeAreasRes.data.representatives ?? []);
   }
 
   useEffect(() => {
@@ -188,12 +262,18 @@ export default function StoresPage() {
         <p className="muted">{t.stores.hint}</p>
         <p className="muted small">{t.stores.rowHint}</p>
         <TableFilterBar
-          {...storeTable}
+          search={storeTable.search}
+          filters={storeTable.filters}
+          showFilters={storeTable.showFilters}
+          fields={storeFilterFields}
+          hasActiveFilters={storeTable.hasActiveFilters}
+          totalCount={storeTable.totalCount}
+          filteredCount={storeTable.filteredCount}
           onSearchChange={storeTable.setSearch}
-          onFilterChange={storeTable.setFilter}
-          onClear={storeTable.clearFilters}
+          onFilterChange={onFilterChange}
+          onClear={onClearFilters}
           onToggleFilters={() => storeTable.setShowFilters((v) => !v)}
-          pinnedFieldIds={["area", "rep"]}
+          pinnedFieldIds={["rep", "area"]}
           labels={t.tableFilters}
         />
         {storeTable.filteredCount > 0 && (
@@ -258,7 +338,11 @@ export default function StoresPage() {
                   </td>
                   <td onClick={(e) => e.stopPropagation()}>
                     {can("stores.deferred_toggle") ? (
-                      <button type="button" className={s.deferred_payment_enabled ? "pill on" : "pill off"} onClick={() => void toggleDeferred(s)}>
+                      <button
+                        type="button"
+                        className={s.deferred_payment_enabled ? "pill on" : "pill off"}
+                        onClick={() => void toggleDeferred(s)}
+                      >
                         {s.deferred_payment_enabled ? t.stores.open : t.stores.closed}
                       </button>
                     ) : s.deferred_payment_enabled ? (
@@ -294,11 +378,7 @@ export default function StoresPage() {
       </div>
 
       {editStore && (
-        <StoreEditModal
-          store={editStore}
-          onClose={() => setEditStore(null)}
-          onSaved={() => void load()}
-        />
+        <StoreEditModal store={editStore} onClose={() => setEditStore(null)} onSaved={() => void load()} />
       )}
 
       {payStoreId != null && (
@@ -310,7 +390,13 @@ export default function StoresPage() {
             <form onSubmit={recordPayment} className="form">
               <label>
                 {t.stores.amount}
-                <input value={payAmount} onChange={(e) => setPayAmount(e.target.value)} type="number" step="0.01" required />
+                <input
+                  value={payAmount}
+                  onChange={(e) => setPayAmount(e.target.value)}
+                  type="number"
+                  step="0.01"
+                  required
+                />
               </label>
               <label>
                 {t.stores.note}

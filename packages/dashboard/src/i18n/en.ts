@@ -575,6 +575,7 @@ export const en: Messages = {
     colQr: "Store QR",
     colDeferred: "Deferred",
     colRegisteredBy: "Registered by rep",
+    colRouteRep: "Rep (route)",
     open: "Open",
     closed: "Closed",
     pay: "Payment",

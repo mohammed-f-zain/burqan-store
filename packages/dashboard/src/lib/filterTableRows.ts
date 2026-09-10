@@ -5,6 +5,8 @@ export type FilterFieldDef<T> = {
   label: string;
   type: "text" | "select" | "searchableSelect" | "boolean" | "dateFrom" | "dateTo";
   getValue: (row: T) => string | number | boolean | null | undefined;
+  /** When set, used instead of getValue equality for select/searchableSelect filters. */
+  matches?: (row: T, filterVal: string) => boolean;
   options?: { value: string; label: string }[];
 };
 
@@ -98,7 +100,11 @@ export function filterTableRows<T>(
 
       const text = norm(cellText(raw));
       if (field.type === "select" || field.type === "searchableSelect") {
-        if (text !== norm(filterVal)) return false;
+        if (field.matches) {
+          if (!field.matches(row, filterVal)) return false;
+        } else if (text !== norm(filterVal)) {
+          return false;
+        }
       } else if (!text.includes(norm(filterVal))) {
         return false;
       }

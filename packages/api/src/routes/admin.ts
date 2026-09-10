@@ -28,6 +28,7 @@ import {
 } from "../data/noBuyReasons.js";
 import { buildJordanVoronoiPayload } from "../utils/buildJordanVoronoiPayload.js";
 import { ARABIC_WEEKDAY_NAMES, routeZoneVisibleToRepSql } from "../utils/routeZones.js";
+import { expandRepAreaIds } from "../utils/expandRepAreaIds.js";
 import { importGooglePlaces } from "../utils/importGooglePlaces.js";
 import { isGooglePlacesEnabled } from "../utils/googlePlaces.js";
 import { GOVERNORATE_AREA_SUFFIX } from "../utils/matchAreaFromGoogle.js";
@@ -1413,6 +1414,64 @@ router.get(
         ORDER BY r.id DESC
       `);
       res.json({ representatives: rows });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+/** Areas covered by each rep's weekly route zones (expanded coverage rows included). */
+router.get(
+  "/representatives/route-areas",
+  adminAuthMiddleware,
+  requireAdminPermission("stores.read"),
+  async (_req, res, next) => {
+    try {
+      const { rows: scheduleRows } = await query<{
+        representative_id: number;
+        full_name: string;
+        area_id: number;
+      }>(
+        `SELECT DISTINCT r.id AS representative_id, r.full_name, rza.area_id
+         FROM representatives r
+         JOIN rep_route_schedule rs ON rs.representative_id = r.id
+         JOIN route_zones rz ON rz.id = rs.route_zone_id AND rz.is_active = true
+         JOIN route_zone_areas rza ON rza.route_zone_id = rz.id
+         WHERE r.is_active = true
+         ORDER BY r.full_name ASC`
+      );
+
+      const byRep = new Map<number, { id: number; fullName: string; areaIds: Set<number> }>();
+      for (const row of scheduleRows) {
+        let entry = byRep.get(row.representative_id);
+        if (!entry) {
+          entry = { id: row.representative_id, fullName: row.full_name, areaIds: new Set() };
+          byRep.set(row.representative_id, entry);
+        }
+        entry.areaIds.add(row.area_id);
+      }
+
+      const reps = [];
+      for (const entry of byRep.values()) {
+        const expandedIds = await expandRepAreaIds([...entry.areaIds]);
+        let areaNames: string[] = [];
+        if (expandedIds.length) {
+          const { rows: areaRows } = await query<{ name: string }>(
+            `SELECT name FROM areas WHERE id = ANY($1::int[]) ORDER BY name ASC`,
+            [expandedIds]
+          );
+          areaNames = areaRows.map((a) => a.name);
+        }
+        reps.push({
+          id: entry.id,
+          fullName: entry.fullName,
+          areaIds: expandedIds,
+          areaNames,
+        });
+      }
+
+      reps.sort((a, b) => a.fullName.localeCompare(b.fullName, "ar"));
+      res.json({ representatives: reps });
     } catch (e) {
       next(e);
     }
