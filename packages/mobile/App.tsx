@@ -125,6 +125,8 @@ const t = {
   collectDeferredCancel: "إلغاء",
   collectDeferredDone: "تم تسجيل الدفعة الآجلة.",
   collectDeferredFailed: "تعذّر تسجيل الدفعة.",
+  collectDeferredInvalidAmount: "أدخل مبلغاً صالحاً أكبر من صفر.",
+  collectDeferredTooHigh: "المبلغ أكبر من المتبقي المستحق.",
   collectDeferredNone: "لا يوجد رصيد آجل مستحق.",
   collectDeferredDisabled: "التحصيل الآجل غير مفعّل لهذا المتجر.",
   tabProducts: "المنتجات",
@@ -538,6 +540,7 @@ export default function App() {
   const [storeSortMode, setStoreSortMode] = useState<StoreSortMode>("lastVisit");
   const [deferredPayOpen, setDeferredPayOpen] = useState(false);
   const [deferredPayBusy, setDeferredPayBusy] = useState(false);
+  const [deferredPayError, setDeferredPayError] = useState<string | null>(null);
   const [deferredOutstanding, setDeferredOutstanding] = useState(0);
   const [deferredBalanceLoading, setDeferredBalanceLoading] = useState(false);
   const [orderReceipt, setOrderReceipt] = useState<ReceiptData | null>(null);
@@ -2035,6 +2038,7 @@ export default function App() {
                           return;
                         }
                         setDeferredOutstanding(outstanding);
+                        setDeferredPayError(null);
                         setDeferredPayOpen(true);
                       })
                       .catch((e) => showToast(toArabicUserMessage(e, t.collectDeferredFailed), "error"))
@@ -2689,7 +2693,8 @@ export default function App() {
           notePlaceholder: t.collectDeferredNoteHint,
           submit: t.collectDeferredSubmit,
           cancel: t.collectDeferredCancel,
-          invalidAmount: t.collectDeferredFailed,
+          invalidAmount: t.collectDeferredInvalidAmount,
+          amountTooHigh: t.collectDeferredTooHigh,
         }}
         onClose={() => {
           if (!deferredPayBusy) setDeferredPayOpen(false);

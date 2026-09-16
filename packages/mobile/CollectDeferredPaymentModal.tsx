@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -24,6 +25,7 @@ export type CollectDeferredLabels = {
   submit: string;
   cancel: string;
   invalidAmount: string;
+  amountTooHigh?: string;
 };
 
 type Props = {
@@ -31,27 +33,60 @@ type Props = {
   storeName: string;
   outstanding: number;
   busy?: boolean;
+  serverError?: string | null;
   labels: CollectDeferredLabels;
   formatMoney: (n: number) => string;
   onClose: () => void;
   onSubmit: (payload: { amount: number; note?: string }) => void;
 };
 
+/** Parse amounts typed with Arabic/Persian digits or ، / ٫ decimals. */
+export function parseMoneyInput(raw: string): number {
+  const normalized = String(raw ?? "")
+    .trim()
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 1632))
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 1776))
+    .replace(/[٫،]/g, ".")
+    .replace(/,/g, ".")
+    .replace(/\s+/g, "")
+    .replace(/[^\d.]/g, "");
+  if (!normalized) return NaN;
+  const firstDot = normalized.indexOf(".");
+  const cleaned =
+    firstDot === -1
+      ? normalized
+      : normalized.slice(0, firstDot + 1) + normalized.slice(firstDot + 1).replace(/\./g, "");
+  return parseFloat(cleaned);
+}
+
 export default function CollectDeferredPaymentModal(props: Props) {
-  const { visible, storeName, outstanding, busy, labels, formatMoney } = props;
+  const { visible, storeName, outstanding, busy, serverError, labels, formatMoney } = props;
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (visible) {
       setAmount(outstanding > 0 ? String(Number(outstanding.toFixed(2))) : "");
       setNote("");
+      setError(null);
     }
   }, [visible, outstanding]);
 
+  const shownError = error || serverError || null;
+
   function submit() {
-    const n = parseFloat(amount.replace(",", "."));
-    if (!Number.isFinite(n) || n <= 0) return;
+    Keyboard.dismiss();
+    const n = parseMoneyInput(amount);
+    if (!Number.isFinite(n) || n <= 0) {
+      setError(labels.invalidAmount);
+      return;
+    }
+    if (n > outstanding + 0.004) {
+      setError(labels.amountTooHigh ?? labels.invalidAmount);
+      return;
+    }
+    setError(null);
     props.onSubmit({ amount: n, note: note.trim() || undefined });
   }
 
@@ -60,10 +95,11 @@ export default function CollectDeferredPaymentModal(props: Props) {
       <KeyboardAvoidingView
         style={styles.backdrop}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
+        pointerEvents="box-none"
       >
-        <Pressable style={styles.backdropTouch} onPress={props.onClose} />
-        <SafeAreaView style={styles.sheetWrap} edges={["bottom"]}>
-          <View style={styles.sheet}>
+        <Pressable style={styles.backdropTouch} onPress={props.onClose} accessibilityLabel={labels.cancel} />
+        <SafeAreaView style={styles.sheetWrap} edges={["bottom"]} pointerEvents="box-none">
+          <View style={styles.sheet} pointerEvents="auto">
             <View style={styles.handle} />
             <Text style={styles.title}>{labels.title}</Text>
             <Text style={styles.storeName}>{storeName}</Text>
@@ -73,10 +109,15 @@ export default function CollectDeferredPaymentModal(props: Props) {
             <TextInput
               style={styles.input}
               value={amount}
-              onChangeText={setAmount}
+              onChangeText={(v) => {
+                setAmount(v);
+                if (error) setError(null);
+              }}
               keyboardType="decimal-pad"
               textAlign="right"
               editable={!busy}
+              returnKeyType="done"
+              onSubmitEditing={submit}
             />
 
             <Text style={styles.label}>{labels.note}</Text>
@@ -90,10 +131,14 @@ export default function CollectDeferredPaymentModal(props: Props) {
               editable={!busy}
             />
 
+            {shownError ? <Text style={styles.errorText}>{shownError}</Text> : null}
+
             <Pressable
               style={[styles.submit, busy && styles.disabled]}
               onPress={submit}
-              disabled={busy}
+              disabled={!!busy}
+              accessibilityRole="button"
+              accessibilityLabel={labels.submit}
             >
               {busy ? (
                 <ActivityIndicator color="#fff" />
@@ -104,7 +149,7 @@ export default function CollectDeferredPaymentModal(props: Props) {
                 </>
               )}
             </Pressable>
-            <Pressable style={styles.cancel} onPress={props.onClose} disabled={busy}>
+            <Pressable style={styles.cancel} onPress={props.onClose} disabled={!!busy}>
               <Text style={styles.cancelText}>{labels.cancel}</Text>
             </Pressable>
           </View>
@@ -120,8 +165,11 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
     backgroundColor: "rgba(15, 23, 42, 0.55)",
   },
-  backdropTouch: { ...StyleSheet.absoluteFillObject },
-  sheetWrap: { width: "100%" },
+  backdropTouch: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 0,
+  },
+  sheetWrap: { width: "100%", zIndex: 1 },
   sheet: {
     backgroundColor: theme.card,
     borderTopLeftRadius: 24,
@@ -162,6 +210,13 @@ const styles = StyleSheet.create({
     color: theme.text,
     backgroundColor: "#f8fafc",
     marginBottom: 12,
+  },
+  errorText: {
+    color: "#b91c1c",
+    fontWeight: "700",
+    textAlign: "center",
+    marginBottom: 8,
+    fontSize: 14,
   },
   submit: {
     marginTop: 8,
