@@ -132,6 +132,25 @@ const t = {
   tabVisits: "زيارات",
   tabOrders: "طلبات",
   tabSell: "طلب",
+  tabExchange: "استبدال",
+  exchangeStepReturn: "١) منتجات المرتجع",
+  exchangeStepGive: "٢) منتجات البديل من السيارة",
+  exchangeReturnHint: "اختر المنتجات التي يعيدها المتجر. ستُضاف إلى مخزون سيارتك بعد تأكيد الاستبدال.",
+  exchangeGiveHint: "اختر منتجات من مخزون سيارتك بقيمة تساوي المرتجع أو أعلى. لا يوجد إرجاع نقدي للمتجر.",
+  exchangeReturnTotal: "قيمة المرتجع",
+  exchangeGiveTotal: "قيمة البديل",
+  exchangeCashDiff: "فرق نقدي من صاحب المتجر",
+  exchangeConfirmReturns: "تأكيد المرتجع والانتقال للبديل",
+  exchangeBackToReturns: "تعديل المرتجع",
+  exchangeSubmit: "تأكيد الاستبدال",
+  exchangeNeedReturns: "أضف منتجاً واحداً على الأقل للمرتجع",
+  exchangeNeedGives: "أضف منتجاً واحداً على الأقل من السيارة",
+  exchangeValueTooLow: "قيمة البديل أقل من المرتجع — أضف منتجات أو زد الكمية",
+  exchangeDone: "تم تسجيل الاستبدال.",
+  exchangeDoneCash: (amount: string) => `تم الاستبدال. حصّل ${amount} نقداً من صاحب المتجر.`,
+  exchangeFailed: "فشل تسجيل الاستبدال",
+  exchangeEmptyCatalog: "لا توجد منتجات في الكتالوج",
+  exchangeEmptyVan: "لا يوجد مخزون في السيارة للاستبدال",
   cartTitle: "ملخص الطلب",
   cartEmptyHint: "اضغط + لإضافة منتجات من القائمة أعلاه",
   invoiceTitle: "فاتورة الطلب",
@@ -484,7 +503,11 @@ export default function App() {
   const [manualToken, setManualToken] = useState("");
   const [areas, setAreas] = useState<Area[]>([]);
   const [activeStore, setActiveStore] = useState<StoreBrief | null>(null);
-  const [storeTab, setStoreTab] = useState<"info" | "sell" | "redeem">("sell");
+  const [storeTab, setStoreTab] = useState<"info" | "sell" | "redeem" | "exchange">("sell");
+  const [exchangeStep, setExchangeStep] = useState<"return" | "give">("return");
+  const [exchangeReturnCart, setExchangeReturnCart] = useState<Record<number, number>>({});
+  const [exchangeGiveCart, setExchangeGiveCart] = useState<Record<number, number>>({});
+  const [exchangeBusy, setExchangeBusy] = useState(false);
   const [editStoreOpen, setEditStoreOpen] = useState(false);
   const [prizeProducts, setPrizeProducts] = useState<PrizeProduct[]>([]);
   const [redeemCart, setRedeemCart] = useState<Record<number, number>>({});
@@ -973,6 +996,9 @@ export default function App() {
           setActiveStore(normalizeStoreBrief(store as Record<string, unknown>));
           setStorePointsBalance(store.loyaltyPointsBalance ?? 0);
           setRedeemCart({});
+          setExchangeReturnCart({});
+          setExchangeGiveCart({});
+          setExchangeStep("return");
           setVisitHadOrder(false);
           setMode("store");
           setBottomTab("home");
@@ -1002,6 +1028,9 @@ export default function App() {
         setActiveStore(store);
         setStorePointsBalance(store.loyaltyPointsBalance ?? 0);
         setRedeemCart({});
+        setExchangeReturnCart({});
+        setExchangeGiveCart({});
+        setExchangeStep("return");
         setVisitHadOrder(false);
         setMode("store");
         setBottomTab("home");
@@ -1211,9 +1240,31 @@ export default function App() {
     });
   }
 
+  function setExchangeReturnQty(pid: number, delta: number) {
+    setExchangeReturnCart((c) => {
+      const q = (c[pid] ?? 0) + delta;
+      const next = { ...c };
+      if (q <= 0) delete next[pid];
+      else next[pid] = q;
+      return next;
+    });
+  }
+
+  function setExchangeGiveQty(pid: number, delta: number) {
+    const max = products.find((p) => p.id === pid)?.quantity ?? 0;
+    setExchangeGiveCart((c) => {
+      const q = (c[pid] ?? 0) + delta;
+      const next = { ...c };
+      if (q <= 0) delete next[pid];
+      else next[pid] = Math.min(q, max);
+      return next;
+    });
+  }
+
   const tabLabels: Record<typeof storeTab, string> = {
     info: t.tabInfo,
     sell: t.tabSell,
+    exchange: t.tabExchange,
     redeem: t.tabRedeem,
   };
 
@@ -1250,6 +1301,13 @@ export default function App() {
   useEffect(() => {
     if (storeTab === "redeem" && activeStore) void loadPrizes();
   }, [storeTab, activeStore, loadPrizes]);
+
+  useEffect(() => {
+    if ((storeTab === "exchange" || storeTab === "sell") && token) {
+      void loadCatalog();
+      void loadInventory();
+    }
+  }, [storeTab, token, loadCatalog, loadInventory]);
 
   useEffect(() => {
     if (storeTab !== "info" || !activeStore?.id || !token) return;
@@ -1327,6 +1385,9 @@ export default function App() {
     setActiveStore(null);
     setCart({});
     setRedeemCart({});
+    setExchangeReturnCart({});
+    setExchangeGiveCart({});
+    setExchangeStep("return");
     setPrizeProducts([]);
     setVisitHadOrder(false);
     setOrderReceipt(null);
@@ -1448,7 +1509,89 @@ export default function App() {
     [cartLines]
   );
 
-  const storeTabOrder = ["sell", "info", "redeem"] as const;
+  const exchangeReturnTotal = useMemo(
+    () =>
+      Object.entries(exchangeReturnCart).reduce((sum, [pid, qty]) => {
+        const id = parseInt(pid, 10);
+        const van = products.find((x) => x.id === id);
+        const cat = catalogDisplay.find((x) => x.id === id);
+        const price = parseFloat(van?.price ?? cat?.price ?? "0") || 0;
+        return sum + price * qty;
+      }, 0),
+    [exchangeReturnCart, products, catalogDisplay]
+  );
+
+  const exchangeGiveTotal = useMemo(
+    () =>
+      Object.entries(exchangeGiveCart).reduce((sum, [pid, qty]) => {
+        const p = products.find((x) => x.id === parseInt(pid, 10));
+        return sum + (parseFloat(p?.price ?? "0") || 0) * qty;
+      }, 0),
+    [exchangeGiveCart, products]
+  );
+
+  const exchangeCashDiff = Math.max(0, exchangeGiveTotal - exchangeReturnTotal);
+  const exchangeReturnCount = useMemo(
+    () => Object.values(exchangeReturnCart).reduce((s, q) => s + q, 0),
+    [exchangeReturnCart]
+  );
+  const exchangeGiveCount = useMemo(
+    () => Object.values(exchangeGiveCart).reduce((s, q) => s + q, 0),
+    [exchangeGiveCart]
+  );
+
+  async function submitExchange() {
+    if (!activeStore) return;
+    const returnLines = Object.entries(exchangeReturnCart)
+      .filter(([, q]) => q > 0)
+      .map(([productId, quantity]) => ({ productId: parseInt(productId, 10), quantity }));
+    const giveLines = Object.entries(exchangeGiveCart)
+      .filter(([, q]) => q > 0)
+      .map(([productId, quantity]) => ({ productId: parseInt(productId, 10), quantity }));
+    if (!returnLines.length) {
+      showToast(t.exchangeNeedReturns, "info");
+      return;
+    }
+    if (!giveLines.length) {
+      showToast(t.exchangeNeedGives, "info");
+      return;
+    }
+    if (exchangeGiveTotal + 0.00005 < exchangeReturnTotal) {
+      showToast(t.exchangeValueTooLow, "error");
+      return;
+    }
+    setExchangeBusy(true);
+    try {
+      const pos = await getRepPosition();
+      const data = (await apiPost("/api/v1/rep/exchanges", {
+        storeId: activeStore.id,
+        returnLines,
+        giveLines,
+        repLat: pos.lat,
+        repLng: pos.lng,
+      })) as { cashDifference?: number };
+      const cash = Number(data.cashDifference) || 0;
+      setExchangeReturnCart({});
+      setExchangeGiveCart({});
+      setExchangeStep("return");
+      setVisitHadOrder(true);
+      await Promise.all([refreshStoreData(activeStore.id), loadInventory(), loadCatalog()]);
+      if (cash > 0.004) {
+        showToast(t.exchangeDoneCash(`${cash.toFixed(2)} ${t.currency}`), "success");
+      } else {
+        showToast(t.exchangeDone, "success");
+      }
+    } catch (e) {
+      if (e instanceof LocationDeniedError) showToast(t.locationDenied, "error");
+      else if (e instanceof LocationInaccurateError) showToast(t.locationInaccurate(e.accuracyM), "error");
+      else if (e instanceof LocationTimeoutError) showToast(t.locationTimeout, "error");
+      else showToast(e instanceof Error ? e.message : t.exchangeFailed, "error");
+    } finally {
+      setExchangeBusy(false);
+    }
+  }
+
+  const storeTabOrder = ["sell", "exchange", "info", "redeem"] as const;
 
   const productDetailLabels = useMemo(
     () => ({
@@ -1814,6 +1957,9 @@ export default function App() {
                 <Text style={[styles.tabText, storeTab === tab && styles.tabTextOn]}>
                   {tabLabels[tab]}
                   {tab === "sell" && cartItemCount > 0 ? ` (${cartItemCount})` : ""}
+                  {tab === "exchange" && exchangeReturnCount + exchangeGiveCount > 0
+                    ? ` (${exchangeReturnCount + exchangeGiveCount})`
+                    : ""}
                   {tab === "redeem" && redeemCartCount > 0 ? ` (${redeemCartCount})` : ""}
                 </Text>
               </Pressable>
@@ -2003,6 +2149,146 @@ export default function App() {
                   onSubmit={() => setOrderConfirmOpen(true)}
                 />
               ) : null}
+            </View>
+          )}
+
+          {storeTab === "exchange" && (
+            <View style={styles.panel}>
+              <View style={styles.tabs}>
+                <Pressable
+                  style={[styles.tab, exchangeStep === "return" && styles.tabOn]}
+                  onPress={() => setExchangeStep("return")}
+                >
+                  <Text style={[styles.tabText, exchangeStep === "return" && styles.tabTextOn]}>
+                    {t.exchangeStepReturn}
+                    {exchangeReturnCount > 0 ? ` (${exchangeReturnCount})` : ""}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.tab, exchangeStep === "give" && styles.tabOn]}
+                  onPress={() => {
+                    if (exchangeReturnCount === 0) {
+                      showToast(t.exchangeNeedReturns, "info");
+                      return;
+                    }
+                    setExchangeStep("give");
+                  }}
+                >
+                  <Text style={[styles.tabText, exchangeStep === "give" && styles.tabTextOn]}>
+                    {t.exchangeStepGive}
+                    {exchangeGiveCount > 0 ? ` (${exchangeGiveCount})` : ""}
+                  </Text>
+                </Pressable>
+              </View>
+
+              {exchangeStep === "return" ? (
+                <>
+                  <Text style={styles.muted}>{t.exchangeReturnHint}</Text>
+                  {catalogDisplay.length === 0 ? (
+                    <Text style={styles.emptyText}>{t.exchangeEmptyCatalog}</Text>
+                  ) : (
+                    catalogDisplay.map((item) => {
+                      const q = exchangeReturnCart[item.id] ?? 0;
+                      return (
+                        <ProductCard
+                          key={`ret-${item.id}`}
+                          item={item}
+                          mode="sell"
+                          cartQty={q}
+                          atMax={false}
+                          onMinus={() => setExchangeReturnQty(item.id, -1)}
+                          onPlus={() => setExchangeReturnQty(item.id, 1)}
+                        />
+                      );
+                    })
+                  )}
+                  <View style={styles.exchangeSummaryBox}>
+                    <Text style={styles.exchangeSummaryLabel}>{t.exchangeReturnTotal}</Text>
+                    <Text style={styles.exchangeSummaryValue}>
+                      {exchangeReturnTotal.toFixed(2)} {t.currency}
+                    </Text>
+                  </View>
+                  <Pressable
+                    style={[styles.primary, exchangeReturnCount === 0 && styles.disabledBtn]}
+                    disabled={exchangeReturnCount === 0}
+                    onPress={() => {
+                      if (exchangeReturnCount === 0) {
+                        showToast(t.exchangeNeedReturns, "info");
+                        return;
+                      }
+                      setExchangeStep("give");
+                    }}
+                  >
+                    <Text style={styles.primaryText}>{t.exchangeConfirmReturns}</Text>
+                  </Pressable>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.muted}>{t.exchangeGiveHint}</Text>
+                  {products.length === 0 ? (
+                    <Text style={styles.emptyText}>{t.exchangeEmptyVan}</Text>
+                  ) : (
+                    products.map((item) => {
+                      const q = exchangeGiveCart[item.id] ?? 0;
+                      const atMax = q >= item.quantity;
+                      return (
+                        <ProductCard
+                          key={`give-${item.id}`}
+                          item={item}
+                          mode="sell"
+                          cartQty={q}
+                          atMax={atMax}
+                          onMinus={() => setExchangeGiveQty(item.id, -1)}
+                          onPlus={() => setExchangeGiveQty(item.id, 1)}
+                        />
+                      );
+                    })
+                  )}
+                  <View style={styles.exchangeSummaryBox}>
+                    <Text style={styles.exchangeSummaryLabel}>{t.exchangeReturnTotal}</Text>
+                    <Text style={styles.exchangeSummaryValue}>
+                      {exchangeReturnTotal.toFixed(2)} {t.currency}
+                    </Text>
+                    <Text style={[styles.exchangeSummaryLabel, { marginTop: 8 }]}>
+                      {t.exchangeGiveTotal}
+                    </Text>
+                    <Text style={styles.exchangeSummaryValue}>
+                      {exchangeGiveTotal.toFixed(2)} {t.currency}
+                    </Text>
+                    {exchangeCashDiff > 0.004 ? (
+                      <>
+                        <Text style={[styles.exchangeSummaryLabel, styles.exchangeCashLabel, { marginTop: 8 }]}>
+                          {t.exchangeCashDiff}
+                        </Text>
+                        <Text style={[styles.exchangeSummaryValue, styles.exchangeCashValue]}>
+                          {exchangeCashDiff.toFixed(2)} {t.currency}
+                        </Text>
+                      </>
+                    ) : null}
+                  </View>
+                  <Pressable style={styles.secondary} onPress={() => setExchangeStep("return")}>
+                    <Text style={styles.secondaryText}>{t.exchangeBackToReturns}</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[
+                      styles.primary,
+                      { marginTop: 10 },
+                      (exchangeBusy || exchangeGiveCount === 0 || exchangeGiveTotal + 0.00005 < exchangeReturnTotal) &&
+                        styles.disabledBtn,
+                    ]}
+                    disabled={
+                      exchangeBusy ||
+                      exchangeGiveCount === 0 ||
+                      exchangeGiveTotal + 0.00005 < exchangeReturnTotal
+                    }
+                    onPress={() => void submitExchange()}
+                  >
+                    <Text style={styles.primaryText}>
+                      {exchangeBusy ? t.uploading : t.exchangeSubmit}
+                    </Text>
+                  </Pressable>
+                </>
+              )}
             </View>
           )}
 
@@ -2846,6 +3132,20 @@ const styles = StyleSheet.create({
     minHeight: 48,
   },
   secondaryText: { color: text, fontWeight: "700", fontSize: 15 },
+  disabledBtn: { opacity: 0.45 },
+  exchangeSummaryBox: {
+    marginTop: 14,
+    marginBottom: 8,
+    padding: 14,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: line,
+    backgroundColor: "#f8fafc",
+  },
+  exchangeSummaryLabel: { color: muted, fontSize: 12, fontWeight: "600", textAlign: "right" },
+  exchangeSummaryValue: { color: text, fontSize: 18, fontWeight: "800", textAlign: "right", marginTop: 2 },
+  exchangeCashLabel: { color: "#9a3412" },
+  exchangeCashValue: { color: "#c2410c" },
   muted: { color: muted, marginTop: 6, fontSize: 13, textAlign: "right" },
   link: { color: accent, fontWeight: "800", fontSize: 15 },
   scannerModal: { flex: 1, backgroundColor: "#000" },

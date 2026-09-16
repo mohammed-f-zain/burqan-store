@@ -33,6 +33,7 @@ const FILES = [
   "021_price_four_decimals.sql",
   "022_external_sales_store_id.sql",
   "023_store_payments_rep.sql",
+  "024_product_exchanges.sql",
 ] as const;
 
 async function main() {

@@ -1649,11 +1649,48 @@ router.get(
         paymentsByRep.set(p.rep_id, list);
       }
 
+      const { rows: exchangeCashRows } = await query<{
+        rep_id: number;
+        exchange_id: string;
+        store_id: number;
+        store_name: string;
+        amount: string;
+        created_at: Date;
+      }>(
+        `SELECT pe.representative_id AS rep_id,
+                pe.id::text AS exchange_id,
+                pe.store_id,
+                s.name AS store_name,
+                pe.cash_difference::text AS amount,
+                pe.created_at
+         FROM product_exchanges pe
+         INNER JOIN stores s ON s.id = pe.store_id
+         INNER JOIN representatives r ON r.id = pe.representative_id
+         WHERE pe.cash_difference > 0
+           AND (pe.created_at AT TIME ZONE 'Asia/Amman')::date = $1::date
+           AND (
+             $1::date <> (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Amman')::date
+             OR r.car_fill_at IS NULL
+             OR pe.created_at >= r.car_fill_at
+           )
+         ORDER BY pe.created_at DESC`,
+        [date]
+      );
+
+      const exchangeCashByRep = new Map<number, typeof exchangeCashRows>();
+      for (const row of exchangeCashRows) {
+        const list = exchangeCashByRep.get(row.rep_id) ?? [];
+        list.push(row);
+        exchangeCashByRep.set(row.rep_id, list);
+      }
+
       res.json({
         date,
         representatives: reps.map((r) => {
           const payRows = paymentsByRep.get(r.id) ?? [];
           const paymentsTotal = payRows.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+          const cashRows = exchangeCashByRep.get(r.id) ?? [];
+          const exchangeCashTotal = cashRows.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
           return {
             ...r,
             lines: linesByRep.get(r.id) ?? [],
@@ -1665,8 +1702,222 @@ router.get(
               createdAt: p.created_at,
             })),
             paymentsCollectedTotal: paymentsTotal.toFixed(4),
+            exchangeCashCollected: cashRows.map((p) => ({
+              id: p.exchange_id,
+              storeId: p.store_id,
+              storeName: p.store_name,
+              amount: p.amount,
+              createdAt: p.created_at,
+            })),
+            exchangeCashCollectedTotal: exchangeCashTotal.toFixed(4),
           };
         }),
+      });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+/** List product exchanges / returns (additive feature; read-only). */
+router.get(
+  "/exchanges",
+  adminAuthMiddleware,
+  requireAnyAdminPermission("fill_car.read", "reps.read", "orders.read"),
+  async (req, res, next) => {
+    try {
+      const storeId = req.query.storeId ? z.coerce.number().int().positive().parse(req.query.storeId) : null;
+      const repId = req.query.repId ? z.coerce.number().int().positive().parse(req.query.repId) : null;
+      const dateFrom = typeof req.query.dateFrom === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.dateFrom)
+        ? req.query.dateFrom
+        : null;
+      const dateTo = typeof req.query.dateTo === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.dateTo)
+        ? req.query.dateTo
+        : null;
+
+      const params: unknown[] = [];
+      const where: string[] = [];
+      if (storeId != null) {
+        params.push(storeId);
+        where.push(`pe.store_id = $${params.length}`);
+      }
+      if (repId != null) {
+        params.push(repId);
+        where.push(`pe.representative_id = $${params.length}`);
+      }
+      if (dateFrom) {
+        params.push(dateFrom);
+        where.push(`(pe.created_at AT TIME ZONE 'Asia/Amman')::date >= $${params.length}::date`);
+      }
+      if (dateTo) {
+        params.push(dateTo);
+        where.push(`(pe.created_at AT TIME ZONE 'Asia/Amman')::date <= $${params.length}::date`);
+      }
+      const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+
+      const { rows } = await query<{
+        id: string;
+        store_id: number;
+        store_name: string;
+        representative_id: number;
+        rep_name: string;
+        return_total: string;
+        give_total: string;
+        cash_difference: string;
+        note: string | null;
+        created_at: Date;
+        return_summary: string;
+        give_summary: string;
+      }>(
+        `SELECT pe.id::text AS id,
+                pe.store_id,
+                s.name AS store_name,
+                pe.representative_id,
+                r.full_name AS rep_name,
+                pe.return_total::text,
+                pe.give_total::text,
+                pe.cash_difference::text,
+                pe.note,
+                pe.created_at,
+                COALESCE((
+                  SELECT string_agg(p.name || ' ×' || rl.quantity::text, '، ' ORDER BY p.name)
+                  FROM product_exchange_return_lines rl
+                  JOIN products p ON p.id = rl.product_id
+                  WHERE rl.exchange_id = pe.id
+                ), '') AS return_summary,
+                COALESCE((
+                  SELECT string_agg(p.name || ' ×' || gl.quantity::text, '، ' ORDER BY p.name)
+                  FROM product_exchange_give_lines gl
+                  JOIN products p ON p.id = gl.product_id
+                  WHERE gl.exchange_id = pe.id
+                ), '') AS give_summary
+         FROM product_exchanges pe
+         INNER JOIN stores s ON s.id = pe.store_id
+         INNER JOIN representatives r ON r.id = pe.representative_id
+         ${whereSql}
+         ORDER BY pe.created_at DESC, pe.id DESC
+         LIMIT 500`,
+        params
+      );
+
+      res.json({
+        exchanges: rows.map((row) => ({
+          id: row.id,
+          storeId: row.store_id,
+          storeName: row.store_name,
+          representativeId: row.representative_id,
+          repName: row.rep_name,
+          returnTotal: row.return_total,
+          giveTotal: row.give_total,
+          cashDifference: row.cash_difference,
+          note: row.note,
+          createdAt: row.created_at,
+          returnSummary: row.return_summary,
+          giveSummary: row.give_summary,
+        })),
+      });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+router.get(
+  "/exchanges/:id",
+  adminAuthMiddleware,
+  requireAnyAdminPermission("fill_car.read", "reps.read", "orders.read"),
+  async (req, res, next) => {
+    try {
+      const id = z.coerce.number().int().positive().parse(req.params.id);
+      const { rows } = await query<{
+        id: string;
+        store_id: number;
+        store_name: string;
+        representative_id: number;
+        rep_name: string;
+        return_total: string;
+        give_total: string;
+        cash_difference: string;
+        note: string | null;
+        created_at: Date;
+      }>(
+        `SELECT pe.id::text AS id,
+                pe.store_id,
+                s.name AS store_name,
+                pe.representative_id,
+                r.full_name AS rep_name,
+                pe.return_total::text,
+                pe.give_total::text,
+                pe.cash_difference::text,
+                pe.note,
+                pe.created_at
+         FROM product_exchanges pe
+         INNER JOIN stores s ON s.id = pe.store_id
+         INNER JOIN representatives r ON r.id = pe.representative_id
+         WHERE pe.id = $1`,
+        [id]
+      );
+      const head = rows[0];
+      if (!head) throw new HttpError(404, "عملية الاستبدال غير موجودة");
+
+      const { rows: returnLines } = await query<{
+        product_id: number;
+        product_name: string;
+        quantity: number;
+        unit_price: string;
+        line_total: string;
+      }>(
+        `SELECT rl.product_id, p.name AS product_name, rl.quantity,
+                rl.unit_price::text, rl.line_total::text
+         FROM product_exchange_return_lines rl
+         JOIN products p ON p.id = rl.product_id
+         WHERE rl.exchange_id = $1
+         ORDER BY p.name`,
+        [id]
+      );
+      const { rows: giveLines } = await query<{
+        product_id: number;
+        product_name: string;
+        quantity: number;
+        unit_price: string;
+        line_total: string;
+      }>(
+        `SELECT gl.product_id, p.name AS product_name, gl.quantity,
+                gl.unit_price::text, gl.line_total::text
+         FROM product_exchange_give_lines gl
+         JOIN products p ON p.id = gl.product_id
+         WHERE gl.exchange_id = $1
+         ORDER BY p.name`,
+        [id]
+      );
+
+      res.json({
+        exchange: {
+          id: head.id,
+          storeId: head.store_id,
+          storeName: head.store_name,
+          representativeId: head.representative_id,
+          repName: head.rep_name,
+          returnTotal: head.return_total,
+          giveTotal: head.give_total,
+          cashDifference: head.cash_difference,
+          note: head.note,
+          createdAt: head.created_at,
+          returnLines: returnLines.map((l) => ({
+            productId: l.product_id,
+            productName: l.product_name,
+            quantity: l.quantity,
+            unitPrice: l.unit_price,
+            lineTotal: l.line_total,
+          })),
+          giveLines: giveLines.map((l) => ({
+            productId: l.product_id,
+            productName: l.product_name,
+            quantity: l.quantity,
+            unitPrice: l.unit_price,
+            lineTotal: l.line_total,
+          })),
+        },
       });
     } catch (e) {
       next(e);

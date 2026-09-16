@@ -9,6 +9,7 @@ export type NavIconName =
   | "redeem"
   | "representatives"
   | "fillCar"
+  | "exchanges"
   | "stores"
   | "loyaltyStores"
   | "deferredStores"
@@ -109,6 +110,15 @@ export default function NavIcon({ name, size = 20, className = "" }: Props) {
           <circle cx="7.5" cy="17" r="1.5" fill="currentColor" />
           <circle cx="16.5" cy="17" r="1.5" fill="currentColor" />
           <path d="M5 10h14" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+        </svg>
+      );
+    case "exchanges":
+      return (
+        <svg {...common}>
+          <path d="M7 7h7M14 7l-2-2M14 7l-2 2" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M17 17H10M10 17l2-2M10 17l2 2" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+          <rect x="4" y="10" width="6" height="5" rx="1" stroke="currentColor" strokeWidth="1.75" />
+          <rect x="14" y="9" width="6" height="5" rx="1" stroke="currentColor" strokeWidth="1.75" />
         </svg>
       );
     case "stores":

@@ -1918,4 +1918,181 @@ router.post("/orders", repAuthMiddleware, async (req, res, next) => {
   }
 });
 
+const exchangeLineSchema = z.object({
+  productId: z.number().int().positive(),
+  quantity: z.number().int().positive(),
+});
+
+const exchangePostSchema = z.object({
+  storeId: z.number().int().positive(),
+  returnLines: z.array(exchangeLineSchema).min(1),
+  giveLines: z.array(exchangeLineSchema).min(1),
+  note: z.string().trim().max(500).optional(),
+  repLat: z.number().min(-90).max(90),
+  repLng: z.number().min(-180).max(180),
+});
+
+/** Exchange returned products (into van) for products given from van (equal or higher value). */
+router.post("/exchanges", repAuthMiddleware, async (req, res, next) => {
+  try {
+    const body = exchangePostSchema.parse(req.body);
+    const rep = req.rep!;
+    const storeRow = await loadStoreRowForRep(body.storeId, rep);
+    assertWithinScanDistance(body.repLat, body.repLng, storeRow.location_lat, storeRow.location_lng);
+    const store = await loadStoreForRep(body.storeId, rep);
+
+    const c = await pool.connect();
+    try {
+      await c.query("BEGIN");
+
+      type Priced = {
+        productId: number;
+        productName: string;
+        quantity: number;
+        unitPrice: number;
+        lineTotal: number;
+      };
+
+      async function priceLine(
+        productId: number,
+        quantity: number,
+        requireStock: boolean
+      ): Promise<Priced> {
+        const pr = await c.query<{
+          name: string;
+          is_active: boolean;
+          unit_price: string;
+        }>(
+          `SELECT p.name, p.is_active,
+                  COALESCE(ri.price, p.price)::text AS unit_price
+           FROM products p
+           LEFT JOIN representative_inventory ri
+             ON ri.product_id = p.id AND ri.representative_id = $2
+           WHERE p.id = $1`,
+          [productId, rep.id]
+        );
+        const p = pr.rows[0];
+        if (!p?.is_active) throw new HttpError(400, "منتج غير صالح");
+        const unitPrice = parseFloat(p.unit_price);
+        if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+          throw new HttpError(400, "سعر المنتج غير صالح");
+        }
+        if (requireStock) {
+          const inv = await c.query<{ quantity: number }>(
+            `SELECT quantity FROM representative_inventory
+             WHERE representative_id = $1 AND product_id = $2
+             FOR UPDATE`,
+            [rep.id, productId]
+          );
+          const stock = inv.rows[0]?.quantity ?? 0;
+          if (stock < quantity) {
+            throw new HttpError(400, `الكمية غير كافية في مخزون السيارة لـ «${p.name}» (متوفر: ${stock})`);
+          }
+        }
+        return {
+          productId,
+          productName: p.name,
+          quantity,
+          unitPrice,
+          lineTotal: unitPrice * quantity,
+        };
+      }
+
+      const returns: Priced[] = [];
+      let returnTotal = 0;
+      for (const line of body.returnLines) {
+        const priced = await priceLine(line.productId, line.quantity, false);
+        returns.push(priced);
+        returnTotal += priced.lineTotal;
+      }
+
+      const gives: Priced[] = [];
+      let giveTotal = 0;
+      for (const line of body.giveLines) {
+        const priced = await priceLine(line.productId, line.quantity, true);
+        gives.push(priced);
+        giveTotal += priced.lineTotal;
+      }
+
+      if (giveTotal + 0.00005 < returnTotal) {
+        throw new HttpError(
+          400,
+          `قيمة المنتجات المعطاة (${giveTotal.toFixed(2)}) أقل من قيمة المرتجع (${returnTotal.toFixed(2)})`
+        );
+      }
+      const cashDifference = Math.max(0, giveTotal - returnTotal);
+
+      const ins = await c.query<{ id: string; created_at: Date }>(
+        `INSERT INTO product_exchanges
+           (store_id, representative_id, return_total, give_total, cash_difference, note)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING id, created_at`,
+        [
+          body.storeId,
+          rep.id,
+          returnTotal.toFixed(4),
+          giveTotal.toFixed(4),
+          cashDifference.toFixed(4),
+          body.note?.trim() || null,
+        ]
+      );
+      const exchangeId = ins.rows[0]!.id;
+      const createdAt = ins.rows[0]!.created_at;
+
+      for (const line of returns) {
+        await c.query(
+          `INSERT INTO product_exchange_return_lines
+             (exchange_id, product_id, quantity, unit_price, line_total)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [exchangeId, line.productId, line.quantity, line.unitPrice.toFixed(4), line.lineTotal.toFixed(4)]
+        );
+        await c.query(
+          `INSERT INTO representative_inventory (representative_id, product_id, quantity, updated_at)
+           VALUES ($1, $2, $3, now())
+           ON CONFLICT (representative_id, product_id)
+           DO UPDATE SET
+             quantity = representative_inventory.quantity + EXCLUDED.quantity,
+             updated_at = now()`,
+          [rep.id, line.productId, line.quantity]
+        );
+      }
+
+      for (const line of gives) {
+        await c.query(
+          `INSERT INTO product_exchange_give_lines
+             (exchange_id, product_id, quantity, unit_price, line_total)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [exchangeId, line.productId, line.quantity, line.unitPrice.toFixed(4), line.lineTotal.toFixed(4)]
+        );
+        await c.query(
+          `UPDATE representative_inventory
+           SET quantity = quantity - $1, updated_at = now()
+           WHERE representative_id = $2 AND product_id = $3`,
+          [line.quantity, rep.id, line.productId]
+        );
+      }
+
+      await c.query("COMMIT");
+      res.status(201).json({
+        exchangeId,
+        storeId: body.storeId,
+        storeName: store.name,
+        returnTotal,
+        giveTotal,
+        cashDifference,
+        createdAt,
+        returnLines: returns,
+        giveLines: gives,
+      });
+    } catch (e) {
+      await c.query("ROLLBACK");
+      throw e;
+    } finally {
+      c.release();
+    }
+  } catch (e) {
+    next(e);
+  }
+});
+
 export default router;

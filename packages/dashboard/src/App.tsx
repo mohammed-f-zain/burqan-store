@@ -24,6 +24,7 @@ import OwnerPortal from "./pages/OwnerPortal";
 import PublicQrRedirect from "./pages/PublicQrRedirect";
 import QrPoolPage from "./pages/QrPoolPage";
 import FillCarPage from "./pages/FillCarPage";
+import ExchangesPage from "./pages/ExchangesPage";
 import RepresentativesPage from "./pages/RepresentativesPage";
 import RolesPage from "./pages/RolesPage";
 import RouteZonesPage from "./pages/RouteZonesPage";
@@ -57,6 +58,7 @@ export default function App() {
                 <Route path="redeem" element={<RedeemPage />} />
                 <Route path="representatives" element={<RepresentativesPage />} />
                 <Route path="fill-car" element={<FillCarPage />} />
+                <Route path="exchanges" element={<ExchangesPage />} />
                 <Route path="rep-sales" element={<Navigate to="/app/fill-car" replace />} />
                 <Route path="stores" element={<StoresPage />} />
                   <Route path="deferred" element={<DeferredStoresPage />} />

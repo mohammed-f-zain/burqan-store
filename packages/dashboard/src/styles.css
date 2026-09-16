@@ -1730,6 +1730,67 @@ html[data-theme="dark"] .fill-car-delta--added {
   background: rgba(74, 222, 128, 0.15);
 }
 
+.exchange-cash-pill {
+  display: inline-block;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-weight: 700;
+  color: #9a3412;
+  background: rgba(251, 146, 60, 0.28);
+}
+
+html[data-theme="dark"] .exchange-cash-pill {
+  color: #fdba74;
+  background: rgba(251, 146, 60, 0.22);
+}
+
+.exchange-row--cash td {
+  background: rgba(251, 146, 60, 0.08);
+}
+
+.fill-car-exchange-cash-title {
+  color: #9a3412;
+}
+
+html[data-theme="dark"] .fill-car-exchange-cash-title {
+  color: #fdba74;
+}
+
+.fill-car-exchange-cash-row td {
+  background: rgba(251, 146, 60, 0.1);
+}
+
+.exchange-detail {
+  padding: 0.75rem 0.25rem 0.25rem;
+}
+
+.exchange-detail-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+@media (max-width: 720px) {
+  .exchange-detail-cols {
+    grid-template-columns: 1fr;
+  }
+}
+
+.exchange-line-list {
+  margin: 0.35rem 0;
+  padding-inline-start: 1.1rem;
+}
+
+.exchange-cash-note {
+  margin-top: 0.75rem;
+  font-weight: 700;
+  color: #9a3412;
+}
+
+html[data-theme="dark"] .exchange-cash-note {
+  color: #fdba74;
+}
+
 .area-gov-wrap {
   width: 100%;
 }

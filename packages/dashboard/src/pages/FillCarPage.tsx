@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
@@ -24,12 +24,21 @@ type PaymentCollected = {
   amount: string;
   createdAt: string;
 };
+type ExchangeCashCollected = {
+  id: string;
+  storeId: number;
+  storeName: string;
+  amount: string;
+  createdAt: string;
+};
 type RepSales = Rep & {
   order_count: number;
   total_sales: string;
   lines: SalesLine[];
   paymentsCollected?: PaymentCollected[];
   paymentsCollectedTotal?: string;
+  exchangeCashCollected?: ExchangeCashCollected[];
+  exchangeCashCollectedTotal?: string;
 };
 type InvRow = {
   product_id: number;
@@ -666,6 +675,40 @@ export default function FillCarPage() {
               </div>
               <p className="muted small" style={{ marginTop: 8 }}>
                 {t.fillCar.paymentsCollectedAmount}: {money(selected.paymentsCollectedTotal ?? 0)}
+              </p>
+            </>
+          ) : null}
+
+          {(selected.exchangeCashCollected?.length ?? 0) > 0 ? (
+            <>
+              <h4 className="strong fill-car-exchange-cash-title" style={{ marginTop: 24 }}>
+                {t.fillCar.exchangeCashThatDay}
+              </h4>
+              <p className="muted small">{t.fillCar.exchangeCashHint}</p>
+              <div className="table-wrap">
+                <table className="table fill-car-exchange-cash-table">
+                  <thead>
+                    <tr>
+                      <th>{t.fillCar.exchangeCashStore}</th>
+                      <th>{t.fillCar.exchangeCashAmount}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(selected.exchangeCashCollected ?? []).map((p) => (
+                      <tr key={p.id} className="fill-car-exchange-cash-row">
+                        <td>
+                          <Link to={`/app/exchanges?id=${p.id}`}>{p.storeName}</Link>
+                        </td>
+                        <td>
+                          <span className="exchange-cash-pill">{money(p.amount)}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="muted small" style={{ marginTop: 8 }}>
+                {t.fillCar.exchangeCashAmount}: {money(selected.exchangeCashCollectedTotal ?? 0)}
               </p>
             </>
           ) : null}
