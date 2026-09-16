@@ -8,6 +8,7 @@ import TableFilterBar from "../components/TableFilterBar";
 import { useTableFilters } from "../hooks/useTableFilters";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
+import { downloadFillCarSoldExcel, printFillCarSoldPdf } from "../lib/exportFillCarSold";
 import { toMarketDateString } from "../lib/filterTableRows";
 import { mediaUrl } from "../lib/mediaUrl";
 import { confirmDanger, confirmSave } from "../lib/swalConfirm";
@@ -34,10 +35,11 @@ type AreaOption = { id: number; name: string; governorate: string | null };
 export default function FillCarPage() {
   const [searchParams] = useSearchParams();
   const { me, can } = useAuth();
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const canRead = can("fill_car.read") || can("reps.read");
   const canWrite = can("fill_car.write") || can("reps.write");
   const canExternalSales = Boolean(me) && canWrite;
+  const [exportingSold, setExportingSold] = useState(false);
 
   const [date, setDate] = useState(() => {
     const fromUrl = searchParams.get("date");
@@ -151,6 +153,78 @@ export default function FillCarPage() {
     searchAccessors: ["product_name", "quantity", "line_total", "product_id"],
     fields: soldFilterFields,
   });
+
+  function buildSoldExportMeta() {
+    if (!selected) return null;
+    const safeRep = selected.full_name.replace(/[^\w\u0600-\u06FF-]+/g, "_").slice(0, 40);
+    return {
+      title: t.fillCar.soldThatDay,
+      repLabel: t.fillCar.selectedRep,
+      repName: selected.full_name,
+      dateLabel: t.fillCar.dateLabel,
+      date,
+      ordersLabel: t.fillCar.colOrders,
+      ordersCount: selected.order_count,
+      salesLabel: t.fillCar.colSold,
+      salesTotalFormatted: money(selected.total_sales),
+      productCol: t.orders.product,
+      qtyCol: t.orders.qty,
+      lineCol: t.orders.line,
+      sheetName: t.fillCar.exportSoldSheet,
+      fileBaseName: `fill-car-sold_${date}_${safeRep || selected.id}`,
+      dir: (locale === "ar" ? "rtl" : "ltr") as "rtl" | "ltr",
+    };
+  }
+
+  async function exportSoldExcel() {
+    if (!selected || selected.lines.length === 0) {
+      toastError(t.fillCar.exportSoldEmpty);
+      return;
+    }
+    const meta = buildSoldExportMeta();
+    if (!meta) return;
+    const rows = soldTable.filtered.map((l) => ({
+      productName: l.product_name,
+      quantity: l.quantity,
+      lineTotal: parseFloat(l.line_total) || 0,
+    }));
+    if (rows.length === 0) {
+      toastError(t.fillCar.exportSoldEmpty);
+      return;
+    }
+    setExportingSold(true);
+    try {
+      await downloadFillCarSoldExcel(rows, meta);
+      toastSuccess(t.fillCar.exportSoldExcelDone);
+    } catch {
+      toastError(t.fillCar.exportSoldFailed);
+    } finally {
+      setExportingSold(false);
+    }
+  }
+
+  function exportSoldPdf() {
+    if (!selected || selected.lines.length === 0) {
+      toastError(t.fillCar.exportSoldEmpty);
+      return;
+    }
+    const meta = buildSoldExportMeta();
+    if (!meta) return;
+    const rows = soldTable.filtered.map((l) => ({
+      productName: l.product_name,
+      quantity: l.quantity,
+      lineTotal: parseFloat(l.line_total) || 0,
+    }));
+    if (rows.length === 0) {
+      toastError(t.fillCar.exportSoldEmpty);
+      return;
+    }
+    try {
+      printFillCarSoldPdf(rows, meta);
+    } catch {
+      toastError(t.fillCar.exportSoldPdfBlocked);
+    }
+  }
 
   const invFilterFields = useMemo(
     () => [
@@ -494,9 +568,31 @@ export default function FillCarPage() {
             </div>
           )}
 
-          <h4 className="strong" style={{ marginTop: 20 }}>
-            {t.fillCar.soldThatDay}
-          </h4>
+          <div className="row spread" style={{ marginTop: 20, alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <h4 className="strong" style={{ margin: 0 }}>
+              {t.fillCar.soldThatDay}
+            </h4>
+            {selected.lines.length > 0 ? (
+              <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={exportingSold || soldTable.filteredCount === 0}
+                  onClick={() => void exportSoldExcel()}
+                >
+                  {exportingSold ? t.common.loading : t.fillCar.exportSoldExcel}
+                </button>
+                <button
+                  type="button"
+                  className="ghost"
+                  disabled={exportingSold || soldTable.filteredCount === 0}
+                  onClick={exportSoldPdf}
+                >
+                  {t.fillCar.exportSoldPdf}
+                </button>
+              </div>
+            ) : null}
+          </div>
           {selected.lines.length === 0 ? (
             <p className="muted">{t.fillCar.noSales}</p>
           ) : (

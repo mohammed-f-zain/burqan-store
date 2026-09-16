@@ -45,3 +45,4 @@ Use classes `fill-car-delta`, `fill-car-delta--sold`, `fill-car-delta--added`.
 - Date picker filters sales by Jordan calendar day.
 - Click a rep row to load their inventory section below.
 - Saving inventory updates DB only; refresh baseline after successful save.
+- **Products sold that day**: Excel download + PDF/Print buttons export the (filtered) sold table for documentation (`lib/exportFillCarSold.ts`).
