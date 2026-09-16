@@ -1949,6 +1949,16 @@ router.post(
           );
           const p = prodRows[0];
           if (!p) throw new HttpError(400, "منتج غير صالح");
+          const { rows: invRows } = await c.query<{ quantity: number }>(
+            `SELECT quantity FROM representative_inventory
+             WHERE representative_id = $1 AND product_id = $2
+             FOR UPDATE`,
+            [id, line.productId]
+          );
+          const stock = invRows[0]?.quantity ?? 0;
+          if (stock < line.quantity) {
+            throw new HttpError(400, `الكمية غير كافية في مخزون السيارة للمنتج «${p.name}» (متوفر: ${stock})`);
+          }
           const unitPrice = parseFloat(p.unit_price);
           if (!Number.isFinite(unitPrice) || unitPrice < 0) {
             throw new HttpError(400, "سعر المنتج غير صالح");
@@ -1979,6 +1989,12 @@ router.post(
                (external_sale_id, product_id, quantity, unit_price, line_total)
              VALUES ($1, $2, $3, $4, $5)`,
             [saleId, line.productId, line.quantity, line.unitPrice.toFixed(4), line.lineTotal.toFixed(4)]
+          );
+          await c.query(
+            `UPDATE representative_inventory
+             SET quantity = quantity - $1, updated_at = now()
+             WHERE representative_id = $2 AND product_id = $3`,
+            [line.quantity, id, line.productId]
           );
         }
         await c.query("COMMIT");
@@ -3189,12 +3205,45 @@ router.delete(
       if (!parsed) throw new HttpError(400, "رقم الطلب غير صالح");
 
       if (parsed.source === "external") {
-        const { rows } = await query<{ id: string }>(
-          `DELETE FROM external_sales WHERE id = $1 RETURNING id`,
-          [parsed.id]
-        );
-        if (!rows[0]) throw new HttpError(404, "Order not found");
-        res.json({ deleted: true, id: externalOrderPublicId(rows[0].id) });
+        const c = await pool.connect();
+        try {
+          await c.query("BEGIN");
+          const { rows: saleRows } = await c.query<{ id: string; representative_id: number }>(
+            `SELECT id, representative_id FROM external_sales WHERE id = $1 FOR UPDATE`,
+            [parsed.id]
+          );
+          const sale = saleRows[0];
+          if (!sale) throw new HttpError(404, "Order not found");
+
+          const { rows: lines } = await c.query<{ product_id: number; quantity: number }>(
+            `SELECT product_id, quantity FROM external_sale_lines WHERE external_sale_id = $1`,
+            [parsed.id]
+          );
+          for (const line of lines) {
+            await c.query(
+              `INSERT INTO representative_inventory (representative_id, product_id, quantity, updated_at)
+               VALUES ($1, $2, $3, now())
+               ON CONFLICT (representative_id, product_id)
+               DO UPDATE SET
+                 quantity = representative_inventory.quantity + EXCLUDED.quantity,
+                 updated_at = now()`,
+              [sale.representative_id, line.product_id, line.quantity]
+            );
+          }
+
+          await c.query(`DELETE FROM external_sales WHERE id = $1`, [parsed.id]);
+          await c.query("COMMIT");
+          res.json({ deleted: true, id: externalOrderPublicId(sale.id) });
+        } catch (e) {
+          try {
+            await c.query("ROLLBACK");
+          } catch {
+            /* ignore */
+          }
+          throw e;
+        } finally {
+          c.release();
+        }
         return;
       }
 

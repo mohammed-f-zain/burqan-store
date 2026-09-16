@@ -284,6 +284,14 @@ export default function FillCarPage() {
       toastError(t.fillCar.externalSalesEmpty);
       return;
     }
+    for (const line of lines) {
+      const row = inventory.find((r) => r.product_id === line.productId);
+      const stock = row?.quantity ?? 0;
+      if (line.quantity > stock) {
+        toastError(t.fillCar.externalSalesInsufficient(row?.name ?? String(line.productId), stock));
+        return;
+      }
+    }
     setExtSaving(true);
     try {
       await api.post(`/representatives/${repId}/external-sales`, {
@@ -294,6 +302,19 @@ export default function FillCarPage() {
       });
       setExtOpen(false);
       await loadSales();
+      if (repId) {
+        setInvLoading(true);
+        try {
+          const r = await api.get<{ inventory: InvRow[] }>(`/representatives/${repId}/inventory`);
+          const inv = r.data.inventory ?? [];
+          setInventory(inv);
+          setBaselineQty(Object.fromEntries(inv.map((row) => [row.product_id, row.quantity])));
+        } catch (e) {
+          toastError(pickAxiosErrorMessage(e, t.fillCar.loadFailed));
+        } finally {
+          setInvLoading(false);
+        }
+      }
       toastSuccess(t.fillCar.externalSalesSaved);
     } catch (e) {
       toastError(pickAxiosErrorMessage(e, t.fillCar.externalSalesFailed));
@@ -653,11 +674,15 @@ export default function FillCarPage() {
                   <label key={row.product_id} className="fill-car-ext-line">
                     <span>
                       <strong>{row.name}</strong>
-                      <span className="muted small"> · {money(row.price)}</span>
+                      <span className="muted small">
+                        {" "}
+                        · {money(row.price)} · {t.fillCar.externalSalesOnVan(row.quantity)}
+                      </span>
                     </span>
                     <input
                       type="number"
                       min={0}
+                      max={row.quantity}
                       value={extQty[row.product_id] ?? ""}
                       placeholder="0"
                       onChange={(e) =>
