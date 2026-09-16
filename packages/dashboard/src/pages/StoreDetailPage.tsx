@@ -13,6 +13,7 @@ import { pickAxiosErrorMessage } from "../lib/apiError";
 import { mediaUrl } from "../lib/mediaUrl";
 import { confirmDanger } from "../lib/swalConfirm";
 import { toastError, toastSuccess } from "../lib/toast";
+import { ownerFormatMoney } from "../owner/ownerFormat";
 import { isNoBuyReasonNote } from "../constants/noBuyReasons";
 import { formatMarketDateTime } from "../utils/formatMarketDateTime";
 import { qrPayload } from "../utils/qrPayload";
@@ -42,6 +43,7 @@ type OrderRow = {
   created_at: string;
   representative_id: number;
   rep_name: string;
+  source?: string;
 };
 
 type VisitRow = {
@@ -57,6 +59,15 @@ function ownerPortalUrl(token: string): string {
   const base = import.meta.env.VITE_OWNER_PORTAL_BASE_URL?.trim().replace(/\/$/, "");
   if (base) return `${base}/owner?t=${encodeURIComponent(token)}`;
   return `${window.location.origin}/owner?t=${encodeURIComponent(token)}`;
+}
+
+function sumAmounts(values: Iterable<string | number>): number {
+  let sum = 0;
+  for (const v of values) {
+    const n = typeof v === "number" ? v : parseFloat(v);
+    if (Number.isFinite(n)) sum += n;
+  }
+  return sum;
 }
 
 export default function StoreDetailPage() {
@@ -75,16 +86,69 @@ export default function StoreDetailPage() {
   const [editOpen, setEditOpen] = useState(false);
   const canDeleteOrder = can("orders.delete");
   const canDeleteStore = can("stores.write");
+  const currency = t.overview.currency;
+  const money = (n: number) => ownerFormatMoney(n, currency);
+
+  const paymentTypeOptions = useMemo(
+    () => [
+      { value: "cash", label: t.overview.payCash },
+      { value: "deferred", label: t.overview.payDeferred },
+    ],
+    [t.overview.payCash, t.overview.payDeferred]
+  );
+
+  const repFilterOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const o of orders) {
+      const n = o.rep_name?.trim();
+      if (n) names.add(n);
+    }
+    return [...names]
+      .sort((a, b) => a.localeCompare(b, "ar"))
+      .map((name) => ({ value: name, label: name }));
+  }, [orders]);
 
   const orderFilterFields = useMemo(
     () => [
       { id: "id", label: t.orders.colId, type: "text" as const, getValue: (o: OrderRow) => o.id },
-      { id: "type", label: t.orders.colType, type: "text" as const, getValue: (o: OrderRow) => o.payment_type },
+      {
+        id: "type",
+        label: t.orders.colType,
+        type: "select" as const,
+        getValue: (o: OrderRow) => o.payment_type,
+        options: paymentTypeOptions,
+      },
+      {
+        id: "rep",
+        label: t.storeDetail.rep,
+        type: "searchableSelect" as const,
+        getValue: (o: OrderRow) => o.rep_name,
+        options: repFilterOptions,
+      },
       { id: "total", label: t.orders.colTotal, type: "text" as const, getValue: (o: OrderRow) => o.total_amount },
-      { id: "rep", label: t.storeDetail.rep, type: "text" as const, getValue: (o: OrderRow) => o.rep_name },
-      { id: "when", label: t.orders.colWhen, type: "text" as const, getValue: (o: OrderRow) => formatMarketDateTime(o.created_at) },
+      {
+        id: "dateFrom",
+        label: t.orders.dateFrom,
+        type: "dateFrom" as const,
+        getValue: (o: OrderRow) => o.created_at,
+      },
+      {
+        id: "dateTo",
+        label: t.orders.dateTo,
+        type: "dateTo" as const,
+        getValue: (o: OrderRow) => o.created_at,
+      },
     ],
-    [t.orders.colId, t.orders.colTotal, t.orders.colType, t.orders.colWhen, t.storeDetail.rep]
+    [
+      paymentTypeOptions,
+      repFilterOptions,
+      t.orders.colId,
+      t.orders.colTotal,
+      t.orders.colType,
+      t.orders.dateFrom,
+      t.orders.dateTo,
+      t.storeDetail.rep,
+    ]
   );
 
   const storeOrdersTable = useTableFilters(orders, {
@@ -92,13 +156,41 @@ export default function StoreDetailPage() {
     fields: orderFilterFields,
   });
 
+  const visitRepOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const v of visits) {
+      const n = v.rep_name?.trim();
+      if (n) names.add(n);
+    }
+    return [...names]
+      .sort((a, b) => a.localeCompare(b, "ar"))
+      .map((name) => ({ value: name, label: name }));
+  }, [visits]);
+
   const visitFilterFields = useMemo(
     () => [
-      { id: "when", label: t.orders.colWhen, type: "text" as const, getValue: (v: VisitRow) => formatMarketDateTime(v.visited_at) },
-      { id: "rep", label: t.storeDetail.rep, type: "text" as const, getValue: (v: VisitRow) => v.rep_name },
+      {
+        id: "dateFrom",
+        label: t.orders.dateFrom,
+        type: "dateFrom" as const,
+        getValue: (v: VisitRow) => v.visited_at,
+      },
+      {
+        id: "dateTo",
+        label: t.orders.dateTo,
+        type: "dateTo" as const,
+        getValue: (v: VisitRow) => v.visited_at,
+      },
+      {
+        id: "rep",
+        label: t.storeDetail.rep,
+        type: "searchableSelect" as const,
+        getValue: (v: VisitRow) => v.rep_name,
+        options: visitRepOptions,
+      },
       { id: "note", label: t.visits.colReason, type: "text" as const, getValue: (v: VisitRow) => v.note },
     ],
-    [t.orders.colWhen, t.storeDetail.rep, t.visits.colReason]
+    [t.orders.dateFrom, t.orders.dateTo, t.storeDetail.rep, t.visits.colReason, visitRepOptions]
   );
 
   const storeVisitsTable = useTableFilters(visits, {
@@ -110,15 +202,47 @@ export default function StoreDetailPage() {
     () => [
       { id: "amount", label: t.stores.amount, type: "text" as const, getValue: (p: PaymentRow) => p.amount },
       { id: "note", label: t.stores.note, type: "text" as const, getValue: (p: PaymentRow) => p.note },
-      { id: "when", label: t.orders.colWhen, type: "text" as const, getValue: (p: PaymentRow) => formatMarketDateTime(p.created_at) },
+      {
+        id: "dateFrom",
+        label: t.orders.dateFrom,
+        type: "dateFrom" as const,
+        getValue: (p: PaymentRow) => p.created_at,
+      },
+      {
+        id: "dateTo",
+        label: t.orders.dateTo,
+        type: "dateTo" as const,
+        getValue: (p: PaymentRow) => p.created_at,
+      },
     ],
-    [t.orders.colWhen, t.stores.amount, t.stores.note]
+    [t.orders.dateFrom, t.orders.dateTo, t.stores.amount, t.stores.note]
   );
 
   const storePaymentsTable = useTableFilters(payments, {
     searchAccessors: ["amount", "note", (p) => formatMarketDateTime(p.created_at), "id"],
     fields: paymentFilterFields,
   });
+
+  const allTimeTotal = useMemo(() => sumAmounts(orders.map((o) => o.total_amount)), [orders]);
+  const filteredTotal = useMemo(
+    () => sumAmounts(storeOrdersTable.filtered.map((o) => o.total_amount)),
+    [storeOrdersTable.filtered]
+  );
+  const paymentsTotal = useMemo(() => sumAmounts(payments.map((p) => p.amount)), [payments]);
+  const deferredTotal = useMemo(
+    () => sumAmounts(orders.filter((o) => o.payment_type === "deferred").map((o) => o.total_amount)),
+    [orders]
+  );
+  const deferredOutstanding = useMemo(
+    () => Math.max(0, deferredTotal - paymentsTotal),
+    [deferredTotal, paymentsTotal]
+  );
+
+  function paymentTypeLabel(type: string) {
+    if (type === "cash") return t.overview.payCash;
+    if (type === "deferred") return t.overview.payDeferred;
+    return type;
+  }
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -271,11 +395,34 @@ export default function StoreDetailPage() {
           </div>
         </div>
 
+        <div className="dash-kpi-grid" style={{ marginTop: 16, marginBottom: 8 }}>
+          <div className="dash-kpi dash-kpi--accent">
+            <div className="dash-kpi-label">{t.storeDetail.statFilteredTotal}</div>
+            <div className="dash-kpi-value dash-kpi-value--sm">{money(filteredTotal)}</div>
+          </div>
+          <div className="dash-kpi">
+            <div className="dash-kpi-label">{t.storeDetail.statPayments}</div>
+            <div className="dash-kpi-value dash-kpi-value--sm">{money(paymentsTotal)}</div>
+          </div>
+          <div className="dash-kpi">
+            <div className="dash-kpi-label">{t.storeDetail.statDeferredOutstanding}</div>
+            <div
+              className={`dash-kpi-value dash-kpi-value--sm${
+                deferredOutstanding > 0.004 ? " dash-kpi-value--danger" : ""
+              }`}
+            >
+              {money(deferredOutstanding)}
+            </div>
+          </div>
+          <div className="dash-kpi">
+            <div className="dash-kpi-label">{t.storeDetail.statAllTimeTotal}</div>
+            <div className="dash-kpi-value dash-kpi-value--sm">{money(allTimeTotal)}</div>
+          </div>
+        </div>
+
         <div className="store-detail-grid">
           <div className="store-detail-info">
-            {photo && (
-              <img src={photo} alt="" className="store-detail-photo" />
-            )}
+            {photo && <img src={photo} alt="" className="store-detail-photo" />}
             <dl className="store-detail-dl">
               <dt>{t.storeDetail.owner}</dt>
               <dd>{store.owner_name}</dd>
@@ -342,55 +489,56 @@ export default function StoreDetailPage() {
               onFilterChange={storeOrdersTable.setFilter}
               onClear={storeOrdersTable.clearFilters}
               onToggleFilters={() => storeOrdersTable.setShowFilters((v) => !v)}
+              pinnedFieldIds={["type", "rep"]}
               labels={t.tableFilters}
             />
             {storeOrdersTable.filteredCount === 0 ? (
               <p className="muted">{t.tableFilters.noResults}</p>
             ) : (
-          <div className="table-wrap">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>{t.orders.colId}</th>
-                  <th>{t.orders.colType}</th>
-                  <th>{t.orders.colTotal}</th>
-                  <th>{t.storeDetail.rep}</th>
-                  <th>{t.orders.colWhen}</th>
-                  {canDeleteOrder && <th>{t.orders.colActions}</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {storeOrdersTable.filtered.map((o) => (
-                  <tr
-                    key={o.id}
-                    className="store-row"
-                    onClick={() => navigate(`/app/orders/${o.id}`)}
-                    role="link"
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        navigate(`/app/orders/${o.id}`);
-                      }
-                    }}
-                  >
-                    <td className="strong">#{o.id}</td>
-                    <td>{o.payment_type}</td>
-                    <td>{o.total_amount}</td>
-                    <td>{o.rep_name}</td>
-                    <td className="small muted">{formatMarketDateTime(o.created_at)}</td>
-                    {canDeleteOrder && (
-                      <td onClick={(e) => e.stopPropagation()}>
-                        <button type="button" className="ghost danger" onClick={() => void removeOrder(o.id)}>
-                          {t.orders.delete}
-                        </button>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              <div className="table-wrap">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>{t.orders.colId}</th>
+                      <th>{t.orders.colType}</th>
+                      <th>{t.orders.colTotal}</th>
+                      <th>{t.storeDetail.rep}</th>
+                      <th>{t.orders.colWhen}</th>
+                      {canDeleteOrder && <th>{t.orders.colActions}</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {storeOrdersTable.filtered.map((o) => (
+                      <tr
+                        key={o.id}
+                        className="store-row"
+                        onClick={() => navigate(`/app/orders/${o.id}`)}
+                        role="link"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            navigate(`/app/orders/${o.id}`);
+                          }
+                        }}
+                      >
+                        <td className="strong">#{o.id}</td>
+                        <td>{paymentTypeLabel(o.payment_type)}</td>
+                        <td>{money(parseFloat(o.total_amount) || 0)}</td>
+                        <td>{o.rep_name}</td>
+                        <td className="small muted">{formatMarketDateTime(o.created_at)}</td>
+                        {canDeleteOrder && (
+                          <td onClick={(e) => e.stopPropagation()}>
+                            <button type="button" className="ghost danger" onClick={() => void removeOrder(o.id)}>
+                              {t.orders.delete}
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </>
         )}
@@ -408,26 +556,27 @@ export default function StoreDetailPage() {
               onFilterChange={storeVisitsTable.setFilter}
               onClear={storeVisitsTable.clearFilters}
               onToggleFilters={() => storeVisitsTable.setShowFilters((v) => !v)}
+              pinnedFieldIds={["rep"]}
               labels={t.tableFilters}
             />
             {storeVisitsTable.filteredCount === 0 ? (
               <p className="muted">{t.tableFilters.noResults}</p>
             ) : (
-          <ul className="simple-list">
-            {storeVisitsTable.filtered.map((v) => (
-              <li key={v.id}>
-                <strong>{formatMarketDateTime(v.visited_at)}</strong>
-                {v.rep_name ? ` · ${v.rep_name}` : ""}
-                {v.note ? (
-                  v.isNoBuyReason ?? isNoBuyReasonNote(v.note) ? (
-                    <span className="no-buy-pill"> — {v.note}</span>
-                  ) : (
-                    <span className="muted"> — {v.note}</span>
-                  )
-                ) : null}
-              </li>
-            ))}
-          </ul>
+              <ul className="simple-list">
+                {storeVisitsTable.filtered.map((v) => (
+                  <li key={v.id}>
+                    <strong>{formatMarketDateTime(v.visited_at)}</strong>
+                    {v.rep_name ? ` · ${v.rep_name}` : ""}
+                    {v.note ? (
+                      v.isNoBuyReason ?? isNoBuyReasonNote(v.note) ? (
+                        <span className="no-buy-pill"> — {v.note}</span>
+                      ) : (
+                        <span className="muted"> — {v.note}</span>
+                      )
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
             )}
           </>
         )}
@@ -450,15 +599,26 @@ export default function StoreDetailPage() {
             {storePaymentsTable.filteredCount === 0 ? (
               <p className="muted">{t.tableFilters.noResults}</p>
             ) : (
-          <ul className="simple-list">
-            {storePaymentsTable.filtered.map((p) => (
-              <li key={p.id}>
-                <strong>{p.amount}</strong>
-                {p.note ? <span className="muted"> — {p.note}</span> : null}
-                <span className="muted small"> · {formatMarketDateTime(p.created_at)}</span>
-              </li>
-            ))}
-          </ul>
+              <div className="table-wrap">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>{t.stores.amount}</th>
+                      <th>{t.stores.note}</th>
+                      <th>{t.orders.colWhen}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {storePaymentsTable.filtered.map((p) => (
+                      <tr key={p.id}>
+                        <td className="strong">{money(parseFloat(p.amount) || 0)}</td>
+                        <td>{p.note || "—"}</td>
+                        <td className="small muted">{formatMarketDateTime(p.created_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </>
         )}

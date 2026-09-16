@@ -682,6 +682,10 @@ export const ar = {
     noVisits: "لا زيارات بعد.",
     noPayments: "لا دفعات مسجّلة بعد.",
     rep: "المندوب",
+    statFilteredTotal: "إجمالي المصفّى",
+    statPayments: "الدفعات",
+    statDeferredOutstanding: "المتبقي آجل",
+    statAllTimeTotal: "الإجمالي الكلي",
   },
 
   orderDetail: {

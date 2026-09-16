@@ -685,6 +685,10 @@ export const en: Messages = {
     noVisits: "No visits yet.",
     noPayments: "No payments recorded yet.",
     rep: "Rep",
+    statFilteredTotal: "Filtered total",
+    statPayments: "Payments",
+    statDeferredOutstanding: "Still to pay (deferred)",
+    statAllTimeTotal: "All-time total",
   },
 
   orderDetail: {

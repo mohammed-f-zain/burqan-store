@@ -3087,25 +3087,46 @@ router.get(
       const [ordersResult, summaryResult] = await Promise.all([
         storeId
           ? query(
-              `SELECT o.id::text AS id, 'store'::text AS source, o.representative_id, o.store_id,
-                      o.payment_type, o.total_amount, o.created_at,
-                      s.name AS store_name, r.full_name AS rep_name,
-                      COALESCE((
-                        SELECT string_agg(p.name, ', ' ORDER BY p.name)
-                        FROM order_lines ol
-                        JOIN products p ON p.id = ol.product_id
-                        WHERE ol.order_id = o.id
-                      ), '') AS product_names,
-                      COALESCE((
-                        SELECT string_agg(ol.product_id::text, '|' ORDER BY ol.product_id)
-                        FROM order_lines ol
-                        WHERE ol.order_id = o.id
-                      ), '') AS product_ids
-               FROM orders o
-               INNER JOIN stores s ON s.id = o.store_id
-               INNER JOIN representatives r ON r.id = o.representative_id
-               WHERE o.store_id = $1
-               ORDER BY o.created_at DESC, o.id DESC`,
+              `SELECT * FROM (
+                 SELECT o.id::text AS id, 'store'::text AS source, o.representative_id, o.store_id,
+                        o.payment_type, o.total_amount, o.created_at,
+                        s.name AS store_name, r.full_name AS rep_name,
+                        COALESCE((
+                          SELECT string_agg(p.name, ', ' ORDER BY p.name)
+                          FROM order_lines ol
+                          JOIN products p ON p.id = ol.product_id
+                          WHERE ol.order_id = o.id
+                        ), '') AS product_names,
+                        COALESCE((
+                          SELECT string_agg(ol.product_id::text, '|' ORDER BY ol.product_id)
+                          FROM order_lines ol
+                          WHERE ol.order_id = o.id
+                        ), '') AS product_ids
+                 FROM orders o
+                 INNER JOIN stores s ON s.id = o.store_id
+                 INNER JOIN representatives r ON r.id = o.representative_id
+                 WHERE o.store_id = $1
+                 UNION ALL
+                 SELECT ('ext-' || e.id::text) AS id, 'external'::text AS source, e.representative_id, e.store_id,
+                        e.payment_type, e.total_amount, e.created_at,
+                        COALESCE(s2.name, e.store_name) AS store_name, r.full_name AS rep_name,
+                        COALESCE((
+                          SELECT string_agg(p.name, ', ' ORDER BY p.name)
+                          FROM external_sale_lines el
+                          JOIN products p ON p.id = el.product_id
+                          WHERE el.external_sale_id = e.id
+                        ), '') AS product_names,
+                        COALESCE((
+                          SELECT string_agg(el.product_id::text, '|' ORDER BY el.product_id)
+                          FROM external_sale_lines el
+                          WHERE el.external_sale_id = e.id
+                        ), '') AS product_ids
+                 FROM external_sales e
+                 INNER JOIN representatives r ON r.id = e.representative_id
+                 LEFT JOIN stores s2 ON s2.id = e.store_id
+                 WHERE e.store_id = $1
+               ) x
+               ORDER BY x.created_at DESC, x.id DESC`,
               [storeId]
             )
           : query(
@@ -3129,8 +3150,8 @@ router.get(
                  INNER JOIN representatives r ON r.id = o.representative_id
                  UNION ALL
                  SELECT ('ext-' || e.id::text) AS id, 'external'::text AS source, e.representative_id,
-                        NULL::int AS store_id, e.payment_type, e.total_amount, e.created_at,
-                        e.store_name, r.full_name AS rep_name,
+                        e.store_id, e.payment_type, e.total_amount, e.created_at,
+                        COALESCE(s2.name, e.store_name) AS store_name, r.full_name AS rep_name,
                         COALESCE((
                           SELECT string_agg(p.name, ', ' ORDER BY p.name)
                           FROM external_sale_lines el
@@ -3144,6 +3165,7 @@ router.get(
                         ), '') AS product_ids
                  FROM external_sales e
                  INNER JOIN representatives r ON r.id = e.representative_id
+                 LEFT JOIN stores s2 ON s2.id = e.store_id
                ) x
                ORDER BY x.created_at DESC, x.id DESC`
             ),
@@ -3156,11 +3178,14 @@ router.get(
             }>(
               `SELECT
                  COUNT(*)::int AS total_count,
-                 COALESCE(SUM(o.total_amount), 0)::text AS total_revenue,
-                 COUNT(*) FILTER (WHERE o.created_at >= ${monthStart})::int AS month_count,
-                 COALESCE(SUM(o.total_amount) FILTER (WHERE o.created_at >= ${monthStart}), 0)::text AS month_revenue
-               FROM orders o
-               WHERE o.store_id = $1`,
+                 COALESCE(SUM(total_amount), 0)::text AS total_revenue,
+                 COUNT(*) FILTER (WHERE created_at >= ${monthStart})::int AS month_count,
+                 COALESCE(SUM(total_amount) FILTER (WHERE created_at >= ${monthStart}), 0)::text AS month_revenue
+               FROM (
+                 SELECT total_amount, created_at FROM orders WHERE store_id = $1
+                 UNION ALL
+                 SELECT total_amount, created_at FROM external_sales WHERE store_id = $1
+               ) sales`,
               [storeId]
             )
           : query<{
