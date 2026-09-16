@@ -38,7 +38,7 @@ import {
   getLoyaltyPeriodAudit,
   syncLoyaltyPeriodsFromFirstPurchase,
 } from "../utils/loyaltyExpiry.js";
-import { formatAmmanDateTime, notifyOdooSaleCompleted } from "../utils/odooWebhook.js";
+import { formatAmmanDateTime, notifyOdooSaleCompleted, notifyOdooSaleCancelled, productPayloadFromRow, notifyOdooProductCreated, notifyOdooProductUpdated, notifyOdooProductDeleted, notifyOdooStoreUpsert, notifyOdooStoreDeleted, buildStoreOdooPayload, notifyOdooRepresentativeUpsert, notifyOdooRepresentativeDeleted, enqueueOdooWebhookForce, normalizeOdooPaymentType } from "../utils/odooWebhook.js";
 
 const router = Router();
 
@@ -1198,6 +1198,15 @@ router.post(
           body.redeemEnabled ?? false,
         ]
       );
+      const product = rows[0]! as {
+        id: number;
+        name: string;
+        price: string | number;
+        is_active?: boolean;
+        designation?: string | null;
+        unit_label?: string | null;
+      };
+      notifyOdooProductCreated(productPayloadFromRow(product));
       res.status(201).json({ product: rows[0] });
     } catch (e) {
       next(e);
@@ -1251,6 +1260,18 @@ router.patch(
       vals.push(id);
       const { rows } = await query(`UPDATE products SET ${sets} WHERE id = $${vals.length} RETURNING *`, vals);
       if (!rows[0]) throw new HttpError(404, "Product not found");
+      notifyOdooProductUpdated(
+        productPayloadFromRow(
+          rows[0] as {
+            id: number;
+            name: string;
+            price: string | number;
+            is_active?: boolean;
+            designation?: string | null;
+            unit_label?: string | null;
+          }
+        )
+      );
       res.json({ product: rows[0] });
     } catch (e) {
       next(e);
@@ -1275,6 +1296,7 @@ router.delete(
       }
       const { rowCount } = await query(`DELETE FROM products WHERE id = $1`, [id]);
       if (!rowCount) throw new HttpError(404, "المنتج غير موجود");
+      notifyOdooProductDeleted(id);
       res.status(204).send();
     } catch (e) {
       next(e);
@@ -1501,6 +1523,13 @@ router.post(
         );
         const id = ins.rows[0]!.id;
         await c.query("COMMIT");
+        notifyOdooRepresentativeUpsert("representative.created", {
+          id,
+          name: body.fullName,
+          email: body.email,
+          phone: body.phone,
+          active: true,
+        });
         res.status(201).json({ id });
       } catch (e) {
         await c.query("ROLLBACK");
@@ -2016,6 +2045,20 @@ router.patch(
         [id]
       );
       if (!rows[0]) throw new HttpError(404, "المندوب غير موجود");
+      const repRow = rows[0] as {
+        id: number;
+        full_name: string;
+        email: string;
+        phone: string;
+        is_active: boolean;
+      };
+      notifyOdooRepresentativeUpsert("representative.updated", {
+        id: repRow.id,
+        name: repRow.full_name,
+        email: repRow.email,
+        phone: repRow.phone,
+        active: repRow.is_active,
+      });
       res.json({ representative: rows[0] });
     } catch (e) {
       if (e instanceof DatabaseError && e.code === "23505") {
@@ -2033,6 +2076,10 @@ router.delete(
   async (req, res, next) => {
     try {
       const id = z.coerce.number().int().positive().parse(req.params.id);
+      const { rows: before } = await query<{ email: string }>(
+        `SELECT email FROM representatives WHERE id = $1`,
+        [id]
+      );
       const { rows: ord } = await query<{ n: string }>(
         `SELECT COUNT(*)::text AS n FROM orders WHERE representative_id = $1`,
         [id]
@@ -2043,6 +2090,7 @@ router.delete(
       }
       const { rowCount } = await query(`DELETE FROM representatives WHERE id = $1`, [id]);
       if (!rowCount) throw new HttpError(404, "المندوب غير موجود");
+      notifyOdooRepresentativeDeleted({ id, email: before[0]?.email ?? null });
       res.status(204).send();
     } catch (e) {
       next(e);
@@ -2302,7 +2350,7 @@ router.post(
           orderId: externalOrderPublicId(saleId),
           occurredAt: createdAt.toISOString(),
           occurredAtAmman: formatAmmanDateTime(createdAt),
-          paymentType: body.paymentType,
+          paymentType: normalizeOdooPaymentType(body.paymentType),
           store: {
             id: store.id,
             name: storeName,
@@ -2970,6 +3018,17 @@ router.post(
         );
         await c.query("COMMIT");
         const store = ins.rows[0]!;
+        notifyOdooStoreUpsert(
+          "store.created",
+          buildStoreOdooPayload({
+            id: store.id,
+            name: store.name,
+            phone: store.phone,
+            address_text: null,
+            registered_by_representative_id: null,
+            owner_name: ownerName,
+          })
+        );
         res.status(201).json({
           store: {
             id: store.id,
@@ -3193,6 +3252,15 @@ router.patch(
       `,
         [id]
       );
+      const store = rows[0] as {
+        id: number;
+        name: string;
+        phone: string;
+        address_text: string | null;
+        registered_by_representative_id: number | null;
+        owner_name: string;
+      };
+      notifyOdooStoreUpsert("store.updated", buildStoreOdooPayload(store));
       res.json({ store: rows[0] });
     } catch (e) {
       next(e);
@@ -3223,6 +3291,7 @@ router.delete(
       }
       const { rowCount } = await query(`DELETE FROM stores WHERE id = $1`, [id]);
       if (!rowCount) throw new HttpError(404, "المتجر غير موجود");
+      notifyOdooStoreDeleted(id);
       res.status(204).send();
     } catch (e) {
       next(e);
@@ -3647,6 +3716,11 @@ router.delete(
 
           await c.query(`DELETE FROM external_sales WHERE id = $1`, [parsed.id]);
           await c.query("COMMIT");
+          notifyOdooSaleCancelled({
+            orderId: externalOrderPublicId(sale.id),
+            source: "external",
+            reason: "deleted_by_admin",
+          });
           res.json({ deleted: true, id: externalOrderPublicId(sale.id) });
         } catch (e) {
           try {
@@ -3690,6 +3764,11 @@ router.delete(
 
         await c.query(`DELETE FROM orders WHERE id = $1`, [parsed.id]);
         await c.query("COMMIT");
+        notifyOdooSaleCancelled({
+          orderId: String(order.id),
+          source: "store",
+          reason: "deleted_by_admin",
+        });
         res.json({ deleted: true, id: order.id });
       } catch (e) {
         try {
@@ -3985,5 +4064,173 @@ router.delete(
     }
   }
 );
+
+const odooResyncSchema = z.object({
+  entity: z.enum(["products", "stores", "representatives", "orders"]),
+  id: z.number().int().positive().optional(),
+  limit: z.number().int().min(1).max(2000).optional(),
+});
+
+/** Push existing Burqan rows to Odoo (fire-and-forget upserts / sale.completed). Super admin only. */
+router.post("/odoo/resync", adminAuthMiddleware, async (req, res, next) => {
+  try {
+    if (!req.admin?.isSuperAdmin) throw new HttpError(403, "Super admin only");
+    const body = odooResyncSchema.parse(req.body);
+    const limit = body.limit ?? 500;
+    let queued = 0;
+
+    if (body.entity === "products") {
+      const { rows } = await query<{
+        id: number;
+        name: string;
+        price: string;
+        is_active: boolean;
+        designation: string | null;
+        unit_label: string | null;
+      }>(
+        body.id
+          ? `SELECT id, name, price, is_active, designation, unit_label FROM products WHERE id = $1`
+          : `SELECT id, name, price, is_active, designation, unit_label FROM products ORDER BY id ASC LIMIT $1`,
+        body.id ? [body.id] : [limit]
+      );
+      for (const row of rows) {
+        const product = productPayloadFromRow(row);
+        enqueueOdooWebhookForce(
+          "product",
+          { event: "product.updated", product },
+          `resync:product:${product.id}:${Date.now()}`
+        );
+        queued += 1;
+      }
+    } else if (body.entity === "stores") {
+      const { rows } = await query<{
+        id: number;
+        name: string;
+        phone: string;
+        address_text: string | null;
+        registered_by_representative_id: number | null;
+        owner_name: string;
+      }>(
+        body.id
+          ? `SELECT id, name, phone, address_text, registered_by_representative_id, owner_name FROM stores WHERE id = $1`
+          : `SELECT id, name, phone, address_text, registered_by_representative_id, owner_name FROM stores ORDER BY id ASC LIMIT $1`,
+        body.id ? [body.id] : [limit]
+      );
+      for (const row of rows) {
+        const store = buildStoreOdooPayload(row);
+        enqueueOdooWebhookForce(
+          "store",
+          { event: "store.upsert", store },
+          `resync:store:${store.id}:${Date.now()}`
+        );
+        queued += 1;
+      }
+    } else if (body.entity === "representatives") {
+      const { rows } = await query<{
+        id: number;
+        full_name: string;
+        email: string;
+        phone: string;
+        is_active: boolean;
+      }>(
+        body.id
+          ? `SELECT id, full_name, email, phone, is_active FROM representatives WHERE id = $1`
+          : `SELECT id, full_name, email, phone, is_active FROM representatives ORDER BY id ASC LIMIT $1`,
+        body.id ? [body.id] : [limit]
+      );
+      for (const row of rows) {
+        enqueueOdooWebhookForce(
+          "representative",
+          {
+            event: "representative.upsert",
+            representative: {
+              id: row.id,
+              name: row.full_name,
+              email: row.email,
+              phone: row.phone,
+              active: row.is_active,
+            },
+          },
+          `resync:representative:${row.id}:${Date.now()}`
+        );
+        queued += 1;
+      }
+    } else {
+      const { rows } = await query<{
+        id: string;
+        payment_type: string;
+        total_amount: string;
+        created_at: Date;
+        store_id: number;
+        store_name: string;
+        store_phone: string;
+        rep_id: number;
+        rep_name: string;
+        rep_email: string;
+      }>(
+        body.id
+          ? `SELECT o.id::text, o.payment_type, o.total_amount, o.created_at,
+                    s.id AS store_id, s.name AS store_name, s.phone AS store_phone,
+                    r.id AS rep_id, r.full_name AS rep_name, r.email AS rep_email
+             FROM orders o
+             JOIN stores s ON s.id = o.store_id
+             JOIN representatives r ON r.id = o.representative_id
+             WHERE o.id = $1`
+          : `SELECT o.id::text, o.payment_type, o.total_amount, o.created_at,
+                    s.id AS store_id, s.name AS store_name, s.phone AS store_phone,
+                    r.id AS rep_id, r.full_name AS rep_name, r.email AS rep_email
+             FROM orders o
+             JOIN stores s ON s.id = o.store_id
+             JOIN representatives r ON r.id = o.representative_id
+             ORDER BY o.id DESC LIMIT $1`,
+        body.id ? [body.id] : [limit]
+      );
+      for (const row of rows) {
+        const { rows: lines } = await query<{
+          product_id: number;
+          product_name: string;
+          quantity: number;
+          unit_price: string;
+          line_total: string;
+        }>(
+          `SELECT ol.product_id, p.name AS product_name, ol.quantity,
+                  ol.unit_price::text, ol.line_total::text
+           FROM order_lines ol
+           JOIN products p ON p.id = ol.product_id
+           WHERE ol.order_id = $1`,
+          [row.id]
+        );
+        const createdAt = new Date(row.created_at);
+        enqueueOdooWebhookForce(
+          "sale",
+          {
+            event: "sale.completed",
+            source: "store",
+            orderId: row.id,
+            occurredAt: createdAt.toISOString(),
+            occurredAtAmman: formatAmmanDateTime(createdAt),
+            paymentType: normalizeOdooPaymentType(row.payment_type),
+            store: { id: row.store_id, name: row.store_name, phone: row.store_phone },
+            representative: { id: row.rep_id, name: row.rep_name, email: row.rep_email },
+            lines: lines.map((l) => ({
+              productId: l.product_id,
+              productName: l.product_name,
+              quantity: l.quantity,
+              unitPrice: parseFloat(l.unit_price) || 0,
+              lineTotal: parseFloat(l.line_total) || 0,
+            })),
+            totalAmount: parseFloat(row.total_amount) || 0,
+          },
+          `resync:sale.completed:${row.id}:${Date.now()}`
+        );
+        queued += 1;
+      }
+    }
+
+    res.json({ ok: true, entity: body.entity, queued });
+  } catch (e) {
+    next(e);
+  }
+});
 
 export default router;

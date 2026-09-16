@@ -12,7 +12,7 @@ import { HttpError } from "../utils/errors.js";
 import { hashPassword, verifyPassword } from "../utils/password.js";
 import { signRepToken } from "../utils/jwt.js";
 import { config } from "../config.js";
-import { formatAmmanDateTime, notifyOdooSaleCompleted } from "../utils/odooWebhook.js";
+import { formatAmmanDateTime, notifyOdooSaleCompleted, normalizeOdooPaymentType, notifyOdooStoreUpsert, buildStoreOdooPayload } from "../utils/odooWebhook.js";
 import {
   optionalStoredImagePathNullableSchema,
   optionalStoredImagePathSchema,
@@ -379,6 +379,7 @@ async function loadStoreForRep(storeId: number, rep: { id: number }) {
     qrPublicToken: s.qr_public_token,
     ownerPortalUrl,
     loyaltyPointsBalance: s.loyalty_points_balance,
+    registeredByRepresentativeId: s.registered_by_representative_id,
   };
 }
 
@@ -446,6 +447,17 @@ router.post("/stores/register", repAuthMiddleware, async (req, res, next) => {
       );
       await c.query("COMMIT");
       const store = await loadStoreForRep(storeId, rep);
+      notifyOdooStoreUpsert(
+        "store.created",
+        buildStoreOdooPayload({
+          id: store.id,
+          name: store.name,
+          phone: store.phone,
+          address_text: store.addressText ?? null,
+          registered_by_representative_id: rep.id,
+          owner_name: store.ownerName,
+        })
+      );
       res.status(201).json({
         store,
         areaName: resolved.areaName,
@@ -727,6 +739,17 @@ router.post("/prospect-stores/:id/convert", repAuthMiddleware, async (req, res, 
       );
       await c.query("COMMIT");
       const store = await loadStoreForRep(storeId, rep);
+      notifyOdooStoreUpsert(
+        "store.created",
+        buildStoreOdooPayload({
+          id: store.id,
+          name: store.name,
+          phone: store.phone,
+          address_text: store.addressText ?? null,
+          registered_by_representative_id: rep.id,
+          owner_name: store.ownerName,
+        })
+      );
       res.status(201).json({ store, prospectId, converted: true });
     } catch (e) {
       await c.query("ROLLBACK");
@@ -1401,6 +1424,17 @@ router.patch("/stores/:id", repAuthMiddleware, async (req, res, next) => {
     if (!rowCount) throw new HttpError(404, "المتجر غير موجود");
 
     const store = await loadStoreForRep(id, rep);
+    notifyOdooStoreUpsert(
+      "store.updated",
+      buildStoreOdooPayload({
+        id: store.id,
+        name: store.name,
+        phone: store.phone,
+        address_text: store.addressText ?? null,
+        registered_by_representative_id: store.registeredByRepresentativeId ?? null,
+        owner_name: store.ownerName,
+      })
+    );
     res.json({ store });
   } catch (e) {
     next(e);
@@ -1873,7 +1907,7 @@ router.post("/orders", repAuthMiddleware, async (req, res, next) => {
         orderId: String(orderId),
         occurredAt: createdAt.toISOString(),
         occurredAtAmman: formatAmmanDateTime(createdAt),
-        paymentType: body.paymentType,
+        paymentType: normalizeOdooPaymentType(body.paymentType),
         store: {
           id: store.id,
           name: store.name,

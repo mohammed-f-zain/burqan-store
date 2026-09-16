@@ -49,8 +49,12 @@ export const config = {
   adminResetTokenMinutes: parseInt(process.env.ADMIN_RESET_TOKEN_MINUTES ?? "60", 10),
   /** Google Maps Geocoding API key — accurate area from GPS (optional; falls back to circles). */
   googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY?.trim() || undefined,
-  /** Odoo sale webhook. Default is production ERP; skipped when ODOO_WEBHOOK_SECRET is unset. */
-  odooWebhookUrl:
-    process.env.ODOO_WEBHOOK_URL?.trim() || "https://erp.burqan.tech/burqan/webhook/sale",
+  /**
+   * Odoo ERP base URL for Burqan webhooks (`/burqan/webhook/*`).
+   * Sale URL can still be overridden with ODOO_WEBHOOK_URL for backward compatibility.
+   */
+  odooBaseUrl: (process.env.ODOO_BASE_URL?.trim() || "https://erp.burqan.tech").replace(/\/$/, ""),
+  /** Full sale webhook URL override (legacy). When unset, uses `${ODOO_BASE_URL}/burqan/webhook/sale`. */
+  odooWebhookUrl: process.env.ODOO_WEBHOOK_URL?.trim() || undefined,
   odooWebhookSecret: process.env.ODOO_WEBHOOK_SECRET?.trim() || undefined,
 };
