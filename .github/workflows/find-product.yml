@@ -1,0 +1,52 @@
+name: Find product by id/name
+
+on:
+  workflow_dispatch:
+    inputs:
+      q:
+        description: Product id or name fragment
+        required: true
+        default: "10"
+
+jobs:
+  find:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Query product + sample image URL
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          SEARCH_Q: ${{ inputs.q }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          envs: SEARCH_Q
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.DEPLOY_PATH }}"
+            DB_URL=""
+            if [[ -f /root/.burqan-db-url ]]; then
+              DB_URL="$(cat /root/.burqan-db-url | sed 's/^DATABASE_URL=//')"
+            elif [[ -f packages/api/.env ]]; then
+              DB_URL="$(grep -E '^DATABASE_URL=' packages/api/.env | head -1 | cut -d= -f2-)"
+            fi
+            Q="${SEARCH_Q}"
+            echo "=== products matching ==="
+            if [[ "$Q" =~ ^[0-9]+$ ]]; then
+              psql "$DB_URL" -P pager=off -c \
+                "SELECT id, name, image_url, is_active, price::text FROM products WHERE id = ${Q}::int;"
+            else
+              psql "$DB_URL" -P pager=off -c \
+                "SELECT id, name, image_url, is_active, price::text FROM products WHERE name ILIKE '%${Q}%' ORDER BY id LIMIT 20;"
+            fi
+            echo "=== PUBLIC_API_BASE_URL / sample curl ==="
+            grep -E '^(PUBLIC_API_BASE_URL|ODOO_)' packages/api/.env 2>/dev/null || true
+            IMG="$(psql "$DB_URL" -t -A -c "SELECT image_url FROM products WHERE id = 10 LIMIT 1;" | tr -d '[:space:]')"
+            echo "product 10 image_url=${IMG}"
+            if [[ -n "$IMG" && "$IMG" != "" ]]; then
+              URL="https://api.burqan.store${IMG}"
+              echo "trying $URL"
+              curl -sI "$URL" | head -8 || true
+            fi
+            echo "=== uploads dir ==="
+            ls -la packages/api/uploads 2>/dev/null | head -15 || ls -la uploads 2>/dev/null | head -15 || echo missing
