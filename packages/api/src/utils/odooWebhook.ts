@@ -75,6 +75,8 @@ export type OdooProductPayload = {
   uom: string;
   designation?: string | null;
   unitLabel?: string | null;
+  /** Absolute https URL for product image, or null. */
+  imageUrl: string | null;
 };
 
 export type OdooStorePayload = {
@@ -350,6 +352,17 @@ export function notifyOdooSaleCancelled(payload: {
   enqueueOdooWebhook("sale", body, `sale.cancelled:${body.orderId}`);
 }
 
+/** Absolute https URL for a stored `/uploads/...` path (or pass-through http(s)). */
+export function productImageUrl(path: string | null | undefined): string | null {
+  if (!path) return null;
+  const trimmed = String(path).trim();
+  if (!trimmed) return null;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  const base = config.publicApiBaseUrl.replace(/\/$/, "");
+  if (!base) return null;
+  return `${base}${trimmed.startsWith("/") ? trimmed : `/${trimmed}`}`;
+}
+
 export function productPayloadFromRow(row: {
   id: number;
   name: string;
@@ -357,6 +370,7 @@ export function productPayloadFromRow(row: {
   is_active?: boolean;
   designation?: string | null;
   unit_label?: string | null;
+  image_url?: string | null;
 }): OdooProductPayload {
   const unitPrice = typeof row.price === "number" ? row.price : parseFloat(String(row.price)) || 0;
   return {
@@ -369,6 +383,7 @@ export function productPayloadFromRow(row: {
     uom: (row.unit_label && String(row.unit_label).trim()) || "unit",
     designation: row.designation ?? null,
     unitLabel: row.unit_label ?? null,
+    imageUrl: productImageUrl(row.image_url) ?? null,
   };
 }
 

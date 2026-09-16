@@ -1205,6 +1205,7 @@ router.post(
         is_active?: boolean;
         designation?: string | null;
         unit_label?: string | null;
+        image_url?: string | null;
       };
       notifyOdooProductCreated(productPayloadFromRow(product));
       res.status(201).json({ product: rows[0] });
@@ -1269,6 +1270,7 @@ router.patch(
             is_active?: boolean;
             designation?: string | null;
             unit_label?: string | null;
+            image_url?: string | null;
           }
         )
       );
@@ -4087,10 +4089,11 @@ router.post("/odoo/resync", adminAuthMiddleware, async (req, res, next) => {
         is_active: boolean;
         designation: string | null;
         unit_label: string | null;
+        image_url: string | null;
       }>(
         body.id
-          ? `SELECT id, name, price, is_active, designation, unit_label FROM products WHERE id = $1`
-          : `SELECT id, name, price, is_active, designation, unit_label FROM products ORDER BY id ASC LIMIT $1`,
+          ? `SELECT id, name, price, is_active, designation, unit_label, image_url FROM products WHERE id = $1`
+          : `SELECT id, name, price, is_active, designation, unit_label, image_url FROM products ORDER BY id ASC LIMIT $1`,
         body.id ? [body.id] : [limit]
       );
       for (const row of rows) {

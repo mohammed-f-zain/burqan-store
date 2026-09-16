@@ -49,6 +49,8 @@ export const config = {
   adminResetTokenMinutes: parseInt(process.env.ADMIN_RESET_TOKEN_MINUTES ?? "60", 10),
   /** Google Maps Geocoding API key — accurate area from GPS (optional; falls back to circles). */
   googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY?.trim() || undefined,
+  /** Public API origin for absolute `/uploads/...` URLs (Odoo product images, etc.). */
+  publicApiBaseUrl: (process.env.PUBLIC_API_BASE_URL?.trim() || "https://api.burqan.store").replace(/\/$/, ""),
   /**
    * Odoo ERP base URL for Burqan webhooks (`/burqan/webhook/*`).
    * Sale URL can still be overridden with ODOO_WEBHOOK_URL for backward compatibility.
