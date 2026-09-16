@@ -236,7 +236,7 @@ export default function ExchangesPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {pgn.pageItems.map((r) => {
+                  {pgn.slice.map((r) => {
                     const cash = parseFloat(r.cashDifference) || 0;
                     const open = expandedId === r.id;
                     return (
@@ -276,7 +276,7 @@ export default function ExchangesPage() {
                                     <div>
                                       <h4 className="strong">{t.exchanges.returnLines}</h4>
                                       <ul className="exchange-line-list">
-                                        {detail.returnLines.map((l) => (
+                                        {(detail.returnLines ?? []).map((l) => (
                                           <li key={`r-${l.productId}`}>
                                             {l.productName} ×{l.quantity} — {money(l.lineTotal)}
                                           </li>
@@ -289,7 +289,7 @@ export default function ExchangesPage() {
                                     <div>
                                       <h4 className="strong">{t.exchanges.giveLines}</h4>
                                       <ul className="exchange-line-list">
-                                        {detail.giveLines.map((l) => (
+                                        {(detail.giveLines ?? []).map((l) => (
                                           <li key={`g-${l.productId}`}>
                                             {l.productName} ×{l.quantity} — {money(l.lineTotal)}
                                           </li>
