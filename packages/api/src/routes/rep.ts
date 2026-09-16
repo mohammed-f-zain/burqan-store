@@ -4,7 +4,7 @@ import { Router } from "express";
 import { z } from "zod";
 
 import { imageUpload } from "../lib/uploadConfig.js";
-import { isNoBuyReasonNote } from "../data/noBuyReasons.js";
+import { isNoBuyReasonNote, NO_BUY_OTHER_PREFIX, NO_BUY_REASONS, formatNoBuyOtherReason } from "../data/noBuyReasons.js";
 import { isNotRegisterReasonNote } from "../data/notRegisterReasons.js";
 import { query, pool } from "../db/pool.js";
 import { repAuthMiddleware } from "../middleware/repAuth.js";
@@ -1267,20 +1267,29 @@ router.patch("/stores/:id/today-visit-note", repAuthMiddleware, async (req, res,
     const body = visitNoteSchema.parse(req.body);
     const rep = req.rep!;
     await loadStoreForRep(storeId, rep);
-    const note = body.note?.trim() ? body.note.trim() : null;
+    const rawNote = body.note?.trim() ? body.note.trim() : null;
     const hadOrderToday = await repHadOrderAtStoreToday(rep.id, storeId);
     const kind =
       body.kind ??
-      (hadOrderToday ? "visit-note" : note && isNoBuyReasonNote(note) ? "no-buy-reason" : "visit-note");
+      (hadOrderToday ? "visit-note" : rawNote && isNoBuyReasonNote(rawNote) ? "no-buy-reason" : "visit-note");
 
+    let note = rawNote;
     if (kind === "no-buy-reason") {
-      if (!note || !isNoBuyReasonNote(note)) {
-        throw new HttpError(400, "يرجى اختيار سبب عدم الشراء من القائمة");
+      if (!rawNote || rawNote.length < 2) {
+        throw new HttpError(400, "يرجى اختيار أو كتابة سبب عدم الشراء");
       }
       if (hadOrderToday) {
         throw new HttpError(400, "لا يمكن تسجيل سبب عدم الشراء بعد إتمام عملية بيع");
       }
+      note =
+        (NO_BUY_REASONS as readonly string[]).includes(rawNote) || rawNote.startsWith(NO_BUY_OTHER_PREFIX)
+          ? rawNote
+          : formatNoBuyOtherReason(rawNote);
+      if (!isNoBuyReasonNote(note)) {
+        throw new HttpError(400, "يرجى اختيار أو كتابة سبب عدم الشراء");
+      }
     }
+
     const { rows } = await query<{ id: string; visited_at: string; note: string | null }>(
       `UPDATE visits SET note = $1
        WHERE id = (
@@ -1403,6 +1412,109 @@ router.get("/stores/:id", repAuthMiddleware, async (req, res, next) => {
     const id = z.coerce.number().int().positive().parse(req.params.id);
     const store = await loadStoreForRep(id, req.rep!);
     res.json({ store });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get("/stores/:id/deferred-balance", repAuthMiddleware, async (req, res, next) => {
+  try {
+    const id = z.coerce.number().int().positive().parse(req.params.id);
+    const store = await loadStoreForRep(id, req.rep!);
+    const { rows } = await query<{
+      deferred_total: string;
+      paid_total: string;
+    }>(
+      `SELECT
+         COALESCE((
+           SELECT SUM(total_amount) FROM orders
+           WHERE store_id = $1 AND payment_type = 'deferred'
+         ), 0)::text AS deferred_total,
+         COALESCE((
+           SELECT SUM(amount) FROM store_payments WHERE store_id = $1
+         ), 0)::text AS paid_total`,
+      [id]
+    );
+    const deferredTotal = parseFloat(rows[0]?.deferred_total ?? "0") || 0;
+    const paidTotal = parseFloat(rows[0]?.paid_total ?? "0") || 0;
+    const outstanding = Math.max(0, deferredTotal - paidTotal);
+    res.json({
+      deferredPaymentEnabled: store.deferredPaymentEnabled,
+      deferredTotal,
+      paidTotal,
+      outstanding,
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+const repPaymentSchema = z.object({
+  amount: z.number().positive(),
+  note: z.string().trim().max(500).optional(),
+});
+
+router.post("/stores/:id/payments", repAuthMiddleware, async (req, res, next) => {
+  try {
+    const id = z.coerce.number().int().positive().parse(req.params.id);
+    const body = repPaymentSchema.parse(req.body);
+    const rep = req.rep!;
+    const store = await loadStoreForRep(id, rep);
+    if (!store.deferredPaymentEnabled) {
+      throw new HttpError(400, "التحصيل الآجل غير مفعّل لهذا المتجر");
+    }
+
+    const { rows: bal } = await query<{
+      deferred_total: string;
+      paid_total: string;
+    }>(
+      `SELECT
+         COALESCE((
+           SELECT SUM(total_amount) FROM orders
+           WHERE store_id = $1 AND payment_type = 'deferred'
+         ), 0)::text AS deferred_total,
+         COALESCE((
+           SELECT SUM(amount) FROM store_payments WHERE store_id = $1
+         ), 0)::text AS paid_total`,
+      [id]
+    );
+    const deferredTotal = parseFloat(bal[0]?.deferred_total ?? "0") || 0;
+    const paidTotal = parseFloat(bal[0]?.paid_total ?? "0") || 0;
+    const outstanding = Math.max(0, deferredTotal - paidTotal);
+    if (outstanding <= 0.004) {
+      throw new HttpError(400, "لا يوجد رصيد آجل مستحق على هذا المتجر");
+    }
+    if (body.amount > outstanding + 0.004) {
+      throw new HttpError(400, `المبلغ أكبر من المتبقي (${outstanding.toFixed(2)})`);
+    }
+
+    const { rows } = await query<{
+      id: string;
+      amount: string;
+      note: string | null;
+      created_at: Date;
+    }>(
+      `INSERT INTO store_payments (store_id, amount, note, recorded_by_representative_id)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, amount, note, created_at`,
+      [id, body.amount.toFixed(4), body.note?.trim() || null, rep.id]
+    );
+    const payment = rows[0]!;
+    const newPaid = paidTotal + body.amount;
+    const newOutstanding = Math.max(0, deferredTotal - newPaid);
+    res.status(201).json({
+      payment: {
+        id: payment.id,
+        amount: parseFloat(payment.amount),
+        note: payment.note,
+        createdAt: payment.created_at,
+        storeId: id,
+        storeName: store.name,
+      },
+      deferredTotal,
+      paidTotal: newPaid,
+      outstanding: newOutstanding,
+    });
   } catch (e) {
     next(e);
   }

@@ -62,6 +62,7 @@ import DailyStoresByArea from "./DailyStoresByArea";
 import PossibleClientsSection from "./PossibleClientsSection";
 import RepZoneMapCard from "./RepZoneMapCard";
 import { dailyStoresToPins } from "./zoneMapTypes";
+import CollectDeferredPaymentModal from "./CollectDeferredPaymentModal";
 import EndVisitModal, { type EndVisitReasonKind } from "./EndVisitModal";
 import EndVisitBar from "./EndVisitBar";
 import OrderInvoiceModal from "./OrderInvoiceModal";
@@ -72,7 +73,7 @@ import RegisterErrorBoundary from "./RegisterErrorBoundary";
 import type { ReceiptData } from "./receiptFormat";
 import { normalizeStoreBrief, normalizeDailyStoreCard } from "./storeTypes";
 import type { DailyStoreCard, PrizeProduct, ProspectCard, StoreBrief } from "./storeTypes";
-import { sortDailyStoreCardsByDistance } from "./geoDistance";
+import { sortDailyStoreCardsByDistance, type StoreSortMode } from "./geoDistance";
 
 /** Lazy: keeps react-native-maps out of the register screen chunk on Android. */
 const RegisterStoreForm = lazy(() => import("./RegisterStoreForm"));
@@ -114,6 +115,18 @@ const t = {
   back: "رجوع",
   deferredOn: "آجل",
   deferredOff: "نقدي فقط",
+  collectDeferredPay: "تحصيل دفعة آجلة",
+  collectDeferredTitle: "تحصيل دفعة آجلة",
+  collectDeferredOutstanding: (amount: string) => `المتبقي: ${amount}`,
+  collectDeferredAmount: "المبلغ",
+  collectDeferredNote: "ملاحظة (اختياري)",
+  collectDeferredNoteHint: "مثال: دفعة جزئية",
+  collectDeferredSubmit: "تأكيد التحصيل",
+  collectDeferredCancel: "إلغاء",
+  collectDeferredDone: "تم تسجيل الدفعة الآجلة.",
+  collectDeferredFailed: "تعذّر تسجيل الدفعة.",
+  collectDeferredNone: "لا يوجد رصيد آجل مستحق.",
+  collectDeferredDisabled: "التحصيل الآجل غير مفعّل لهذا المتجر.",
   tabProducts: "المنتجات",
   tabInfo: "معلومات",
   tabVisits: "زيارات",
@@ -207,7 +220,7 @@ const t = {
   routeDayStoresCount: (n: number) => `${n} موقع`,
   routeDayPossibleCount: (n: number) => `${n} محتمل`,
   routeDayPossiblePill: "محتمل",
-  routeDayNearest: "مرتّبة حسب المسافة من موقعك الحالي",
+  routeDayNearest: "الأقدم زيارة أولاً، ثم الأقرب لموقعك",
   routeDayEmpty: "لا متاجر في مسار اليوم.",
   routeDayNoSchedule: "لا يوجد مسار مجدول لهذا اليوم — راجع الإدارة.",
   routeDayNoZoneAreas: "منطقة المسار لا تحتوي مناطق.",
@@ -235,7 +248,9 @@ const t = {
   dailyStoresTitle: "مسار اليوم",
   dailyStoresHint: "بعد الزيارة يظهر ✓ تمت زيارته — تبقى في القائمة حتى اليوم التالي",
   dailyStoresEmpty: "لا متاجر في مسار اليوم",
-  dailyStoresNearestFirst: "ترتيب من الأقرب لموقعك",
+  dailyStoresNearestFirst: "رتّب المتاجر حسب المسافة أو آخر زيارة",
+  dailyStoresSortDistance: "حسب المسافة",
+  dailyStoresSortLastVisit: "حسب آخر زيارة",
   dailyStoresAllVisited: "تمت زيارة كل المتاجر اليوم — أحسنت!",
   dailyStoresCount: (visited: number, total: number) => `${visited} / ${total} تمت زيارته`,
   dailyStoresVisited: "تمت زيارته",
@@ -306,7 +321,9 @@ const t = {
   visitEndConfirm: "إنهاء الزيارة",
   visitEndNoteLabel: "ملاحظة الزيارة (اختياري)",
   visitEndNoBuyNoteLabel: "سبب عدم الشراء",
-  visitEndNoBuyPickHint: "اختر سبباً واحداً",
+  visitEndNoBuyPickHint: "اختر سبباً واحداً أو اكتب سبباً آخر",
+  visitEndOtherReason: "سبب آخر",
+  visitEndOtherReasonPlaceholder: "اكتب سبب عدم الشراء…",
   visitEndNotePlaceholder: "اكتب ملاحظة عن الزيارة…",
   visitEndModeNote: "ملاحظة زيارة (اختياري)",
   visitEndModeNoBuy: "سبب عدم الشراء — مطلوب",
@@ -495,6 +512,11 @@ export default function App() {
   const [endVisitBusy, setEndVisitBusy] = useState(false);
   const [endVisitNoBuyRequired, setEndVisitNoBuyRequired] = useState(false);
   const [visitHadOrder, setVisitHadOrder] = useState(false);
+  const [storeSortMode, setStoreSortMode] = useState<StoreSortMode>("lastVisit");
+  const [deferredPayOpen, setDeferredPayOpen] = useState(false);
+  const [deferredPayBusy, setDeferredPayBusy] = useState(false);
+  const [deferredOutstanding, setDeferredOutstanding] = useState(0);
+  const [deferredBalanceLoading, setDeferredBalanceLoading] = useState(false);
   const [orderReceipt, setOrderReceipt] = useState<ReceiptData | null>(null);
   const [orderReceiptOpen, setOrderReceiptOpen] = useState(false);
   const [orderConfirmOpen, setOrderConfirmOpen] = useState(false);
@@ -704,7 +726,7 @@ export default function App() {
       };
       let burqan = (data.stores ?? []).map((s) => normalizeDailyStoreCard(s));
       if (nearestFirst && burqan.length > 0) {
-        burqan = sortDailyStoreCardsByDistance(burqan, repLat, repLng);
+        burqan = sortDailyStoreCardsByDistance(burqan, repLat, repLng, storeSortMode);
       }
       setDailyStores(burqan);
       setDailyMeta({
@@ -719,7 +741,7 @@ export default function App() {
     } finally {
       setDailyStoresLoading(false);
     }
-  }, [apiGet, token]);
+  }, [apiGet, token, storeSortMode]);
 
   const loadRouteStores = useCallback(async () => {
     if (!token) return;
@@ -774,7 +796,7 @@ export default function App() {
         visitNote: p.todayVisitNote ?? null,
         lastVisitedAt: p.lastVisitedAt ?? null,
       }));
-      setRouteStores(sortDailyStoreCardsByDistance([...burqan, ...prospects], pos.lat, pos.lng));
+      setRouteStores(sortDailyStoreCardsByDistance([...burqan, ...prospects], pos.lat, pos.lng, storeSortMode));
     } catch (e) {
       setRouteStores([]);
       setRouteMeta({
@@ -799,7 +821,7 @@ export default function App() {
       setRouteLocating(false);
       setRouteRefreshing(false);
     }
-  }, [apiGet, showToast, token]);
+  }, [apiGet, showToast, token, storeSortMode]);
 
   const clearSession = useCallback(() => {
     cancelSystemQrScanSession();
@@ -1577,7 +1599,9 @@ export default function App() {
                   storesCount: t.routeDayStoresCount,
                   possibleCount: t.routeDayPossibleCount,
                   possiblePill: t.routeDayPossiblePill,
-                  nearestFirst: t.routeDayNearest,
+                  nearestFirst: t.dailyStoresNearestFirst,
+                  sortByDistance: t.dailyStoresSortDistance,
+                  sortByLastVisit: t.dailyStoresSortLastVisit,
                   empty: t.routeDayEmpty,
                   noSchedule: t.routeDayNoSchedule,
                   noZoneAreas: t.routeDayNoZoneAreas,
@@ -1594,7 +1618,15 @@ export default function App() {
                   filterDone: t.dailyStoresFilterDone,
                   noSearchResults: t.dailyStoresNoSearchResults,
                   refreshLocation: t.refreshLocationCurrent,
+                  expandAll: t.dailyStoresExpandAll,
+                  collapseAll: t.dailyStoresCollapseAll,
+                  storeCount: t.dailyStoresAreaCount,
+                  pendingCount: t.dailyStoresPendingCount,
+                  unknownArea: t.dailyStoresUnknownArea,
+                  allVisited: t.dailyStoresAllVisited,
                 }}
+                sortMode={storeSortMode}
+                onSortModeChange={setStoreSortMode}
                 onRefresh={() => {
                   setRouteRefreshing(true);
                   void loadRouteStores();
@@ -1739,8 +1771,12 @@ export default function App() {
               noSearchResults: t.dailyStoresNoSearchResults,
               visitQr: t.dailyStoresVisitQr,
               nearestFirst: t.dailyStoresNearestFirst,
+              sortByDistance: t.dailyStoresSortDistance,
+              sortByLastVisit: t.dailyStoresSortLastVisit,
               refreshLocation: t.refreshLocationCurrent,
             }}
+            sortMode={storeSortMode}
+            onSortModeChange={setStoreSortMode}
             locating={dailyStoresLoading}
             onRefreshLocation={() => void loadDailyStores()}
             onSelectStore={setPeekStore}
@@ -1835,8 +1871,37 @@ export default function App() {
                 </Pressable>
               </View>
               <Text style={styles.muted}>{t.visitAutoHint}</Text>
+              {activeStore.deferredPaymentEnabled ? (
+                <Pressable
+                  style={[styles.secondary, { marginTop: 16 }]}
+                  disabled={deferredBalanceLoading}
+                  onPress={() => {
+                    setDeferredBalanceLoading(true);
+                    void apiGet(`/api/v1/rep/stores/${activeStore.id}/deferred-balance`)
+                      .then((data: any) => {
+                        const outstanding = Number(data.outstanding) || 0;
+                        if (!data.deferredPaymentEnabled) {
+                          showToast(t.collectDeferredDisabled, "error");
+                          return;
+                        }
+                        if (outstanding <= 0.004) {
+                          showToast(t.collectDeferredNone, "error");
+                          return;
+                        }
+                        setDeferredOutstanding(outstanding);
+                        setDeferredPayOpen(true);
+                      })
+                      .catch((e) => showToast(toArabicUserMessage(e, t.collectDeferredFailed), "error"))
+                      .finally(() => setDeferredBalanceLoading(false));
+                  }}
+                >
+                  <Text style={styles.secondaryText}>
+                    {deferredBalanceLoading ? t.uploading : t.collectDeferredPay}
+                  </Text>
+                </Pressable>
+              ) : null}
               <Pressable
-                style={[styles.secondary, { marginTop: 16 }]}
+                style={[styles.secondary, { marginTop: activeStore.deferredPaymentEnabled ? 12 : 16 }]}
                 onPress={() => setEditStoreOpen(true)}
               >
                 <Text style={styles.secondaryText}>{t.editStore}</Text>
@@ -2307,6 +2372,8 @@ export default function App() {
           noteLabel: noPurchaseEndVisit ? t.visitEndNoBuyNoteLabel : t.visitEndNoteLabel,
           notePlaceholder: t.visitEndNotePlaceholder,
           pickReasonHint: noPurchaseEndVisit ? t.visitEndNoBuyPickHint : undefined,
+          otherReason: t.visitEndOtherReason,
+          otherReasonPlaceholder: t.visitEndOtherReasonPlaceholder,
           modeVisitNote: t.visitEndModeNote,
           modeNoBuy: t.visitEndModeNoBuy,
           stay: t.visitEndStay,
@@ -2321,6 +2388,37 @@ export default function App() {
           setStoreTab("sell");
         }}
         onConfirm={(payload) => void confirmEndVisit(payload)}
+      />
+      <CollectDeferredPaymentModal
+        visible={deferredPayOpen}
+        storeName={activeStore?.name ?? ""}
+        outstanding={deferredOutstanding}
+        busy={deferredPayBusy}
+        formatMoney={(n) => `${n.toFixed(2)} ${t.currency}`}
+        labels={{
+          title: t.collectDeferredTitle,
+          outstanding: t.collectDeferredOutstanding,
+          amount: t.collectDeferredAmount,
+          note: t.collectDeferredNote,
+          notePlaceholder: t.collectDeferredNoteHint,
+          submit: t.collectDeferredSubmit,
+          cancel: t.collectDeferredCancel,
+          invalidAmount: t.collectDeferredFailed,
+        }}
+        onClose={() => {
+          if (!deferredPayBusy) setDeferredPayOpen(false);
+        }}
+        onSubmit={({ amount, note }) => {
+          if (!activeStore) return;
+          setDeferredPayBusy(true);
+          void apiPost(`/api/v1/rep/stores/${activeStore.id}/payments`, { amount, note })
+            .then(() => {
+              setDeferredPayOpen(false);
+              showToast(t.collectDeferredDone, "success");
+            })
+            .catch((e) => showToast(toArabicUserMessage(e, t.collectDeferredFailed), "error"))
+            .finally(() => setDeferredPayBusy(false));
+        }}
       />
       <StorePeekModal
         visible={peekStore != null}

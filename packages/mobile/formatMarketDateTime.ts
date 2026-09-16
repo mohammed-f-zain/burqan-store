@@ -11,10 +11,10 @@ const formatter = new Intl.DateTimeFormat("ar-JO", {
   numberingSystem: "latn",
 });
 
-const dateOnlyFormatter = new Intl.DateTimeFormat("ar-JO", {
+const dateOnlyFormatter = new Intl.DateTimeFormat("en-GB", {
   calendar: "gregory",
-  day: "numeric",
-  month: "short",
+  day: "2-digit",
+  month: "2-digit",
   year: "numeric",
   numberingSystem: "latn",
   timeZone: "Asia/Amman",
@@ -24,7 +24,7 @@ export function formatMarketDateTime(value: string | number | Date): string {
   return formatter.format(new Date(value));
 }
 
-/** Date only (no time), Amman calendar day. */
+/** Date only as numbers (DD/MM/YYYY), Amman calendar day. */
 export function formatMarketDate(value: string | number | Date): string {
   return dateOnlyFormatter.format(new Date(value));
 }

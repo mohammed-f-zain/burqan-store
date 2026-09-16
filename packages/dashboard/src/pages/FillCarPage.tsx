@@ -17,7 +17,20 @@ import { ownerFormatMoney } from "../owner/ownerFormat";
 
 type Rep = { id: number; full_name: string; email: string; is_active: boolean };
 type SalesLine = { product_id: number; product_name: string; quantity: number; line_total: string };
-type RepSales = Rep & { order_count: number; total_sales: string; lines: SalesLine[] };
+type PaymentCollected = {
+  id: string;
+  storeId: number;
+  storeName: string;
+  amount: string;
+  createdAt: string;
+};
+type RepSales = Rep & {
+  order_count: number;
+  total_sales: string;
+  lines: SalesLine[];
+  paymentsCollected?: PaymentCollected[];
+  paymentsCollectedTotal?: string;
+};
 type InvRow = {
   product_id: number;
   name: string;
@@ -627,6 +640,35 @@ export default function FillCarPage() {
             </div>
             </>
           )}
+
+          {(selected.paymentsCollected?.length ?? 0) > 0 ? (
+            <>
+              <h4 className="strong" style={{ marginTop: 24 }}>
+                {t.fillCar.paymentsCollectedThatDay}
+              </h4>
+              <div className="table-wrap">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>{t.fillCar.paymentsCollectedStore}</th>
+                      <th>{t.fillCar.paymentsCollectedAmount}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(selected.paymentsCollected ?? []).map((p) => (
+                      <tr key={p.id}>
+                        <td>{p.storeName}</td>
+                        <td>{money(p.amount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="muted small" style={{ marginTop: 8 }}>
+                {t.fillCar.paymentsCollectedAmount}: {money(selected.paymentsCollectedTotal ?? 0)}
+              </p>
+            </>
+          ) : null}
 
           <h4 className="strong" style={{ marginTop: 24 }}>
             {t.fillCar.inventorySection}

@@ -7,12 +7,22 @@ export const NO_BUY_REASONS = [
 
 export type NoBuyReason = (typeof NO_BUY_REASONS)[number];
 
-export function isNoBuyReasonNote(note: string | null | undefined): boolean {
-  if (!note?.trim()) return false;
-  return (NO_BUY_REASONS as readonly string[]).includes(note.trim());
+/** Prefix for free-text no-buy reasons written by the rep. */
+export const NO_BUY_OTHER_PREFIX = "سبب آخر:";
+
+export function formatNoBuyOtherReason(text: string): string {
+  const trimmed = text.trim().replace(/\s+/g, " ");
+  return `${NO_BUY_OTHER_PREFIX} ${trimmed}`;
 }
 
-/** True when the visit note is a fixed no-buy reason and there was no sale that day. */
+export function isNoBuyReasonNote(note: string | null | undefined): boolean {
+  if (!note?.trim()) return false;
+  const n = note.trim();
+  if ((NO_BUY_REASONS as readonly string[]).includes(n)) return true;
+  return n.startsWith(NO_BUY_OTHER_PREFIX) && n.length > NO_BUY_OTHER_PREFIX.length + 1;
+}
+
+/** True when the visit note is a fixed/custom no-buy reason and there was no sale that day. */
 export function isNoBuyVisit(
   note: string | null | undefined,
   hadOrderSameDay: boolean

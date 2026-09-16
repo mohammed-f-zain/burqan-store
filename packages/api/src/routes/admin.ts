@@ -1614,12 +1614,59 @@ router.get(
         linesByRep.set(line.rep_id, list);
       }
 
+      const { rows: paymentLines } = await query<{
+        rep_id: number;
+        store_id: number;
+        store_name: string;
+        amount: string;
+        created_at: Date;
+        payment_id: string;
+      }>(
+        `SELECT sp.recorded_by_representative_id AS rep_id,
+                sp.store_id,
+                s.name AS store_name,
+                sp.amount::text AS amount,
+                sp.created_at,
+                sp.id::text AS payment_id
+         FROM store_payments sp
+         INNER JOIN stores s ON s.id = sp.store_id
+         INNER JOIN representatives r ON r.id = sp.recorded_by_representative_id
+         WHERE sp.recorded_by_representative_id IS NOT NULL
+           AND (sp.created_at AT TIME ZONE 'Asia/Amman')::date = $1::date
+           AND (
+             $1::date <> (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Amman')::date
+             OR r.car_fill_at IS NULL
+             OR sp.created_at >= r.car_fill_at
+           )
+         ORDER BY sp.created_at DESC`,
+        [date]
+      );
+
+      const paymentsByRep = new Map<number, typeof paymentLines>();
+      for (const p of paymentLines) {
+        const list = paymentsByRep.get(p.rep_id) ?? [];
+        list.push(p);
+        paymentsByRep.set(p.rep_id, list);
+      }
+
       res.json({
         date,
-        representatives: reps.map((r) => ({
-          ...r,
-          lines: linesByRep.get(r.id) ?? [],
-        })),
+        representatives: reps.map((r) => {
+          const payRows = paymentsByRep.get(r.id) ?? [];
+          const paymentsTotal = payRows.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+          return {
+            ...r,
+            lines: linesByRep.get(r.id) ?? [],
+            paymentsCollected: payRows.map((p) => ({
+              id: p.payment_id,
+              storeId: p.store_id,
+              storeName: p.store_name,
+              amount: p.amount,
+              createdAt: p.created_at,
+            })),
+            paymentsCollectedTotal: paymentsTotal.toFixed(4),
+          };
+        }),
       });
     } catch (e) {
       next(e);

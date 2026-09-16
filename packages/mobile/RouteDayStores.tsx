@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -17,6 +17,7 @@ import type { DailyStoreCard } from "./storeTypes";
 import type { MapRegion } from "./registerMapConfig";
 import { dailyStoresToPins } from "./zoneMapTypes";
 import { formatMarketDate } from "./formatMarketDateTime";
+import { compareStoresByMode, type StoreSortMode } from "./geoDistance";
 
 export type RouteDayLabels = {
   title: string;
@@ -43,6 +44,14 @@ export type RouteDayLabels = {
   filterDone: string;
   noSearchResults: string;
   refreshLocation: string;
+  sortByDistance?: string;
+  sortByLastVisit?: string;
+  expandAll?: string;
+  collapseAll?: string;
+  storeCount?: (n: number) => string;
+  pendingCount?: (n: number) => string;
+  unknownArea?: string;
+  allVisited?: string;
 };
 
 type RouteMeta = {
@@ -62,9 +71,12 @@ type Props = {
   onRefresh: () => void;
   onRefreshLocation: () => void;
   onSelectStore: (store: DailyStoreCard) => void;
+  sortMode?: StoreSortMode;
+  onSortModeChange?: (m: StoreSortMode) => void;
 };
 
 type FilterMode = "all" | "pending" | "done";
+type AreaGroup = { areaName: string; stores: DailyStoreCard[] };
 
 const ROUTE_MAP_HEIGHT = 200;
 
@@ -75,10 +87,109 @@ const JORDAN_REGION: MapRegion = {
   longitudeDelta: 4.2,
 };
 
+const GOVERNORATES = new Set([
+  "عمان",
+  "إربد",
+  "الزرقاء",
+  "المفرق",
+  "العقبة",
+  "الكرك",
+  "معان",
+  "الطفيلة",
+  "مادبا",
+  "جرش",
+  "عجلون",
+  "البلقاء",
+]);
+
+function parseAreaName(raw: string, unknownLabel: string): { title: string; subtitle?: string } {
+  const t = raw.trim();
+  if (!t) return { title: unknownLabel };
+  if (t.includes("شبكة")) return { title: t.replace(/\s*—\s*شبكة\s*\d+/, "").trim() || t, subtitle: "منطقة قديمة" };
+  const dash = t.indexOf(" — ");
+  if (dash > 0) {
+    const left = t.slice(0, dash).trim();
+    const right = t.slice(dash + 3).trim();
+    if (GOVERNORATES.has(left)) return { title: right, subtitle: left };
+  }
+  return { title: t };
+}
+
+function sortStoresInArea(stores: DailyStoreCard[], sortMode: StoreSortMode): DailyStoreCard[] {
+  return [...stores].sort((a, b) => compareStoresByMode(a, b, sortMode));
+}
+
+function groupStoresByArea(
+  stores: DailyStoreCard[],
+  repAreaNames: string[],
+  sortMode: StoreSortMode
+): AreaGroup[] {
+  const byArea = new Map<string, DailyStoreCard[]>();
+  for (const s of stores) {
+    const key = s.areaName?.trim() || "";
+    if (!byArea.has(key)) byArea.set(key, []);
+    byArea.get(key)!.push(s);
+  }
+
+  const keys = [...byArea.keys()];
+  keys.sort((a, b) => {
+    const ia = repAreaNames.indexOf(a);
+    const ib = repAreaNames.indexOf(b);
+    if (ia >= 0 && ib >= 0) return ia - ib;
+    if (ia >= 0) return -1;
+    if (ib >= 0) return 1;
+    if (!a) return 1;
+    if (!b) return -1;
+    return a.localeCompare(b, "ar");
+  });
+
+  return keys.map((areaName) => ({
+    areaName,
+    stores: sortStoresInArea(byArea.get(areaName)!, sortMode),
+  }));
+}
+
+function sortGroupsPendingFirst(groups: AreaGroup[]): AreaGroup[] {
+  return [...groups].sort((a, b) => {
+    const aPending = a.stores.some((s) => !s.visitedToday);
+    const bPending = b.stores.some((s) => !s.visitedToday);
+    if (aPending !== bPending) return aPending ? -1 : 1;
+    return a.areaName.localeCompare(b.areaName, "ar");
+  });
+}
+
+function defaultExpanded(groups: AreaGroup[]): Record<string, boolean> {
+  const next: Record<string, boolean> = {};
+  for (const g of groups) {
+    const key = g.areaName || "__unknown__";
+    next[key] = g.stores.some((s) => !s.visitedToday);
+  }
+  if (Object.values(next).every((v) => !v) && groups[0]) {
+    next[groups[0].areaName || "__unknown__"] = true;
+  }
+  return next;
+}
+
+function areaKey(name: string): string {
+  return name || "__unknown__";
+}
+
 export default function RouteDayStores(props: Props) {
   const { stores, meta, loading, locating, labels } = props;
+  const [internalSortMode, setInternalSortMode] = useState<StoreSortMode>("lastVisit");
+  const sortMode = props.sortMode ?? internalSortMode;
+  const setSortMode = props.onSortModeChange ?? setInternalSortMode;
+
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterMode>("all");
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  const repAreaNames = meta?.routeZone?.areas ?? [];
+  const unknownAreaLabel = labels.unknownArea ?? "منطقة غير معروفة";
+  const expandAllLabel = labels.expandAll ?? "توسيع الكل";
+  const collapseAllLabel = labels.collapseAll ?? "طي الكل";
+  const storeCountLabel = labels.storeCount ?? ((n: number) => `${n} محل`);
+  const pendingCountLabel = labels.pendingCount ?? ((n: number) => `${n} متبقي`);
 
   const storePins = useMemo(() => dailyStoresToPins(stores), [stores]);
 
@@ -91,7 +202,7 @@ export default function RouteDayStores(props: Props) {
     return JORDAN_REGION;
   }, [storePins]);
 
-  const filtered = useMemo(() => {
+  const filteredStores = useMemo(() => {
     const needle = search.trim().toLowerCase();
     return stores.filter((s) => {
       if (filter === "pending" && s.visitedToday) return false;
@@ -105,6 +216,29 @@ export default function RouteDayStores(props: Props) {
       );
     });
   }, [stores, search, filter]);
+
+  const groups = useMemo(
+    () => sortGroupsPendingFirst(groupStoresByArea(filteredStores, repAreaNames, sortMode)),
+    [filteredStores, repAreaNames, sortMode]
+  );
+
+  useEffect(() => {
+    if (!stores.length) {
+      setExpanded({});
+      return;
+    }
+    setExpanded(
+      defaultExpanded(
+        sortGroupsPendingFirst(groupStoresByArea(stores, repAreaNames, sortMode))
+      )
+    );
+  }, [stores, repAreaNames, sortMode]);
+
+  const setAllExpanded = (open: boolean) => {
+    const next: Record<string, boolean> = {};
+    for (const g of groups) next[areaKey(g.areaName)] = open;
+    setExpanded(next);
+  };
 
   const visitedCount = stores.filter((s) => s.visitedToday).length;
   const possibleCount = stores.filter((s) => s.source === "prospect").length;
@@ -135,6 +269,7 @@ export default function RouteDayStores(props: Props) {
   const zoneName = meta.routeZone?.name ?? "—";
   const dayName = meta.dayName ?? "";
   const listBottomPadding = 24;
+  const allVisitedLabel = labels.allVisited ?? "تمت زيارة جميع المحلات";
 
   return (
     <ScrollView
@@ -204,79 +339,187 @@ export default function RouteDayStores(props: Props) {
           placeholderTextColor={theme.muted}
           textAlign="right"
         />
-        <View style={styles.filters}>
-          {(["all", "pending", "done"] as const).map((f) => (
+        <View style={styles.toolbarRow}>
+          <View style={styles.toolbarMain}>
+            <View style={styles.filters}>
+              {(["all", "pending", "done"] as const).map((f) => (
+                <Pressable
+                  key={f}
+                  style={[styles.filterChip, filter === f && styles.filterChipOn]}
+                  onPress={() => setFilter(f)}
+                >
+                  <Text style={[styles.filterText, filter === f && styles.filterTextOn]}>
+                    {f === "all" ? labels.filterAll : f === "pending" ? labels.filterPending : labels.filterDone}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            <View style={styles.sortRow}>
+              {(
+                [
+                  ["distance", labels.sortByDistance ?? "المسافة"],
+                  ["lastVisit", labels.sortByLastVisit ?? "آخر زيارة"],
+                ] as const
+              ).map(([mode, label]) => (
+                <Pressable
+                  key={mode}
+                  style={[styles.filterChip, sortMode === mode && styles.filterChipOn]}
+                  onPress={() => setSortMode(mode)}
+                >
+                  <Text style={[styles.filterText, sortMode === mode && styles.filterTextOn]}>{label}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+          {groups.length > 1 ? (
             <Pressable
-              key={f}
-              style={[styles.filterChip, filter === f && styles.filterChipOn]}
-              onPress={() => setFilter(f)}
+              style={styles.expandToggle}
+              onPress={() => {
+                const anyClosed = groups.some((g) => !expanded[areaKey(g.areaName)]);
+                setAllExpanded(anyClosed);
+              }}
             >
-              <Text style={[styles.filterText, filter === f && styles.filterTextOn]}>
-                {f === "all" ? labels.filterAll : f === "pending" ? labels.filterPending : labels.filterDone}
+              <Text style={styles.expandToggleText}>
+                {groups.every((g) => expanded[areaKey(g.areaName)]) ? collapseAllLabel : expandAllLabel}
               </Text>
             </Pressable>
-          ))}
+          ) : null}
         </View>
       </View>
 
-      {filtered.length === 0 ? (
-        <Text style={styles.emptyMsg}>{search.trim() ? labels.noSearchResults : labels.empty}</Text>
+      {filteredStores.length === 0 ? (
+        <Text style={styles.emptyMsg}>{search.trim() || filter !== "all" ? labels.noSearchResults : labels.empty}</Text>
       ) : (
-        filtered.map((s, index) => (
-          <Pressable
-            key={`${s.source ?? "burqan"}-${s.id}`}
-            style={[
-              styles.storeCard,
-              s.visitedToday && styles.storeCardDone,
-              isPossible(s) && styles.storeCardPossible,
-            ]}
-            onPress={() => props.onSelectStore(s)}
-          >
-            <View style={[styles.rankBadge, isPossible(s) && styles.rankBadgePossible]}>
-              <Text style={[styles.rankText, isPossible(s) && styles.rankTextPossible]}>{index + 1}</Text>
+        <>
+          {stores.length > 0 && stores.every((s) => s.visitedToday) ? (
+            <View style={styles.allDoneBanner}>
+              <Ionicons name="checkmark-circle" size={22} color="#16a34a" />
+              <Text style={styles.allDoneText}>{allVisitedLabel}</Text>
             </View>
-            <View style={styles.storeBody}>
-              <View style={styles.storeTopRow}>
-                <Text style={styles.storeName} numberOfLines={1}>
-                  {s.name}
-                </Text>
-                {s.distanceLabel ? (
-                  <View style={styles.distBadge}>
-                    <Ionicons name="location-sharp" size={12} color={theme.accentDark} />
-                    <Text style={styles.distText}>{s.distanceLabel}</Text>
+          ) : null}
+
+          {groups.map((group) => {
+            const key = areaKey(group.areaName);
+            const isOpen = expanded[key] ?? false;
+            const visited = group.stores.filter((s) => s.visitedToday).length;
+            const pending = group.stores.length - visited;
+            const areaProgress = group.stores.length > 0 ? visited / group.stores.length : 0;
+            const areaDisplay = parseAreaName(group.areaName, unknownAreaLabel);
+            const allDone = group.stores.length > 0 && pending === 0;
+
+            return (
+              <View key={key} style={styles.areaBlock}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.areaHeader,
+                    isOpen && styles.areaHeaderOpen,
+                    allDone && styles.areaHeaderDone,
+                    pressed && styles.pressed,
+                  ]}
+                  onPress={() => setExpanded((prev) => ({ ...prev, [key]: !isOpen }))}
+                >
+                  <View style={[styles.areaIconWrap, allDone && styles.areaIconWrapDone]}>
+                    <Ionicons
+                      name={allDone ? "checkmark-circle" : "location"}
+                      size={20}
+                      color={allDone ? "#16a34a" : theme.accent}
+                    />
                   </View>
-                ) : null}
-              </View>
-              <View style={styles.storeMetaRow}>
-                {isPossible(s) ? (
-                  <View style={styles.possiblePill}>
-                    <Text style={styles.possiblePillText}>{labels.possiblePill}</Text>
+                  <View style={styles.areaHeaderBody}>
+                    <Text style={styles.areaName} numberOfLines={2}>
+                      {areaDisplay.title}
+                    </Text>
+                    {areaDisplay.subtitle ? (
+                      <Text style={styles.areaSubtitle} numberOfLines={1}>
+                        {areaDisplay.subtitle}
+                      </Text>
+                    ) : null}
+                    <View style={styles.areaProgressRow}>
+                      <View style={styles.areaProgressTrack}>
+                        <View
+                          style={[styles.areaProgressFill, { width: `${Math.round(areaProgress * 100)}%` }]}
+                        />
+                      </View>
+                      <Text style={styles.areaMeta}>
+                        {storeCountLabel(group.stores.length)}
+                        {pending > 0
+                          ? ` · ${pendingCountLabel(pending)}`
+                          : ` · ${labels.visited}`}
+                      </Text>
+                    </View>
                   </View>
-                ) : null}
-                <Text style={styles.storeMeta} numberOfLines={1}>
-                  {s.ownerName?.trim() || s.addressText?.trim() || "—"}
-                </Text>
+                  <Ionicons
+                    name={isOpen ? "chevron-up" : "chevron-down"}
+                    size={22}
+                    color={allDone ? "#16a34a" : theme.accent}
+                  />
+                </Pressable>
+
+                {isOpen
+                  ? group.stores.map((s, idx) => (
+                      <Pressable
+                        key={`${s.source ?? "burqan"}-${s.id}`}
+                        style={({ pressed }) => [
+                          styles.storeCard,
+                          s.visitedToday && styles.storeCardDone,
+                          isPossible(s) && styles.storeCardPossible,
+                          idx === group.stores.length - 1 && styles.storeCardLast,
+                          pressed && styles.pressed,
+                        ]}
+                        onPress={() => props.onSelectStore(s)}
+                      >
+                        <View style={[styles.rankBadge, isPossible(s) && styles.rankBadgePossible]}>
+                          <Text style={[styles.rankText, isPossible(s) && styles.rankTextPossible]}>
+                            {idx + 1}
+                          </Text>
+                        </View>
+                        <View style={styles.storeBody}>
+                          <View style={styles.storeTopRow}>
+                            <Text style={styles.storeName} numberOfLines={1}>
+                              {s.name}
+                            </Text>
+                            {s.distanceLabel ? (
+                              <View style={styles.distBadge}>
+                                <Ionicons name="location-sharp" size={12} color={theme.accentDark} />
+                                <Text style={styles.distText}>{s.distanceLabel}</Text>
+                              </View>
+                            ) : null}
+                          </View>
+                          <View style={styles.storeMetaRow}>
+                            {isPossible(s) ? (
+                              <View style={styles.possiblePill}>
+                                <Text style={styles.possiblePillText}>{labels.possiblePill}</Text>
+                              </View>
+                            ) : null}
+                            <Text style={styles.storeMeta} numberOfLines={1}>
+                              {s.ownerName?.trim() || s.addressText?.trim() || "—"}
+                            </Text>
+                          </View>
+                          <Text style={styles.storeLastVisit} numberOfLines={1}>
+                            {s.lastVisitedAt
+                              ? labels.lastVisit(formatMarketDate(s.lastVisitedAt))
+                              : s.visitedToday
+                                ? labels.lastVisit(formatMarketDate(new Date()))
+                                : labels.lastVisitNever}
+                          </Text>
+                          {s.visitedToday ? (
+                            <View style={styles.donePill}>
+                              <Text style={styles.donePillText}>{labels.visited}</Text>
+                            </View>
+                          ) : (
+                            <View style={styles.pendingPill}>
+                              <Text style={styles.pendingPillText}>{labels.pending}</Text>
+                            </View>
+                          )}
+                        </View>
+                        <Ionicons name="chevron-back" size={20} color={theme.muted} />
+                      </Pressable>
+                    ))
+                  : null}
               </View>
-              <Text style={styles.storeLastVisit} numberOfLines={1}>
-                {s.lastVisitedAt
-                  ? labels.lastVisit(formatMarketDate(s.lastVisitedAt))
-                  : s.visitedToday
-                    ? labels.lastVisit(formatMarketDate(new Date()))
-                    : labels.lastVisitNever}
-              </Text>
-              {s.visitedToday ? (
-                <View style={styles.donePill}>
-                  <Text style={styles.donePillText}>{labels.visited}</Text>
-                </View>
-              ) : (
-                <View style={styles.pendingPill}>
-                  <Text style={styles.pendingPillText}>{labels.pending}</Text>
-                </View>
-              )}
-            </View>
-            <Ionicons name="chevron-back" size={20} color={theme.muted} />
-          </Pressable>
-        ))
+            );
+          })}
+        </>
       )}
     </ScrollView>
   );
@@ -375,7 +618,17 @@ const styles = StyleSheet.create({
     color: theme.text,
     fontSize: 15,
   },
-  filters: { flexDirection: "row-reverse", gap: 8, marginTop: 10 },
+  toolbarRow: {
+    flexDirection: "row-reverse",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    marginTop: 10,
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  toolbarMain: { flex: 1, minWidth: 0, gap: 8 },
+  filters: { flexDirection: "row-reverse", gap: 8, flexWrap: "wrap" },
+  sortRow: { flexDirection: "row-reverse", gap: 8, flexWrap: "wrap" },
   filterChip: {
     paddingVertical: 8,
     paddingHorizontal: 14,
@@ -387,16 +640,81 @@ const styles = StyleSheet.create({
   filterChipOn: { backgroundColor: theme.accentSoft, borderColor: theme.accent },
   filterText: { color: theme.muted, fontWeight: "700", fontSize: 13 },
   filterTextOn: { color: theme.accentDark },
+  expandToggle: { paddingVertical: 8, paddingHorizontal: 4 },
+  expandToggleText: { color: theme.accent, fontSize: 13, fontWeight: "700" },
+  allDoneBanner: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#f0fdf4",
+    borderRadius: theme.radius.md,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "rgba(22, 163, 74, 0.25)",
+  },
+  allDoneText: { color: "#16a34a", fontSize: 14, fontWeight: "700", flex: 1, textAlign: "right" },
+  areaBlock: { marginBottom: 10 },
+  areaHeader: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: theme.accentSoft,
+    borderRadius: theme.radius.lg,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: "rgba(37, 99, 235, 0.12)",
+    ...theme.shadow.card,
+  },
+  areaHeaderOpen: {
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    borderBottomWidth: 0,
+  },
+  areaHeaderDone: {
+    backgroundColor: "#f0fdf4",
+    borderColor: "rgba(22, 163, 74, 0.2)",
+  },
+  areaIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: theme.card,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  areaIconWrapDone: { backgroundColor: "#dcfce7" },
+  areaHeaderBody: { flex: 1, minWidth: 0 },
+  areaName: { color: theme.text, fontSize: 16, fontWeight: "800", textAlign: "right" },
+  areaSubtitle: { color: theme.muted, fontSize: 12, marginTop: 2, textAlign: "right" },
+  areaProgressRow: { marginTop: 8, gap: 6 },
+  areaProgressTrack: {
+    height: 4,
+    borderRadius: theme.radius.pill,
+    backgroundColor: "rgba(255,255,255,0.7)",
+    overflow: "hidden",
+  },
+  areaProgressFill: {
+    height: "100%",
+    backgroundColor: theme.accent,
+    borderRadius: theme.radius.pill,
+  },
+  areaMeta: { color: theme.muted, fontSize: 11, textAlign: "right", fontWeight: "600" },
   storeCard: {
     flexDirection: "row-reverse",
     alignItems: "center",
     backgroundColor: theme.card,
-    borderRadius: theme.radius.lg,
     padding: 14,
-    marginBottom: 10,
     borderWidth: 1,
     borderColor: theme.line,
+    borderTopWidth: 0,
     gap: 10,
+  },
+  storeCardLast: {
+    borderBottomLeftRadius: theme.radius.lg,
+    borderBottomRightRadius: theme.radius.lg,
+    marginBottom: 0,
     ...theme.shadow.card,
   },
   storeCardDone: { backgroundColor: "#f0fdf4", borderColor: "rgba(22, 163, 74, 0.35)" },
@@ -461,4 +779,5 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.pill,
   },
   pendingPillText: { color: theme.muted, fontSize: 11, fontWeight: "700" },
+  pressed: { opacity: 0.88 },
 });

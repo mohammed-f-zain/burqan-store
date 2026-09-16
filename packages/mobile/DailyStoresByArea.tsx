@@ -12,6 +12,7 @@ import {
 import { theme } from "./theme";
 import type { DailyStoreCard } from "./storeTypes";
 import { formatMarketDate } from "./formatMarketDateTime";
+import { compareStoresByMode, type StoreSortMode } from "./geoDistance";
 
 const { card, text, muted, line, accent, accentSoft, accentSoftCyan, radius, shadow } = theme;
 
@@ -37,6 +38,8 @@ export type DailyStoresLabels = {
   lastVisitNever: string;
   nearestFirst?: string;
   refreshLocation?: string;
+  sortByDistance?: string;
+  sortByLastVisit?: string;
 };
 
 type AreaGroup = { areaName: string; stores: DailyStoreCard[] };
@@ -70,25 +73,15 @@ function parseAreaName(raw: string, unknownLabel: string): { title: string; subt
   return { title: t };
 }
 
-function sortZoneStores(stores: DailyStoreCard[], nearestFirst: boolean): DailyStoreCard[] {
-  return [...stores].sort((x, y) => {
-    if (nearestFirst && x.distanceM != null && y.distanceM != null) {
-      return x.distanceM - y.distanceM;
-    }
-    if (x.visitedToday !== y.visitedToday) return x.visitedToday ? 1 : -1;
-    return x.name.localeCompare(y.name, "ar");
-  });
+function sortStoresInArea(stores: DailyStoreCard[], sortMode: StoreSortMode): DailyStoreCard[] {
+  return [...stores].sort((a, b) => compareStoresByMode(a, b, sortMode));
 }
 
-function groupStoresByZone(
+function groupStoresByArea(
   stores: DailyStoreCard[],
-  zoneName: string,
-  nearestFirst: boolean
+  repAreaNames: string[],
+  sortMode: StoreSortMode
 ): AreaGroup[] {
-  return [{ areaName: zoneName, stores: sortZoneStores(stores, nearestFirst) }];
-}
-
-function groupStoresByArea(stores: DailyStoreCard[], repAreaNames: string[]): AreaGroup[] {
   const byArea = new Map<string, DailyStoreCard[]>();
   for (const s of stores) {
     const key = s.areaName?.trim() || "";
@@ -110,10 +103,7 @@ function groupStoresByArea(stores: DailyStoreCard[], repAreaNames: string[]): Ar
 
   return keys.map((areaName) => ({
     areaName,
-    stores: [...byArea.get(areaName)!].sort((x, y) => {
-      if (x.visitedToday !== y.visitedToday) return x.visitedToday ? 1 : -1;
-      return x.name.localeCompare(y.name, "ar");
-    }),
+    stores: sortStoresInArea(byArea.get(areaName)!, sortMode),
   }));
 }
 
@@ -161,6 +151,8 @@ type Props = {
   locating?: boolean;
   onRefreshLocation?: () => void;
   onSelectStore: (store: DailyStoreCard) => void;
+  sortMode?: StoreSortMode;
+  onSortModeChange?: (m: StoreSortMode) => void;
 };
 
 export default function DailyStoresByArea({
@@ -169,13 +161,19 @@ export default function DailyStoresByArea({
   loading,
   labels,
   title,
-  zoneName,
+  zoneName: _zoneName,
   dayName,
   nearestFirst = false,
   locating = false,
   onRefreshLocation,
   onSelectStore,
+  sortMode: sortModeProp,
+  onSortModeChange,
 }: Props) {
+  const [internalSortMode, setInternalSortMode] = useState<StoreSortMode>("lastVisit");
+  const sortMode = sortModeProp ?? internalSortMode;
+  const setSortMode = onSortModeChange ?? setInternalSortMode;
+
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [filter, setFilter] = useState<FilterMode>("all");
   const [search, setSearch] = useState("");
@@ -189,23 +187,22 @@ export default function DailyStoresByArea({
     });
   }, [stores, search, filter]);
 
-  const groups = useMemo(() => {
-    if (zoneName?.trim()) {
-      return groupStoresByZone(filteredStores, zoneName.trim(), nearestFirst);
-    }
-    return sortGroupsPendingFirst(groupStoresByArea(filteredStores, repAreaNames));
-  }, [filteredStores, repAreaNames, zoneName, nearestFirst]);
+  const groups = useMemo(
+    () => sortGroupsPendingFirst(groupStoresByArea(filteredStores, repAreaNames, sortMode)),
+    [filteredStores, repAreaNames, sortMode]
+  );
 
   useEffect(() => {
     if (!stores.length) {
       setExpanded({});
       return;
     }
-    const baseGroups = zoneName?.trim()
-      ? groupStoresByZone(stores, zoneName.trim(), nearestFirst)
-      : sortGroupsPendingFirst(groupStoresByArea(stores, repAreaNames));
-    setExpanded(defaultExpanded(baseGroups));
-  }, [stores, repAreaNames, zoneName, nearestFirst]);
+    setExpanded(
+      defaultExpanded(
+        sortGroupsPendingFirst(groupStoresByArea(stores, repAreaNames, sortMode))
+      )
+    );
+  }, [stores, repAreaNames, sortMode]);
 
   const areaKey = (name: string) => name || "__unknown__";
 
@@ -229,6 +226,7 @@ export default function DailyStoresByArea({
           </View>
         ) : null}
       </View>
+      {dayName ? <Text style={styles.daySubtitle}>{dayName}</Text> : null}
 
       {!loading && stores.length > 0 ? (
         <View style={styles.progressBlock}>
@@ -299,24 +297,46 @@ export default function DailyStoresByArea({
           </View>
 
           <View style={styles.toolbar}>
-            <View style={styles.filterRow}>
-              {(
-                [
-                  ["all", labels.filterAll],
-                  ["pending", labels.filterPending],
-                  ["done", labels.filterDone],
-                ] as const
-              ).map(([mode, label]) => (
-                <Pressable
-                  key={mode}
-                  style={[styles.filterChip, filter === mode && styles.filterChipActive]}
-                  onPress={() => setFilter(mode)}
-                >
-                  <Text style={[styles.filterChipText, filter === mode && styles.filterChipTextActive]}>
-                    {label}
-                  </Text>
-                </Pressable>
-              ))}
+            <View style={styles.toolbarMain}>
+              <View style={styles.filterRow}>
+                {(
+                  [
+                    ["all", labels.filterAll],
+                    ["pending", labels.filterPending],
+                    ["done", labels.filterDone],
+                  ] as const
+                ).map(([mode, label]) => (
+                  <Pressable
+                    key={mode}
+                    style={[styles.filterChip, filter === mode && styles.filterChipActive]}
+                    onPress={() => setFilter(mode)}
+                  >
+                    <Text style={[styles.filterChipText, filter === mode && styles.filterChipTextActive]}>
+                      {label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              <View style={styles.sortRow}>
+                {(
+                  [
+                    ["distance", labels.sortByDistance ?? "المسافة"],
+                    ["lastVisit", labels.sortByLastVisit ?? "آخر زيارة"],
+                  ] as const
+                ).map(([mode, label]) => (
+                  <Pressable
+                    key={mode}
+                    style={[styles.filterChip, sortMode === mode && styles.filterChipActive]}
+                    onPress={() => setSortMode(mode)}
+                  >
+                    <Text
+                      style={[styles.filterChipText, sortMode === mode && styles.filterChipTextActive]}
+                    >
+                      {label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
             </View>
             {groups.length > 1 ? (
               <Pressable
@@ -362,10 +382,7 @@ export default function DailyStoresByArea({
             const visited = group.stores.filter((s) => s.visitedToday).length;
             const pending = group.stores.length - visited;
             const areaProgress = group.stores.length > 0 ? visited / group.stores.length : 0;
-            const isZoneGroup = Boolean(zoneName?.trim() && group.areaName === zoneName.trim());
-            const areaDisplay = isZoneGroup
-              ? { title: group.areaName, subtitle: dayName ?? undefined }
-              : parseAreaName(group.areaName, labels.unknownArea);
+            const areaDisplay = parseAreaName(group.areaName, labels.unknownArea);
             const allDone = group.stores.length > 0 && pending === 0;
 
             return (
@@ -381,7 +398,7 @@ export default function DailyStoresByArea({
                 >
                   <View style={[styles.areaIconWrap, allDone && styles.areaIconWrapDone]}>
                     <Ionicons
-                      name={allDone ? "checkmark-circle" : isZoneGroup ? "navigate" : "location"}
+                      name={allDone ? "checkmark-circle" : "location"}
                       size={20}
                       color={allDone ? "#16a34a" : accent}
                     />
@@ -418,7 +435,7 @@ export default function DailyStoresByArea({
                         key={s.id}
                         store={s}
                         isLast={idx === group.stores.length - 1}
-                        rank={nearestFirst && isZoneGroup ? idx + 1 : undefined}
+                        rank={idx + 1}
                         visitedLabel={labels.visited}
                         visitQrLabel={labels.visitQr}
                         lastVisitLabel={labels.lastVisit}
@@ -537,6 +554,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   title: { color: text, fontSize: 18, fontWeight: "800", textAlign: "right", flex: 1 },
+  daySubtitle: { color: muted, fontSize: 13, marginTop: 4, textAlign: "right" },
   headerBadge: {
     backgroundColor: accentSoft,
     paddingHorizontal: 12,
@@ -625,13 +643,15 @@ const styles = StyleSheet.create({
   },
   toolbar: {
     flexDirection: "row-reverse",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     marginTop: 12,
     gap: 8,
     flexWrap: "wrap",
   },
-  filterRow: { flexDirection: "row-reverse", gap: 8, flex: 1, flexWrap: "wrap" },
+  toolbarMain: { flex: 1, minWidth: 0, gap: 8 },
+  filterRow: { flexDirection: "row-reverse", gap: 8, flexWrap: "wrap" },
+  sortRow: { flexDirection: "row-reverse", gap: 8, flexWrap: "wrap" },
   filterChip: {
     paddingHorizontal: 14,
     paddingVertical: 8,

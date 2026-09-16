@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { NO_BUY_REASONS } from "./noBuyReasons";
+import { NO_BUY_OTHER_OPTION, NO_BUY_REASONS, formatNoBuyOtherReason } from "./noBuyReasons";
 import { theme } from "./theme";
 
 export type EndVisitReasonKind = "visit-note" | "no-buy-reason" | "not-register-reason";
@@ -31,6 +31,8 @@ export type EndVisitLabels = {
   pickReasonHint?: string;
   modeVisitNote?: string;
   modeNoBuy?: string;
+  otherReason?: string;
+  otherReasonPlaceholder?: string;
 };
 
 type Props = {
@@ -58,17 +60,30 @@ export default function EndVisitModal(props: Props) {
   } = props;
   const [note, setNote] = useState("");
   const [noBuyReason, setNoBuyReason] = useState<string | null>(null);
+  const [otherText, setOtherText] = useState("");
 
   useEffect(() => {
     if (visible) {
       setNote("");
       setNoBuyReason(null);
+      setOtherText("");
     }
   }, [visible]);
 
   const message = cartItemCount > 0 ? labels.messageCart(cartItemCount) : labels.message;
-  const canConfirm = noBuyReasonRequired ? noBuyReason != null : true;
+  const otherSelected = noBuyReason === NO_BUY_OTHER_OPTION;
+  const otherReady = otherText.trim().length >= 2;
+  const canConfirm = noBuyReasonRequired
+    ? otherSelected
+      ? otherReady
+      : noBuyReason != null
+    : true;
   const modeLabel = noBuyReasonRequired ? labels.modeNoBuy : labels.modeVisitNote;
+
+  function resolveNoBuyNote(): string {
+    if (otherSelected) return formatNoBuyOtherReason(otherText);
+    return noBuyReason!;
+  }
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={props.onStay}>
@@ -125,7 +140,32 @@ export default function EndVisitModal(props: Props) {
                         </Pressable>
                       );
                     })}
+                    <Pressable
+                      style={[styles.reasonRow, otherSelected && styles.reasonRowOn]}
+                      onPress={() => setNoBuyReason(NO_BUY_OTHER_OPTION)}
+                      disabled={busy}
+                    >
+                      <View style={[styles.radio, otherSelected && styles.radioOn]}>
+                        {otherSelected ? <View style={styles.radioDot} /> : null}
+                      </View>
+                      <Text style={[styles.reasonText, otherSelected && styles.reasonTextOn]}>
+                        {labels.otherReason ?? "سبب آخر"}
+                      </Text>
+                    </Pressable>
                   </View>
+                  {otherSelected ? (
+                    <TextInput
+                      style={[styles.noteInput, { marginTop: 12 }]}
+                      value={otherText}
+                      onChangeText={setOtherText}
+                      placeholder={labels.otherReasonPlaceholder ?? "اكتب السبب هنا…"}
+                      placeholderTextColor={theme.muted}
+                      multiline
+                      textAlignVertical="top"
+                      textAlign="right"
+                      editable={!busy}
+                    />
+                  ) : null}
                 </View>
               ) : (
                 <View style={styles.fieldBlock}>
@@ -150,7 +190,7 @@ export default function EndVisitModal(props: Props) {
                 style={[styles.confirmBtn, (busy || !canConfirm) && styles.btnDisabled]}
                 onPress={() =>
                   props.onConfirm({
-                    note: noBuyReasonRequired ? noBuyReason! : note.trim(),
+                    note: noBuyReasonRequired ? resolveNoBuyNote() : note.trim(),
                     kind: noBuyReasonRequired ? requiredReasonKind : "visit-note",
                   })
                 }
