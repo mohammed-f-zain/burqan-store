@@ -27,7 +27,7 @@ Admin dashboard page for daily rep sales and van inventory.
 
 Permissions: `fill_car.read` / `fill_car.write` (or `reps.read` / `reps.write`).
 
-External sales: choose a registered store via searchable dropdown (`GET /stores/options`, `POST .../external-sales` with `storeId`). Deducts van stock like a normal order; deleting the external order restores stock.
+External sales: choose a registered store via searchable dropdown (`GET /stores/options`, `POST .../external-sales` with `storeId`). Deducts van stock like a normal order; deleting the external order restores stock. Use **New store** (`POST /stores/quick`) to create a store by name + area without a physical QR card — a system QR is assigned automatically and the store appears in the dropdown afterward.
 
 ## Product card deltas
 

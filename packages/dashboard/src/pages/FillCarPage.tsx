@@ -29,6 +29,7 @@ type InvRow = {
   image_url?: string | null;
 };
 type StoreOption = { id: number; name: string; phone: string; areaName: string };
+type AreaOption = { id: number; name: string; governorate: string | null };
 
 export default function FillCarPage() {
   const [searchParams] = useSearchParams();
@@ -57,7 +58,13 @@ export default function FillCarPage() {
   const [extNote, setExtNote] = useState("");
   const [extStoreId, setExtStoreId] = useState("");
   const [extStores, setExtStores] = useState<StoreOption[]>([]);
+  const [extAreas, setExtAreas] = useState<AreaOption[]>([]);
   const [extStoresLoading, setExtStoresLoading] = useState(false);
+  const [extCreatingStore, setExtCreatingStore] = useState(false);
+  const [extNewStoreName, setExtNewStoreName] = useState("");
+  const [extNewStorePhone, setExtNewStorePhone] = useState("");
+  const [extNewStoreAreaId, setExtNewStoreAreaId] = useState("");
+  const [extNewStoreSaving, setExtNewStoreSaving] = useState(false);
   const [extQty, setExtQty] = useState<Record<number, string>>({});
 
   const todayAmman = toMarketDateString(new Date());
@@ -248,13 +255,21 @@ export default function FillCarPage() {
     setExtPay("cash");
     setExtNote("");
     setExtStoreId("");
+    setExtCreatingStore(false);
+    setExtNewStoreName("");
+    setExtNewStorePhone("");
+    setExtNewStoreAreaId("");
     setExtOpen(true);
     setExtStoresLoading(true);
     void api
-      .get<{ stores: StoreOption[] }>("/stores/options")
-      .then((r) => setExtStores(r.data.stores ?? []))
+      .get<{ stores: StoreOption[]; areas: AreaOption[] }>("/stores/options")
+      .then((r) => {
+        setExtStores(r.data.stores ?? []);
+        setExtAreas(r.data.areas ?? []);
+      })
       .catch((e) => {
         setExtStores([]);
+        setExtAreas([]);
         toastError(pickAxiosErrorMessage(e, t.fillCar.externalSalesStoresLoadFailed));
       })
       .finally(() => setExtStoresLoading(false));
@@ -269,6 +284,53 @@ export default function FillCarPage() {
       })),
     [extStores]
   );
+
+  const extAreaOptions = useMemo(
+    () =>
+      extAreas.map((a) => ({
+        value: String(a.id),
+        label: a.name,
+        hint: a.governorate ?? undefined,
+      })),
+    [extAreas]
+  );
+
+  async function createQuickStore() {
+    if (!canExternalSales) return;
+    const name = extNewStoreName.trim();
+    if (name.length < 2) {
+      toastError(t.fillCar.externalSalesNewStoreNameRequired);
+      return;
+    }
+    const areaId = parseInt(extNewStoreAreaId, 10);
+    if (!Number.isFinite(areaId) || areaId <= 0) {
+      toastError(t.fillCar.externalSalesNewStoreAreaRequired);
+      return;
+    }
+    setExtNewStoreSaving(true);
+    try {
+      const { data } = await api.post<{ store: StoreOption }>("/stores/quick", {
+        name,
+        phone: extNewStorePhone.trim() || undefined,
+        areaId,
+      });
+      const created = data.store;
+      setExtStores((prev) => {
+        if (prev.some((s) => s.id === created.id)) return prev;
+        return [...prev, created].sort((a, b) => a.name.localeCompare(b.name, "ar"));
+      });
+      setExtStoreId(String(created.id));
+      setExtCreatingStore(false);
+      setExtNewStoreName("");
+      setExtNewStorePhone("");
+      setExtNewStoreAreaId("");
+      toastSuccess(t.fillCar.externalSalesNewStoreCreated);
+    } catch (e) {
+      toastError(pickAxiosErrorMessage(e, t.fillCar.externalSalesNewStoreFailed));
+    } finally {
+      setExtNewStoreSaving(false);
+    }
+  }
 
   async function submitExternalSales() {
     if (!canExternalSales || !repId) return;
@@ -642,22 +704,95 @@ export default function FillCarPage() {
                 void submitExternalSales();
               }}
             >
-              <label>
-                {t.fillCar.externalSalesStore}
+              <div>
+                <div style={{ marginBottom: 6 }}>{t.fillCar.externalSalesStore}</div>
                 {extStoresLoading ? (
                   <p className="muted small">{t.common.loading}</p>
+                ) : !extCreatingStore ? (
+                  <div className="row" style={{ gap: 8, alignItems: "stretch", flexWrap: "wrap" }}>
+                    <div style={{ flex: "1 1 220px", minWidth: 0 }}>
+                      <SearchableSelect
+                        value={extStoreId}
+                        onChange={setExtStoreId}
+                        options={extStoreOptions}
+                        allLabel={t.fillCar.externalSalesStorePlaceholder}
+                        searchPlaceholder={t.fillCar.externalSalesStoreSearch}
+                        ariaLabel={t.fillCar.externalSalesStore}
+                        allowEmpty={false}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      className="secondary"
+                      disabled={extSaving || extNewStoreSaving}
+                      onClick={() => setExtCreatingStore(true)}
+                    >
+                      {t.fillCar.externalSalesNewStore}
+                    </button>
+                  </div>
                 ) : (
-                  <SearchableSelect
-                    value={extStoreId}
-                    onChange={setExtStoreId}
-                    options={extStoreOptions}
-                    allLabel={t.fillCar.externalSalesStorePlaceholder}
-                    searchPlaceholder={t.fillCar.externalSalesStoreSearch}
-                    ariaLabel={t.fillCar.externalSalesStore}
-                    allowEmpty={false}
-                  />
+                  <div className="fill-car-ext-new-store" style={{ display: "grid", gap: 10 }}>
+                    <p className="muted small">{t.fillCar.externalSalesNewStoreHint}</p>
+                    <label>
+                      {t.fillCar.externalSalesNewStoreName}
+                      <input
+                        value={extNewStoreName}
+                        onChange={(e) => setExtNewStoreName(e.target.value)}
+                        maxLength={255}
+                        disabled={extNewStoreSaving}
+                        placeholder={t.fillCar.externalSalesNewStoreNameHint}
+                      />
+                    </label>
+                    <label>
+                      {t.fillCar.externalSalesNewStorePhone}
+                      <input
+                        value={extNewStorePhone}
+                        onChange={(e) => setExtNewStorePhone(e.target.value)}
+                        maxLength={40}
+                        disabled={extNewStoreSaving}
+                        placeholder={t.fillCar.externalSalesNewStorePhoneHint}
+                      />
+                    </label>
+                    <div>
+                      <div style={{ marginBottom: 6 }}>{t.fillCar.externalSalesNewStoreArea}</div>
+                      <SearchableSelect
+                        value={extNewStoreAreaId}
+                        onChange={setExtNewStoreAreaId}
+                        options={extAreaOptions}
+                        allLabel={t.fillCar.externalSalesNewStoreAreaPlaceholder}
+                        searchPlaceholder={t.fillCar.externalSalesNewStoreAreaSearch}
+                        ariaLabel={t.fillCar.externalSalesNewStoreArea}
+                        allowEmpty={false}
+                      />
+                    </div>
+                    <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        className="ghost"
+                        disabled={extNewStoreSaving}
+                        onClick={() => {
+                          setExtCreatingStore(false);
+                          setExtNewStoreName("");
+                          setExtNewStorePhone("");
+                          setExtNewStoreAreaId("");
+                        }}
+                      >
+                        {t.fillCar.externalSalesNewStoreCancel}
+                      </button>
+                      <button
+                        type="button"
+                        className="primary"
+                        disabled={extNewStoreSaving}
+                        onClick={() => void createQuickStore()}
+                      >
+                        {extNewStoreSaving
+                          ? t.fillCar.externalSalesNewStoreSaving
+                          : t.fillCar.externalSalesNewStoreSave}
+                      </button>
+                    </div>
+                  </div>
                 )}
-              </label>
+              </div>
               <label>
                 {t.fillCar.externalSalesPay}
                 <select value={extPay} onChange={(e) => setExtPay(e.target.value as "cash" | "deferred")}>

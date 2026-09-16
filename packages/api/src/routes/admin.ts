@@ -2576,25 +2576,116 @@ router.get(
   requireAnyAdminPermission("stores.read", "fill_car.write", "reps.write"),
   async (_req, res, next) => {
     try {
-      const { rows } = await query<{
-        id: number;
-        name: string;
-        phone: string;
-        area_name: string;
-      }>(`
-        SELECT s.id, s.name, s.phone, a.name AS area_name
-        FROM stores s
-        JOIN areas a ON a.id = s.area_id
-        ORDER BY s.name ASC
-      `);
+      const [{ rows: storeRows }, { rows: areaRows }] = await Promise.all([
+        query<{
+          id: number;
+          name: string;
+          phone: string;
+          area_name: string;
+        }>(`
+          SELECT s.id, s.name, s.phone, a.name AS area_name
+          FROM stores s
+          JOIN areas a ON a.id = s.area_id
+          ORDER BY s.name ASC
+        `),
+        query<{
+          id: number;
+          name: string;
+          governorate: string | null;
+        }>(`
+          SELECT id, name, governorate
+          FROM areas
+          ORDER BY governorate NULLS LAST, name ASC
+        `),
+      ]);
       res.json({
-        stores: rows.map((r) => ({
+        stores: storeRows.map((r) => ({
           id: r.id,
           name: r.name,
           phone: r.phone,
           areaName: r.area_name,
         })),
+        areas: areaRows.map((r) => ({
+          id: r.id,
+          name: r.name,
+          governorate: r.governorate,
+        })),
       });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+const quickStoreSchema = z.object({
+  name: z.string().trim().min(2).max(255),
+  phone: z.string().trim().max(40).optional(),
+  ownerName: z.string().trim().max(255).optional(),
+  areaId: z.number().int().positive(),
+});
+
+/** Create a registered store without scanning a physical QR card (system QR is auto-assigned). */
+router.post(
+  "/stores/quick",
+  adminAuthMiddleware,
+  requireAnyAdminPermission("stores.write", "fill_car.write", "reps.write"),
+  async (req, res, next) => {
+    try {
+      const body = quickStoreSchema.parse(req.body);
+      const name = body.name.trim();
+      const phone = (body.phone?.trim() || "—").slice(0, 40);
+      const ownerName = (body.ownerName?.trim() || name).slice(0, 255);
+
+      const { rows: areaRows } = await query<{
+        id: number;
+        name: string;
+        center_lat: number | null;
+        center_lng: number | null;
+      }>(`SELECT id, name, center_lat, center_lng FROM areas WHERE id = $1`, [body.areaId]);
+      const area = areaRows[0];
+      if (!area) throw new HttpError(400, "المنطقة غير موجودة");
+
+      const lat = area.center_lat ?? 31.9539;
+      const lng = area.center_lng ?? 35.9106;
+      const ownerToken = randomBytes(24).toString("hex");
+      const qrToken = randomBytes(24).toString("hex");
+
+      const c = await pool.connect();
+      try {
+        await c.query("BEGIN");
+        const qr = await c.query<{ id: string }>(
+          `INSERT INTO qr_codes (public_token) VALUES ($1) RETURNING id`,
+          [qrToken]
+        );
+        const qrId = qr.rows[0]!.id;
+        const ins = await c.query<{
+          id: number;
+          name: string;
+          phone: string;
+        }>(
+          `INSERT INTO stores (
+             qr_code_id, name, phone, owner_name, location_lat, location_lng,
+             area_id, deferred_payment_enabled, owner_portal_token
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,false,$8)
+           RETURNING id, name, phone`,
+          [qrId, name, phone, ownerName, lat, lng, area.id, ownerToken]
+        );
+        await c.query("COMMIT");
+        const store = ins.rows[0]!;
+        res.status(201).json({
+          store: {
+            id: store.id,
+            name: store.name,
+            phone: store.phone,
+            areaName: area.name,
+          },
+        });
+      } catch (e) {
+        await c.query("ROLLBACK");
+        throw e;
+      } finally {
+        c.release();
+      }
     } catch (e) {
       next(e);
     }
