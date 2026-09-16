@@ -35,12 +35,6 @@ jobs:
             API_PUBLIC="$(grep -E '^PUBLIC_API_BASE_URL=' packages/api/.env | head -1 | cut -d= -f2- | tr -d '\r' || true)"
             API_PUBLIC="${API_PUBLIC:-https://api.burqan.store}"
             API_PUBLIC="${API_PUBLIC%/}"
-
-            python3 <<'PY'
-            import json, os, subprocess, urllib.request, urllib.error, ssl
-
-            db = os.environ.get("DB_URL") or open("/tmp/no").read()
-            PY
             export DB_URL SECRET BASE API_PUBLIC
             python3 <<'PY'
             import json, os, subprocess, urllib.request, urllib.error
@@ -60,7 +54,7 @@ jobs:
                 text=True,
             )
             rows = [ln for ln in out.splitlines() if ln.strip()]
-            ok = fail = skip_img = 0
+            ok = fail = without_image = 0
             first_fail = None
             for ln in rows:
                 parts = ln.split("\t")
@@ -71,7 +65,7 @@ jobs:
                 if img:
                     image_url = img if img.startswith("http") else f"{api_public}{img if img.startswith('/') else '/' + img}"
                 else:
-                    skip_img += 1
+                    without_image += 1
                 uom = unit.strip() or "unit"
                 active_bool = active in ("t", "true", "True", "1")
                 product = {
@@ -115,19 +109,21 @@ jobs:
                     if first_fail is None:
                         first_fail = f"id={pid} {e}"
 
-            print(f"total={len(rows)} ok={ok} fail={fail} without_image={skip_img}")
+            print(f"total={len(rows)} ok={ok} fail={fail} without_image={without_image}")
             if first_fail:
                 print(f"first_fail={first_fail}")
-            if fail:
-                raise SystemExit(1)
-            # Spot-check image fetchability from this host (same network Odoo may use)
-            sample = next((r for r in rows if r.split("\t")[5].strip()), None)
+
+            sample = next((r for r in rows if len(r.split('\t')) > 5 and r.split('\t')[5].strip()), None)
             if sample:
                 img = sample.split("\t")[5]
                 test = img if img.startswith("http") else f"{api_public}{img}"
                 try:
                     with urllib.request.urlopen(test, timeout=20) as resp:
-                        print(f"image_fetch_ok url={test} status={resp.getcode()} bytes={len(resp.read(64))}")
+                        chunk = resp.read(64)
+                        print(f"image_fetch_ok status={resp.getcode()} sample_bytes={len(chunk)}")
                 except Exception as e:
-                    print(f"image_fetch_fail url={test} err={e}")
+                    print(f"image_fetch_fail err={e}")
+
+            if fail:
+                raise SystemExit(1)
             PY
