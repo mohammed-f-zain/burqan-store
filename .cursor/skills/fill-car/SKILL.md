@@ -29,6 +29,10 @@ Permissions: `fill_car.read` / `fill_car.write` (or `reps.read` / `reps.write`).
 
 External sales: choose a registered store via searchable dropdown (`GET /stores/options`, `POST .../external-sales` with `storeId`). Deducts van stock like a normal order; deleting the external order restores stock. Use **New store** (`POST /stores/quick`) to create a store by name + area without a physical QR card — a system QR is assigned automatically and the store appears in the dropdown afterward.
 
+## Exchange cash on fill-car
+
+`GET /representatives/sales-daily` also returns `exchangeCashCollected[]` / `exchangeCashCollectedTotal` when an exchange’s give value exceeds return value (cash taken from the store owner). Show those rows under “Products sold that day” with the orange `.exchange-cash-pill` styling. Full exchange history lives at `/app/exchanges`.
+
 ## Product card deltas
 
 On each van inventory card show:
