@@ -39,8 +39,7 @@ jobs:
               psql "$DB_URL" -P pager=off -c \
                 "SELECT id, name, image_url, is_active, price::text FROM products WHERE name ILIKE '%${Q}%' ORDER BY id LIMIT 20;"
             fi
-            echo "=== PUBLIC_API_BASE_URL / sample curl ==="
-            grep -E '^(PUBLIC_API_BASE_URL|ODOO_)' packages/api/.env 2>/dev/null || true
+            echo "=== sample public image URL (no secrets) ==="
             IMG="$(psql "$DB_URL" -t -A -c "SELECT image_url FROM products WHERE id = 10 LIMIT 1;" | tr -d '[:space:]')"
             echo "product 10 image_url=${IMG}"
             if [[ -n "$IMG" && "$IMG" != "" ]]; then

@@ -1,0 +1,76 @@
+name: Resync one product to Odoo
+
+on:
+  workflow_dispatch:
+    inputs:
+      productId:
+        description: Burqan product id
+        required: true
+        default: "10"
+
+jobs:
+  resync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: POST product.updated with imageUrl
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          PRODUCT_ID: ${{ inputs.productId }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          envs: PRODUCT_ID
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.DEPLOY_PATH }}"
+            DB_URL=""
+            if [[ -f /root/.burqan-db-url ]]; then
+              DB_URL="$(cat /root/.burqan-db-url | sed 's/^DATABASE_URL=//')"
+            elif [[ -f packages/api/.env ]]; then
+              DB_URL="$(grep -E '^DATABASE_URL=' packages/api/.env | head -1 | cut -d= -f2-)"
+            fi
+            SECRET="$(grep -E '^ODOO_WEBHOOK_SECRET=' packages/api/.env | head -1 | cut -d= -f2-)"
+            BASE="$(grep -E '^ODOO_BASE_URL=' packages/api/.env | head -1 | cut -d= -f2- || true)"
+            BASE="${BASE:-https://erp.burqan.tech}"
+            BASE="${BASE%/}"
+            PID="${PRODUCT_ID}"
+            ROW="$(psql "$DB_URL" -t -A -F $'\t' -c \
+              "SELECT id, name, price::text, COALESCE(is_active,true), COALESCE(unit_label,''), COALESCE(image_url,'') FROM products WHERE id = ${PID}::int")"
+            if [[ -z "$ROW" ]]; then
+              echo "Product $PID not found"
+              exit 1
+            fi
+            IFS=$'\t' read -r ID NAME PRICE ACTIVE UNIT IMG <<<"$ROW"
+            IMAGE_URL=""
+            if [[ -n "$IMG" ]]; then
+              if [[ "$IMG" =~ ^https?:// ]]; then
+                IMAGE_URL="$IMG"
+              else
+                IMAGE_URL="https://api.burqan.store${IMG}"
+              fi
+            fi
+            UOM="unit"
+            if [[ -n "$UNIT" ]]; then UOM="$UNIT"; fi
+            ACTIVE_JSON="true"
+            [[ "$ACTIVE" == "t" || "$ACTIVE" == "true" ]] || ACTIVE_JSON="false"
+            # Escape name for JSON
+            NAME_JSON="$(printf '%s' "$NAME" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')"
+            IMAGE_JSON="null"
+            if [[ -n "$IMAGE_URL" ]]; then
+              IMAGE_JSON="$(printf '%s' "$IMAGE_URL" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')"
+            fi
+            BODY=$(cat <<EOF
+            {"event":"product.updated","product":{"id":${ID},"name":${NAME_JSON},"sku":null,"barcode":null,"unitPrice":${PRICE},"active":${ACTIVE_JSON},"uom":$(printf '%s' "$UOM" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))'),"imageUrl":${IMAGE_JSON}}}
+            EOF
+            )
+            echo "Posting product.updated for id=$ID imageUrl=${IMAGE_URL:-null}"
+            CODE="$(curl -sS -o /tmp/odoo-prod-resp.txt -w '%{http_code}' \
+              -X POST "${BASE}/burqan/webhook/product" \
+              -H "Content-Type: application/json" \
+              -H "Accept: application/json" \
+              -H "Authorization: Bearer ${SECRET}" \
+              -d "$BODY")"
+            echo "HTTP $CODE"
+            head -c 500 /tmp/odoo-prod-resp.txt; echo
+            [[ "$CODE" == "200" || "$CODE" == "201" ]]
