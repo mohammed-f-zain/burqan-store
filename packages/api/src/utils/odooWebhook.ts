@@ -77,6 +77,8 @@ export type OdooProductPayload = {
   unitLabel?: string | null;
   /** Absolute https URL for product image, or null. */
   imageUrl: string | null;
+  /** Snake_case alias for Odoo receivers that expect image_url. */
+  image_url: string | null;
 };
 
 export type OdooStorePayload = {
@@ -373,6 +375,7 @@ export function productPayloadFromRow(row: {
   image_url?: string | null;
 }): OdooProductPayload {
   const unitPrice = typeof row.price === "number" ? row.price : parseFloat(String(row.price)) || 0;
+  const imageUrl = productImageUrl(row.image_url) ?? null;
   return {
     id: row.id,
     name: row.name,
@@ -383,7 +386,8 @@ export function productPayloadFromRow(row: {
     uom: (row.unit_label && String(row.unit_label).trim()) || "unit",
     designation: row.designation ?? null,
     unitLabel: row.unit_label ?? null,
-    imageUrl: productImageUrl(row.image_url) ?? null,
+    imageUrl,
+    image_url: imageUrl,
   };
 }
 

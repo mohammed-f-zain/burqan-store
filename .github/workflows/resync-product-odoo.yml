@@ -1,26 +1,19 @@
-name: Resync one product to Odoo
+name: Resync all products to Odoo
 
 on:
   workflow_dispatch:
-    inputs:
-      productId:
-        description: Burqan product id
-        required: true
-        default: "10"
 
 jobs:
   resync:
     runs-on: ubuntu-latest
     steps:
-      - name: POST product.updated with imageUrl
+      - name: Push all products (with imageUrl) to Odoo once
         uses: appleboy/ssh-action@v1.2.0
-        env:
-          PRODUCT_ID: ${{ inputs.productId }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          envs: PRODUCT_ID
+          command_timeout: 10m
           script: |
             set -euo pipefail
             cd "${{ secrets.DEPLOY_PATH }}"
@@ -30,47 +23,111 @@ jobs:
             elif [[ -f packages/api/.env ]]; then
               DB_URL="$(grep -E '^DATABASE_URL=' packages/api/.env | head -1 | cut -d= -f2-)"
             fi
-            SECRET="$(grep -E '^ODOO_WEBHOOK_SECRET=' packages/api/.env | head -1 | cut -d= -f2-)"
-            BASE="$(grep -E '^ODOO_BASE_URL=' packages/api/.env | head -1 | cut -d= -f2- || true)"
-            BASE="${BASE:-https://erp.burqan.tech}"
-            BASE="${BASE%/}"
-            PID="${PRODUCT_ID}"
-            ROW="$(psql "$DB_URL" -t -A -F $'\t' -c \
-              "SELECT id, name, price::text, COALESCE(is_active,true), COALESCE(unit_label,''), COALESCE(image_url,'') FROM products WHERE id = ${PID}::int")"
-            if [[ -z "$ROW" ]]; then
-              echo "Product $PID not found"
+            SECRET="$(grep -E '^ODOO_WEBHOOK_SECRET=' packages/api/.env | head -1 | cut -d= -f2- | tr -d '\r' || true)"
+            if [[ -z "${SECRET}" ]]; then
+              echo "ODOO_WEBHOOK_SECRET is empty in API .env — set it to match Odoo burqan.webhook_secret"
               exit 1
             fi
-            IFS=$'\t' read -r ID NAME PRICE ACTIVE UNIT IMG <<<"$ROW"
-            IMAGE_URL=""
-            if [[ -n "$IMG" ]]; then
-              if [[ "$IMG" =~ ^https?:// ]]; then
-                IMAGE_URL="$IMG"
-              else
-                IMAGE_URL="https://api.burqan.store${IMG}"
-              fi
-            fi
-            UOM="unit"
-            if [[ -n "$UNIT" ]]; then UOM="$UNIT"; fi
-            ACTIVE_JSON="true"
-            [[ "$ACTIVE" == "t" || "$ACTIVE" == "true" ]] || ACTIVE_JSON="false"
-            # Escape name for JSON
-            NAME_JSON="$(printf '%s' "$NAME" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')"
-            IMAGE_JSON="null"
-            if [[ -n "$IMAGE_URL" ]]; then
-              IMAGE_JSON="$(printf '%s' "$IMAGE_URL" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')"
-            fi
-            BODY=$(cat <<EOF
-            {"event":"product.updated","product":{"id":${ID},"name":${NAME_JSON},"sku":null,"barcode":null,"unitPrice":${PRICE},"active":${ACTIVE_JSON},"uom":$(printf '%s' "$UOM" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))'),"imageUrl":${IMAGE_JSON}}}
-            EOF
+            echo "ODOO_WEBHOOK_SECRET is set (value not printed)"
+            BASE="$(grep -E '^ODOO_BASE_URL=' packages/api/.env | head -1 | cut -d= -f2- | tr -d '\r' || true)"
+            BASE="${BASE:-https://erp.burqan.tech}"
+            BASE="${BASE%/}"
+            API_PUBLIC="$(grep -E '^PUBLIC_API_BASE_URL=' packages/api/.env | head -1 | cut -d= -f2- | tr -d '\r' || true)"
+            API_PUBLIC="${API_PUBLIC:-https://api.burqan.store}"
+            API_PUBLIC="${API_PUBLIC%/}"
+
+            python3 <<'PY'
+            import json, os, subprocess, urllib.request, urllib.error, ssl
+
+            db = os.environ.get("DB_URL") or open("/tmp/no").read()
+            PY
+            export DB_URL SECRET BASE API_PUBLIC
+            python3 <<'PY'
+            import json, os, subprocess, urllib.request, urllib.error
+
+            db_url = os.environ["DB_URL"]
+            secret = os.environ["SECRET"]
+            base = os.environ["BASE"].rstrip("/")
+            api_public = os.environ["API_PUBLIC"].rstrip("/")
+            url = f"{base}/burqan/webhook/product"
+
+            out = subprocess.check_output(
+                [
+                    "psql", db_url, "-t", "-A", "-F", "\t",
+                    "-c",
+                    "SELECT id, name, price::text, COALESCE(is_active,true), COALESCE(unit_label,''), COALESCE(image_url,'') FROM products ORDER BY id",
+                ],
+                text=True,
             )
-            echo "Posting product.updated for id=$ID imageUrl=${IMAGE_URL:-null}"
-            CODE="$(curl -sS -o /tmp/odoo-prod-resp.txt -w '%{http_code}' \
-              -X POST "${BASE}/burqan/webhook/product" \
-              -H "Content-Type: application/json" \
-              -H "Accept: application/json" \
-              -H "Authorization: Bearer ${SECRET}" \
-              -d "$BODY")"
-            echo "HTTP $CODE"
-            head -c 500 /tmp/odoo-prod-resp.txt; echo
-            [[ "$CODE" == "200" || "$CODE" == "201" ]]
+            rows = [ln for ln in out.splitlines() if ln.strip()]
+            ok = fail = skip_img = 0
+            first_fail = None
+            for ln in rows:
+                parts = ln.split("\t")
+                if len(parts) < 6:
+                    continue
+                pid, name, price, active, unit, img = parts[0], parts[1], parts[2], parts[3], parts[4], parts[5]
+                image_url = None
+                if img:
+                    image_url = img if img.startswith("http") else f"{api_public}{img if img.startswith('/') else '/' + img}"
+                else:
+                    skip_img += 1
+                uom = unit.strip() or "unit"
+                active_bool = active in ("t", "true", "True", "1")
+                product = {
+                    "id": int(pid),
+                    "name": name,
+                    "sku": None,
+                    "barcode": None,
+                    "unitPrice": float(price),
+                    "active": active_bool,
+                    "uom": uom,
+                    "imageUrl": image_url,
+                    "image_url": image_url,
+                }
+                body = json.dumps({"event": "product.updated", "product": product}).encode()
+                req = urllib.request.Request(
+                    url,
+                    data=body,
+                    method="POST",
+                    headers={
+                        "Content-Type": "application/json",
+                        "Accept": "application/json",
+                        "Authorization": f"Bearer {secret}",
+                    },
+                )
+                try:
+                    with urllib.request.urlopen(req, timeout=30) as resp:
+                        code = resp.getcode()
+                        resp.read(200)
+                    if code in (200, 201):
+                        ok += 1
+                    else:
+                        fail += 1
+                        if first_fail is None:
+                            first_fail = f"id={pid} HTTP {code}"
+                except urllib.error.HTTPError as e:
+                    fail += 1
+                    if first_fail is None:
+                        first_fail = f"id={pid} HTTP {e.code} {e.read(200)!r}"
+                except Exception as e:
+                    fail += 1
+                    if first_fail is None:
+                        first_fail = f"id={pid} {e}"
+
+            print(f"total={len(rows)} ok={ok} fail={fail} without_image={skip_img}")
+            if first_fail:
+                print(f"first_fail={first_fail}")
+            if fail:
+                raise SystemExit(1)
+            # Spot-check image fetchability from this host (same network Odoo may use)
+            sample = next((r for r in rows if r.split("\t")[5].strip()), None)
+            if sample:
+                img = sample.split("\t")[5]
+                test = img if img.startswith("http") else f"{api_public}{img}"
+                try:
+                    with urllib.request.urlopen(test, timeout=20) as resp:
+                        print(f"image_fetch_ok url={test} status={resp.getcode()} bytes={len(resp.read(64))}")
+                except Exception as e:
+                    print(f"image_fetch_fail url={test} err={e}")
+            PY
