@@ -424,6 +424,8 @@ export const en: Messages = {
     areaMapGovCoverageEmpty: "No governorate coverage areas in the current filter.",
     areaMapSearchLabel: "Search areas by name",
     areaMapSearchPlaceholder: "e.g. عجلون — تغطية",
+    areaMapCounts: (stores: number, prospects: number) =>
+      `${stores} stores · ${prospects} prospects`,
     areaMapSelectVisible: "Select visible",
     areaMapClearVisible: "Clear visible",
   },
@@ -577,6 +579,8 @@ export const en: Messages = {
     colActions: "Actions",
     listCount: (n: number) => `${n} zones`,
     areaCount: (n: number) => `${n} areas`,
+    storesCol: "Stores",
+    prospectsCol: "Prospects",
     repsCol: "Assigned reps",
     allReps: "All reps",
     repsHint: "Leave empty to show this route to all reps when scheduling.",

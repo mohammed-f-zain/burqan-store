@@ -2049,6 +2049,20 @@ html[data-theme="dark"] .exchange-cash-note {
   max-width: 420px;
 }
 
+.rep-area-map-picker__search-label {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  text-align: right;
+  flex: 1;
+  min-width: 0;
+}
+
+.rep-area-map-picker__search-counts {
+  font-weight: 600;
+}
+
 .rep-area-map-picker__map .area-coverage-map {
   height: min(48vh, 400px);
 }

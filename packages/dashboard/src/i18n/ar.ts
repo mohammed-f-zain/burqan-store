@@ -422,6 +422,8 @@ export const ar = {
     areaMapGovCoverageEmpty: "لا توجد مناطق تغطية محافظة في الفلتر الحالي.",
     areaMapSearchLabel: "بحث عن منطقة بالاسم",
     areaMapSearchPlaceholder: "مثال: عجلون — تغطية",
+    areaMapCounts: (stores: number, prospects: number) =>
+      `${stores} متجر · ${prospects} محتمل`,
     areaMapSelectVisible: "تحديد المعروض",
     areaMapClearVisible: "إلغاء المعروض",
   },
@@ -574,6 +576,8 @@ export const ar = {
     colActions: "إجراءات",
     listCount: (n: number) => `${n} منطقة`,
     areaCount: (n: number) => `${n} مناطق`,
+    storesCol: "متاجر",
+    prospectsCol: "المحتمل",
     repsCol: "المندوبون",
     allReps: "كل المندوبين",
     repsHint: "اتركه فارغاً ليظهر المسار لكل المندوبين عند الجدولة.",

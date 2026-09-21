@@ -1045,10 +1045,39 @@ router.get(
   requireAdminPermission("areas.read"),
   async (_req, res, next) => {
     try {
-      const { rows } = await query(
-        `SELECT id, name, governorate, center_lat, center_lng, radius_km, created_at FROM areas ORDER BY governorate NULLS LAST, name ASC`
+      const { rows } = await query<{
+        id: number;
+        name: string;
+        governorate: string | null;
+        center_lat: number | null;
+        center_lng: number | null;
+        radius_km: number;
+        created_at: string;
+        store_count: number;
+        prospect_count: number;
+      }>(
+        `SELECT a.id, a.name, a.governorate, a.center_lat, a.center_lng, a.radius_km, a.created_at,
+                COALESCE(sc.cnt, 0)::int AS store_count,
+                COALESCE(pc.cnt, 0)::int AS prospect_count
+         FROM areas a
+         LEFT JOIN (
+           SELECT area_id, COUNT(*)::int AS cnt FROM stores GROUP BY area_id
+         ) sc ON sc.area_id = a.id
+         LEFT JOIN (
+           SELECT area_id, COUNT(*)::int AS cnt
+           FROM prospect_stores
+           WHERE status = 'open'
+           GROUP BY area_id
+         ) pc ON pc.area_id = a.id
+         ORDER BY a.governorate NULLS LAST, a.name ASC`
       );
-      res.json({ areas: rows });
+      res.json({
+        areas: rows.map((a) => ({
+          ...a,
+          storeCount: a.store_count,
+          prospectCount: a.prospect_count,
+        })),
+      });
     } catch (e) {
       next(e);
     }
@@ -4050,6 +4079,27 @@ router.get(
          ORDER BY r.full_name ASC`
       );
 
+      const { rows: zoneCounts } = await query<{
+        route_zone_id: number;
+        store_count: number;
+        prospect_count: number;
+      }>(
+        `SELECT rza.route_zone_id,
+                COALESCE(SUM(sc.cnt), 0)::int AS store_count,
+                COALESCE(SUM(pc.cnt), 0)::int AS prospect_count
+         FROM route_zone_areas rza
+         LEFT JOIN (
+           SELECT area_id, COUNT(*)::int AS cnt FROM stores GROUP BY area_id
+         ) sc ON sc.area_id = rza.area_id
+         LEFT JOIN (
+           SELECT area_id, COUNT(*)::int AS cnt
+           FROM prospect_stores
+           WHERE status = 'open'
+           GROUP BY area_id
+         ) pc ON pc.area_id = rza.area_id
+         GROUP BY rza.route_zone_id`
+      );
+
       const areasByZone = new Map<number, { id: number; name: string }[]>();
       for (const l of links) {
         if (!areasByZone.has(l.route_zone_id)) areasByZone.set(l.route_zone_id, []);
@@ -4062,6 +4112,13 @@ router.get(
         repsByZone.get(l.route_zone_id)!.push({ id: l.representative_id, fullName: l.full_name });
       }
 
+      const countsByZone = new Map(
+        zoneCounts.map((c) => [
+          c.route_zone_id,
+          { storeCount: c.store_count, prospectCount: c.prospect_count },
+        ])
+      );
+
       res.json({
         routeZones: zones.map((z) => ({
           id: z.id,
@@ -4070,6 +4127,8 @@ router.get(
           isActive: z.is_active,
           areas: areasByZone.get(z.id) ?? [],
           representatives: repsByZone.get(z.id) ?? [],
+          storeCount: countsByZone.get(z.id)?.storeCount ?? 0,
+          prospectCount: countsByZone.get(z.id)?.prospectCount ?? 0,
           createdAt: z.created_at,
           updatedAt: z.updated_at,
         })),

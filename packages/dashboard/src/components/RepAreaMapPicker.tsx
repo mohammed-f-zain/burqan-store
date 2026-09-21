@@ -5,7 +5,15 @@ import AreaCoverageMap from "./AreaCoverageMap";
 import { useLocale } from "../i18n/LocaleContext";
 import type { VoronoiFeatureCollection } from "../lib/voronoiGeo";
 
-type Area = { id: number; name: string; governorate?: string | null };
+type Area = {
+  id: number;
+  name: string;
+  governorate?: string | null;
+  storeCount?: number;
+  prospectCount?: number;
+  store_count?: number;
+  prospect_count?: number;
+};
 
 const MAP_FILTER_ALL = "__all__";
 const GOVERNORATE_COVERAGE_SUFFIX = " — تغطية المحافظة";
@@ -188,19 +196,28 @@ export default function RepAreaMapPicker({
         </label>
         {searchableAreas.length > 0 ? (
           <div className="rep-pick-list rep-area-map-picker__search-results">
-            {searchableAreas.map((a) => (
-              <label key={a.id} className="checkbox-inline rep-pick-item">
-                <input
-                  type="checkbox"
-                  checked={selectedIds.includes(a.id)}
-                  onChange={() => toggleArea(a.id)}
-                />
-                <span>
-                  {a.name}
-                  {a.governorate ? ` · ${a.governorate}` : ""}
-                </span>
-              </label>
-            ))}
+            {searchableAreas.map((a) => {
+              const stores = a.storeCount ?? a.store_count ?? 0;
+              const prospects = a.prospectCount ?? a.prospect_count ?? 0;
+              return (
+                <label key={a.id} className="checkbox-inline rep-pick-item">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.includes(a.id)}
+                    onChange={() => toggleArea(a.id)}
+                  />
+                  <span className="rep-area-map-picker__search-label">
+                    <span>
+                      {a.name}
+                      {a.governorate ? ` · ${a.governorate}` : ""}
+                    </span>
+                    <span className="muted small rep-area-map-picker__search-counts">
+                      {t.reps.areaMapCounts(stores, prospects)}
+                    </span>
+                  </span>
+                </label>
+              );
+            })}
           </div>
         ) : null}
       </div>

@@ -20,6 +20,8 @@ type RouteZone = {
   isActive: boolean;
   areas: { id: number; name: string }[];
   representatives: { id: number; fullName: string }[];
+  storeCount: number;
+  prospectCount: number;
 };
 
 type RouteZoneRow = RouteZone & { areaNamesText: string; repsText: string };
@@ -99,6 +101,8 @@ export default function RouteZonesPage() {
     () =>
       zones.map((z) => ({
         ...z,
+        storeCount: z.storeCount ?? 0,
+        prospectCount: z.prospectCount ?? 0,
         areaNamesText: z.areas.map((a) => areaNameById.get(a.id) ?? a.name).join(" "),
         repsText:
           z.representatives.length === 0
@@ -308,6 +312,8 @@ export default function RouteZonesPage() {
                   <tr>
                     <th>{t.routeZones.name}</th>
                     <th>{t.routeZones.areasCol}</th>
+                    <th>{t.routeZones.storesCol}</th>
+                    <th>{t.routeZones.prospectsCol}</th>
                     <th>{t.routeZones.repsCol}</th>
                     <th>{t.routeZones.statusCol}</th>
                     {write ? <th className="col-actions">{t.routeZones.colActions}</th> : null}
@@ -338,6 +344,8 @@ export default function RouteZonesPage() {
                           </>
                         )}
                       </td>
+                      <td className="strong">{z.storeCount}</td>
+                      <td className="strong">{z.prospectCount}</td>
                       <td className="route-zone-reps-cell">
                         {z.representatives.length === 0 ? (
                           <span className="muted">{t.routeZones.allReps}</span>
