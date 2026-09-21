@@ -1402,6 +1402,39 @@ export default function App() {
     });
   }
 
+  function setRedeemQtyExact(pid: number, value: number) {
+    const p = prizeProducts.find((x) => x.id === pid);
+    if (!p) return;
+    setRedeemCart((c) => {
+      const next = { ...c };
+      const q = Math.floor(value);
+      if (!Number.isFinite(q) || q <= 0) delete next[pid];
+      else next[pid] = q;
+      return next;
+    });
+  }
+
+  function setExchangeReturnQtyExact(pid: number, value: number) {
+    setExchangeReturnCart((c) => {
+      const next = { ...c };
+      const q = Math.floor(value);
+      if (!Number.isFinite(q) || q <= 0) delete next[pid];
+      else next[pid] = q;
+      return next;
+    });
+  }
+
+  function setExchangeGiveQtyExact(pid: number, value: number) {
+    const max = products.find((p) => p.id === pid)?.quantity ?? 0;
+    setExchangeGiveCart((c) => {
+      const next = { ...c };
+      const q = Math.floor(value);
+      if (!Number.isFinite(q) || q <= 0) delete next[pid];
+      else next[pid] = Math.min(q, max);
+      return next;
+    });
+  }
+
   const endStoreSession = useCallback(() => {
     setActiveStore(null);
     setCart({});
@@ -2113,6 +2146,7 @@ export default function App() {
                     redeemLinePoints={linePts}
                     onMinus={() => setRedeemQty(item.id, -1)}
                     onPlus={() => setRedeemQty(item.id, 1)}
+                    onSetQty={(qty) => setRedeemQtyExact(item.id, qty)}
                   />
                 );
               })}
@@ -2147,6 +2181,7 @@ export default function App() {
                       atMax={atMax}
                       onMinus={() => setQty(item.id, -1)}
                       onPlus={() => setQty(item.id, 1)}
+                      onSetQty={(qty) => setQtyExact(item.id, qty)}
                     />
                   );
                 })
@@ -2224,6 +2259,7 @@ export default function App() {
                           atMax={false}
                           onMinus={() => setExchangeReturnQty(item.id, -1)}
                           onPlus={() => setExchangeReturnQty(item.id, 1)}
+                          onSetQty={(qty) => setExchangeReturnQtyExact(item.id, qty)}
                         />
                       );
                     })
@@ -2266,6 +2302,7 @@ export default function App() {
                           atMax={atMax}
                           onMinus={() => setExchangeGiveQty(item.id, -1)}
                           onPlus={() => setExchangeGiveQty(item.id, 1)}
+                          onSetQty={(qty) => setExchangeGiveQtyExact(item.id, qty)}
                         />
                       );
                     })
@@ -2845,7 +2882,15 @@ function ProductCard(props: {
   redeemLinePoints?: number;
   onMinus?: () => void;
   onPlus?: () => void;
+  onSetQty?: (qty: number) => void;
 }) {
+  const cartQty = props.cartQty ?? 0;
+  const [qtyDraft, setQtyDraft] = useState(String(cartQty));
+
+  useEffect(() => {
+    setQtyDraft(String(cartQty));
+  }, [cartQty]);
+
   const uri = productImageUrl(props.item.image_url);
   return (
     <View style={styles.productCard}>
@@ -2878,7 +2923,7 @@ function ProductCard(props: {
             </>
           )}
         </View>
-        {props.mode === "redeem" && (props.cartQty ?? 0) > 0 && props.redeemLinePoints != null ? (
+        {props.mode === "redeem" && cartQty > 0 && props.redeemLinePoints != null ? (
           <Text style={styles.redeemLineTotal}>{t.redeemCartPoints(props.redeemLinePoints)}</Text>
         ) : null}
         {(props.mode === "sell" || props.mode === "redeem") && props.onMinus && props.onPlus ? (
@@ -2886,7 +2931,31 @@ function ProductCard(props: {
             <Pressable style={styles.qtyBtnLg} onPress={props.onMinus}>
               <Text style={styles.qtyBtnText}>−</Text>
             </Pressable>
-            <Text style={styles.qtyNumLg}>{props.cartQty ?? 0}</Text>
+            {props.onSetQty ? (
+              <TextInput
+                style={styles.qtyInputLg}
+                value={qtyDraft}
+                onChangeText={(raw) => {
+                  const digits = raw.replace(/[^\d]/g, "");
+                  setQtyDraft(digits);
+                  if (digits === "") {
+                    props.onSetQty?.(0);
+                    return;
+                  }
+                  const n = parseInt(digits, 10);
+                  if (Number.isFinite(n)) props.onSetQty?.(n);
+                }}
+                onBlur={() => setQtyDraft(String(cartQty))}
+                keyboardType="number-pad"
+                inputMode="numeric"
+                selectTextOnFocus
+                maxLength={5}
+                textAlign="center"
+                accessibilityLabel={t.invoiceQty}
+              />
+            ) : (
+              <Text style={styles.qtyNumLg}>{cartQty}</Text>
+            )}
             <Pressable style={styles.qtyBtnLg} onPress={props.onPlus} disabled={props.atMax}>
               <Text style={[styles.qtyBtnText, props.atMax && { opacity: 0.35 }]}>+</Text>
             </Pressable>
@@ -3320,6 +3389,20 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   qtyNumLg: { color: text, fontWeight: "800", fontSize: 18, minWidth: 28, textAlign: "center" },
+  qtyInputLg: {
+    color: text,
+    fontWeight: "800",
+    fontSize: 18,
+    minWidth: 48,
+    maxWidth: 72,
+    paddingVertical: 6,
+    paddingHorizontal: 6,
+    textAlign: "center",
+    borderWidth: 1,
+    borderColor: line,
+    borderRadius: 10,
+    backgroundColor: "#fff",
+  },
   qtyBtn: {
     width: 36,
     height: 36,
