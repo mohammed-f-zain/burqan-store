@@ -1043,8 +1043,12 @@ router.get(
   "/areas",
   adminAuthMiddleware,
   requireAdminPermission("areas.read"),
-  async (_req, res, next) => {
+  async (req, res, next) => {
     try {
+      const representativeId = req.query.representativeId
+        ? z.coerce.number().int().positive().parse(req.query.representativeId)
+        : null;
+
       const { rows } = await query<{
         id: number;
         name: string;
@@ -1056,20 +1060,43 @@ router.get(
         store_count: number;
         prospect_count: number;
       }>(
-        `SELECT a.id, a.name, a.governorate, a.center_lat, a.center_lng, a.radius_km, a.created_at,
-                COALESCE(sc.cnt, 0)::int AS store_count,
-                COALESCE(pc.cnt, 0)::int AS prospect_count
-         FROM areas a
-         LEFT JOIN (
-           SELECT area_id, COUNT(*)::int AS cnt FROM stores GROUP BY area_id
-         ) sc ON sc.area_id = a.id
-         LEFT JOIN (
-           SELECT area_id, COUNT(*)::int AS cnt
-           FROM prospect_stores
-           WHERE status = 'open'
-           GROUP BY area_id
-         ) pc ON pc.area_id = a.id
-         ORDER BY a.governorate NULLS LAST, a.name ASC`
+        representativeId
+          ? `SELECT a.id, a.name, a.governorate, a.center_lat, a.center_lng, a.radius_km, a.created_at,
+                    COALESCE(sc.cnt, 0)::int AS store_count,
+                    COALESCE(pc.cnt, 0)::int AS prospect_count
+             FROM areas a
+             LEFT JOIN (
+               SELECT area_id, COUNT(*)::int AS cnt FROM stores GROUP BY area_id
+             ) sc ON sc.area_id = a.id
+             LEFT JOIN (
+               SELECT area_id, COUNT(*)::int AS cnt
+               FROM prospect_stores
+               WHERE status = 'open'
+               GROUP BY area_id
+             ) pc ON pc.area_id = a.id
+             WHERE EXISTS (
+               SELECT 1
+               FROM rep_route_schedule rs
+               JOIN route_zone_areas rza ON rza.route_zone_id = rs.route_zone_id
+               WHERE rs.representative_id = $1
+                 AND rza.area_id = a.id
+             )
+             ORDER BY a.governorate NULLS LAST, a.name ASC`
+          : `SELECT a.id, a.name, a.governorate, a.center_lat, a.center_lng, a.radius_km, a.created_at,
+                    COALESCE(sc.cnt, 0)::int AS store_count,
+                    COALESCE(pc.cnt, 0)::int AS prospect_count
+             FROM areas a
+             LEFT JOIN (
+               SELECT area_id, COUNT(*)::int AS cnt FROM stores GROUP BY area_id
+             ) sc ON sc.area_id = a.id
+             LEFT JOIN (
+               SELECT area_id, COUNT(*)::int AS cnt
+               FROM prospect_stores
+               WHERE status = 'open'
+               GROUP BY area_id
+             ) pc ON pc.area_id = a.id
+             ORDER BY a.governorate NULLS LAST, a.name ASC`,
+        representativeId ? [representativeId] : []
       );
       res.json({
         areas: rows.map((a) => ({
@@ -3626,7 +3653,8 @@ router.get(
               `SELECT * FROM (
                  SELECT o.id::text AS id, 'store'::text AS source, o.representative_id, o.store_id,
                         o.payment_type, o.total_amount, o.created_at,
-                        s.name AS store_name, r.full_name AS rep_name,
+                        s.name AS store_name, a.id AS area_id, a.name AS area_name,
+                        r.full_name AS rep_name,
                         COALESCE((
                           SELECT string_agg(p.name, ', ' ORDER BY p.name)
                           FROM order_lines ol
@@ -3640,12 +3668,15 @@ router.get(
                         ), '') AS product_ids
                  FROM orders o
                  INNER JOIN stores s ON s.id = o.store_id
+                 INNER JOIN areas a ON a.id = s.area_id
                  INNER JOIN representatives r ON r.id = o.representative_id
                  WHERE o.store_id = $1
                  UNION ALL
                  SELECT ('ext-' || e.id::text) AS id, 'external'::text AS source, e.representative_id, e.store_id,
                         e.payment_type, e.total_amount, e.created_at,
-                        COALESCE(s2.name, e.store_name) AS store_name, r.full_name AS rep_name,
+                        COALESCE(s2.name, e.store_name) AS store_name,
+                        s2.area_id AS area_id, a2.name AS area_name,
+                        r.full_name AS rep_name,
                         COALESCE((
                           SELECT string_agg(p.name, ', ' ORDER BY p.name)
                           FROM external_sale_lines el
@@ -3660,6 +3691,7 @@ router.get(
                  FROM external_sales e
                  INNER JOIN representatives r ON r.id = e.representative_id
                  LEFT JOIN stores s2 ON s2.id = e.store_id
+                 LEFT JOIN areas a2 ON a2.id = s2.area_id
                  WHERE e.store_id = $1
                ) x
                ORDER BY x.created_at DESC, x.id DESC`,
@@ -3669,7 +3701,8 @@ router.get(
               `SELECT * FROM (
                  SELECT o.id::text AS id, 'store'::text AS source, o.representative_id, o.store_id,
                         o.payment_type, o.total_amount, o.created_at,
-                        s.name AS store_name, r.full_name AS rep_name,
+                        s.name AS store_name, a.id AS area_id, a.name AS area_name,
+                        r.full_name AS rep_name,
                         COALESCE((
                           SELECT string_agg(p.name, ', ' ORDER BY p.name)
                           FROM order_lines ol
@@ -3683,11 +3716,14 @@ router.get(
                         ), '') AS product_ids
                  FROM orders o
                  INNER JOIN stores s ON s.id = o.store_id
+                 INNER JOIN areas a ON a.id = s.area_id
                  INNER JOIN representatives r ON r.id = o.representative_id
                  UNION ALL
                  SELECT ('ext-' || e.id::text) AS id, 'external'::text AS source, e.representative_id,
                         e.store_id, e.payment_type, e.total_amount, e.created_at,
-                        COALESCE(s2.name, e.store_name) AS store_name, r.full_name AS rep_name,
+                        COALESCE(s2.name, e.store_name) AS store_name,
+                        s2.area_id AS area_id, a2.name AS area_name,
+                        r.full_name AS rep_name,
                         COALESCE((
                           SELECT string_agg(p.name, ', ' ORDER BY p.name)
                           FROM external_sale_lines el
@@ -3702,6 +3738,7 @@ router.get(
                  FROM external_sales e
                  INNER JOIN representatives r ON r.id = e.representative_id
                  LEFT JOIN stores s2 ON s2.id = e.store_id
+                 LEFT JOIN areas a2 ON a2.id = s2.area_id
                ) x
                ORDER BY x.created_at DESC, x.id DESC`
             ),

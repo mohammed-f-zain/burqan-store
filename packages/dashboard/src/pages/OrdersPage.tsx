@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
@@ -11,7 +11,7 @@ import { pickAxiosErrorMessage } from "../lib/apiError";
 import { ownerFormatMoney } from "../owner/ownerFormat";
 import { confirmDanger } from "../lib/swalConfirm";
 import { toastError, toastSuccess } from "../lib/toast";
-import { filtersFromSearchParams } from "../lib/filterTableRows";
+import { filtersFromSearchParams, searchParamsFromTableState } from "../lib/filterTableRows";
 import { formatMarketDateTime } from "../utils/formatMarketDateTime";
 
 type PageTab = "sales" | "redemptions";
@@ -22,6 +22,8 @@ type OrderRow = {
   representative_id: number;
   store_id: number | null;
   store_name: string;
+  area_id?: number | null;
+  area_name?: string | null;
   rep_name: string;
   payment_type: string;
   total_amount: string;
@@ -51,35 +53,39 @@ type RedemptionRow = {
   }[];
 };
 
+type AreaOption = { id: number; name: string };
+type ProductOption = { id: number; name: string };
+
+const ORDER_FILTER_KEYS = [
+  "dateFrom",
+  "dateTo",
+  "type",
+  "rep",
+  "area",
+  "id",
+  "store",
+  "total",
+  "productId",
+  "source",
+] as const;
+
 export default function OrdersPage() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { can } = useAuth();
   const { t, locale } = useLocale();
-  const orderInitialFilters = useMemo(() => {
-    const filters = filtersFromSearchParams(searchParams, [
-      "dateFrom",
-      "dateTo",
-      "type",
-      "rep",
-      "id",
-      "store",
-      "total",
-      "product",
-      "productId",
-      "source",
-    ]);
-    // Pad product id so "27" matches "|27|" and not "|127|".
-    if (filters.productId && !filters.productId.includes("|")) {
-      filters.productId = `|${filters.productId}|`;
-    }
-    return filters;
-  }, [searchParams]);
+  const orderInitialFilters = useMemo(
+    () => filtersFromSearchParams(searchParams, ORDER_FILTER_KEYS),
+    [searchParams]
+  );
   const [pageTab, setPageTab] = useState<PageTab>(() => (searchParams.get("tab") === "redemptions" ? "redemptions" : "sales"));
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [redemptions, setRedemptions] = useState<RedemptionRow[]>([]);
   const [summary, setSummary] = useState<OrderSummary | null>(null);
   const [redemptionsLoading, setRedemptionsLoading] = useState(false);
+  const [areas, setAreas] = useState<AreaOption[]>([]);
+  const [products, setProducts] = useState<ProductOption[]>([]);
   const canDelete = can("orders.delete");
   const canRedeemRead = can("redeem.read");
   const canRedeemDelete = can("redeem.write") || can("orders.delete");
@@ -111,23 +117,44 @@ export default function OrdersPage() {
     [t.orders.sourceExternal, t.orders.sourceStore]
   );
 
+  const productFilterOptions = useMemo(
+    () =>
+      products
+        .slice()
+        .sort((a, b) => a.name.localeCompare(b.name, "ar"))
+        .map((p) => ({ value: String(p.id), label: p.name })),
+    [products]
+  );
+
+  const areaFilterOptions = useMemo(
+    () =>
+      areas
+        .slice()
+        .sort((a, b) => a.name.localeCompare(b.name, "ar"))
+        .map((a) => ({ value: a.name, label: a.name })),
+    [areas]
+  );
+
   const orderFilterFields = useMemo(
     () => [
       { id: "id", label: t.orders.colId, type: "text" as const, getValue: (o: OrderRow) => o.id },
       { id: "store", label: t.orders.colStore, type: "text" as const, getValue: (o: OrderRow) => o.store_name },
       {
-        id: "product",
-        label: t.orders.colProducts,
-        type: "text" as const,
-        getValue: (o: OrderRow) => o.product_names ?? "",
+        id: "area",
+        label: t.orders.colArea,
+        type: "searchableSelect" as const,
+        getValue: (o: OrderRow) => o.area_name ?? "",
+        options: areaFilterOptions,
       },
       {
         id: "productId",
-        label: t.orders.product,
-        type: "text" as const,
-        getValue: (o: OrderRow) => {
+        label: t.orders.colProducts,
+        type: "searchableSelect" as const,
+        getValue: (o: OrderRow) => o.product_ids ?? "",
+        options: productFilterOptions,
+        matches: (o: OrderRow, filterVal: string) => {
           const ids = (o.product_ids ?? "").split("|").filter(Boolean);
-          return ids.length ? `|${ids.join("|")}|` : "";
+          return ids.includes(filterVal);
         },
       },
       {
@@ -166,9 +193,12 @@ export default function OrdersPage() {
       },
     ],
     [
+      areaFilterOptions,
       paymentTypeOptions,
+      productFilterOptions,
       repFilterOptions,
       sourceOptions,
+      t.orders.colArea,
       t.orders.colId,
       t.orders.colProducts,
       t.orders.colRep,
@@ -178,7 +208,6 @@ export default function OrdersPage() {
       t.orders.colType,
       t.orders.dateFrom,
       t.orders.dateTo,
-      t.orders.product,
     ]
   );
 
@@ -186,6 +215,7 @@ export default function OrdersPage() {
     searchAccessors: [
       "id",
       "store_name",
+      "area_name",
       "rep_name",
       "payment_type",
       "total_amount",
@@ -198,6 +228,61 @@ export default function OrdersPage() {
     initialSearch: searchParams.get("q") ?? "",
   });
   const orderPgn = orderTable.pagination;
+
+  const selectedRepName = (orderTable.filters.rep ?? "").trim();
+  const selectedRepId = useMemo(() => {
+    if (!selectedRepName) return null;
+    const hit = orders.find((o) => o.rep_name?.trim() === selectedRepName);
+    return hit?.representative_id ?? null;
+  }, [orders, selectedRepName]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const { data } = await api.get<{ areas: AreaOption[] }>("/areas", {
+          params: selectedRepId ? { representativeId: selectedRepId } : undefined,
+        });
+        setAreas(data.areas ?? []);
+      } catch {
+        setAreas([]);
+      }
+    })();
+  }, [selectedRepId]);
+
+  useEffect(() => {
+    const areaVal = (orderTable.filters.area ?? "").trim();
+    if (!areaVal) return;
+    if (areas.length === 0) return;
+    if (!areas.some((a) => a.name === areaVal)) {
+      orderTable.setFilter("area", "");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when area options or selected area change
+  }, [areas, orderTable.filters.area]);
+
+  useEffect(() => {
+    if (pageTab !== "sales") return;
+    const next = searchParamsFromTableState({
+      filters: orderTable.filters,
+      search: orderTable.search,
+    });
+    const cur = searchParams.toString();
+    const nxt = next.toString();
+    if (cur !== nxt) setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync sales filters to URL
+  }, [orderTable.filters, orderTable.search, pageTab]);
+
+  useEffect(() => {
+    if (pageTab === "redemptions") {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set("tab", "redemptions");
+          return next;
+        },
+        { replace: true }
+      );
+    }
+  }, [pageTab, setSearchParams]);
 
   const redemptionFilterFields = useMemo(
     () => [
@@ -276,9 +361,13 @@ export default function OrdersPage() {
   }
 
   async function loadOrders() {
-    const { data } = await api.get<{ orders: OrderRow[]; summary: OrderSummary }>("/orders");
+    const [{ data }, productsRes] = await Promise.all([
+      api.get<{ orders: OrderRow[]; summary: OrderSummary }>("/orders"),
+      api.get<{ products: ProductOption[] }>("/products").catch(() => ({ data: { products: [] as ProductOption[] } })),
+    ]);
     setOrders(data.orders);
     setSummary(data.summary);
+    setProducts((productsRes.data.products ?? []).map((p) => ({ id: p.id, name: p.name })));
   }
 
   async function loadRedemptions() {
@@ -307,7 +396,8 @@ export default function OrdersPage() {
   }, [pageTab, canRedeemRead]);
 
   function openOrder(orderId: string) {
-    navigate(`/app/orders/${orderId}`);
+    const returnTo = `${location.pathname}${location.search}`;
+    navigate(`/app/orders/${orderId}`, { state: { fromOrders: returnTo } });
   }
 
   async function removeOrder(e: React.MouseEvent, id: string) {
@@ -387,7 +477,7 @@ export default function OrdersPage() {
               onFilterChange={orderTable.setFilter}
               onClear={orderTable.clearFilters}
               onToggleFilters={() => orderTable.setShowFilters((v) => !v)}
-              pinnedFieldIds={["dateFrom", "dateTo", "type", "rep", "product"]}
+              pinnedFieldIds={["dateFrom", "dateTo", "type", "rep", "area", "productId"]}
               labels={t.tableFilters}
             />
             {summary && (

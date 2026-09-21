@@ -746,6 +746,7 @@ export const ar = {
     rowHint: "اضغط على الصف لفتح تفاصيل الطلب.",
     colId: "رقم الطلب",
     colStore: "المتجر",
+    colArea: "المنطقة",
     colSource: "المصدر",
     sourceStore: "طلب متجر",
     sourceExternal: "خارجي",

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
@@ -29,9 +29,14 @@ type OrderDetail = {
 export default function OrderDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { can } = useAuth();
   const { t } = useLocale();
   const canDelete = can("orders.delete");
+  const ordersBack =
+    (location.state as { fromOrders?: string } | null)?.fromOrders?.startsWith("/app/orders")
+      ? (location.state as { fromOrders: string }).fromOrders
+      : "/app/orders";
 
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -86,7 +91,7 @@ export default function OrderDetailPage() {
     try {
       await api.delete(`/orders/${order.id}`);
       toastSuccess(t.orders.deleted);
-      navigate("/app/orders", { replace: true });
+      navigate(ordersBack, { replace: true });
     } catch (e) {
       toastError(pickAxiosErrorMessage(e, t.orders.deleteFailed));
     }
@@ -104,7 +109,7 @@ export default function OrderDetailPage() {
     return (
       <div className="card">
         <p className="muted">{t.orderDetail.loadFailed}</p>
-        <Link to="/app/orders" className="ghost" style={{ marginTop: 12, display: "inline-block" }}>
+        <Link to={ordersBack} className="ghost" style={{ marginTop: 12, display: "inline-block" }}>
           {t.orderDetail.back}
         </Link>
       </div>
@@ -114,7 +119,7 @@ export default function OrderDetailPage() {
   return (
     <div className="grid">
       <div className="card">
-        <Link to="/app/orders" className="ghost small">
+        <Link to={ordersBack} className="ghost small">
           ← {t.orderDetail.back}
         </Link>
         <h2 style={{ marginTop: 12 }}>
@@ -228,7 +233,7 @@ export default function OrderDetailPage() {
               {t.orders.delete}
             </button>
           )}
-          <Link to="/app/orders" className="ghost">
+          <Link to={ordersBack} className="ghost">
             {t.orderDetail.back}
           </Link>
         </div>

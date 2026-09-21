@@ -750,6 +750,7 @@ export const en: Messages = {
     rowHint: "Click a row to open the full order details.",
     colId: "Order",
     colStore: "Store",
+    colArea: "Area",
     colSource: "Source",
     sourceStore: "Store order",
     sourceExternal: "External",

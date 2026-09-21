@@ -51,6 +51,28 @@ export function filtersFromSearchParams(params: URLSearchParams, keys: readonly 
   return out;
 }
 
+/** Build query string from table filters (omit empty). */
+export function searchParamsFromTableState(opts: {
+  filters: Record<string, string>;
+  search?: string;
+  extra?: Record<string, string | undefined | null>;
+}): URLSearchParams {
+  const next = new URLSearchParams();
+  const q = opts.search?.trim();
+  if (q) next.set("q", q);
+  for (const [k, v] of Object.entries(opts.filters)) {
+    const t = v?.trim();
+    if (t) next.set(k, t);
+  }
+  if (opts.extra) {
+    for (const [k, v] of Object.entries(opts.extra)) {
+      const t = v?.trim();
+      if (t) next.set(k, t);
+    }
+  }
+  return next;
+}
+
 function cellText(v: string | number | boolean | null | undefined): string {
   if (v == null) return "";
   if (typeof v === "boolean") return v ? "true" : "false";
