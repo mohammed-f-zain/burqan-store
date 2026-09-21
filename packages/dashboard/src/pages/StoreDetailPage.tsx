@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 
@@ -55,6 +55,13 @@ type VisitRow = {
 };
 type PaymentRow = { id: string; amount: string; note: string | null; created_at: string };
 
+type StoreFinancials = {
+  allTimeTotal: number;
+  deferredTotal: number;
+  paymentsTotal: number;
+  deferredOutstanding: number;
+};
+
 function ownerPortalUrl(token: string): string {
   const base = import.meta.env.VITE_OWNER_PORTAL_BASE_URL?.trim().replace(/\/$/, "");
   if (base) return `${base}/owner?t=${encodeURIComponent(token)}`;
@@ -79,7 +86,9 @@ export default function StoreDetailPage() {
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [visits, setVisits] = useState<VisitRow[]>([]);
   const [payments, setPayments] = useState<PaymentRow[]>([]);
+  const [financials, setFinancials] = useState<StoreFinancials | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
+  const loadRequestId = useRef(0);
   const [payOpen, setPayOpen] = useState(false);
   const [payAmount, setPayAmount] = useState("");
   const [payNote, setPayNote] = useState("");
@@ -223,20 +232,20 @@ export default function StoreDetailPage() {
     fields: paymentFilterFields,
   });
 
-  const allTimeTotal = useMemo(() => sumAmounts(orders.map((o) => o.total_amount)), [orders]);
   const filteredTotal = useMemo(
     () => sumAmounts(storeOrdersTable.filtered.map((o) => o.total_amount)),
     [storeOrdersTable.filtered]
   );
-  const paymentsTotal = useMemo(() => sumAmounts(payments.map((p) => p.amount)), [payments]);
-  const deferredTotal = useMemo(
-    () => sumAmounts(orders.filter((o) => o.payment_type === "deferred").map((o) => o.total_amount)),
-    [orders]
-  );
-  const deferredOutstanding = useMemo(
-    () => Math.max(0, deferredTotal - paymentsTotal),
-    [deferredTotal, paymentsTotal]
-  );
+  /** Prefer DB totals so KPI cards stay correct after deletes (not a stale client sum). */
+  const paymentsTotal = financials?.paymentsTotal ?? sumAmounts(payments.map((p) => p.amount));
+  const allTimeTotal = financials?.allTimeTotal ?? sumAmounts(orders.map((o) => o.total_amount));
+  const deferredOutstanding =
+    financials?.deferredOutstanding ??
+    Math.max(
+      0,
+      sumAmounts(orders.filter((o) => o.payment_type === "deferred").map((o) => o.total_amount)) -
+        paymentsTotal
+    );
 
   function paymentTypeLabel(type: string) {
     if (type === "cash") return t.overview.payCash;
@@ -246,19 +255,38 @@ export default function StoreDetailPage() {
 
   const load = useCallback(async () => {
     if (!id) return;
+    const requestId = ++loadRequestId.current;
     setLoadFailed(false);
     try {
       const [storeRes, ordersRes, visitsRes, paymentsRes] = await Promise.all([
-        api.get<{ store: StoreDetail }>(`/stores/${id}`),
+        api.get<{ store: StoreDetail; financials?: StoreFinancials }>(`/stores/${id}`),
         api.get<{ orders: OrderRow[] }>("/orders", { params: { storeId: id } }),
         api.get<{ visits: VisitRow[] }>(`/stores/${id}/visits`),
         api.get<{ payments: PaymentRow[] }>(`/stores/${id}/payments`),
       ]);
+      if (requestId !== loadRequestId.current) return;
       setStore(storeRes.data.store);
-      setOrders(ordersRes.data.orders);
-      setVisits(visitsRes.data.visits);
-      setPayments(paymentsRes.data.payments);
+      setOrders(ordersRes.data.orders ?? []);
+      setVisits(visitsRes.data.visits ?? []);
+      setPayments(paymentsRes.data.payments ?? []);
+      if (storeRes.data.financials) {
+        setFinancials(storeRes.data.financials);
+      } else {
+        const list = ordersRes.data.orders ?? [];
+        const payList = paymentsRes.data.payments ?? [];
+        const deferredTotal = sumAmounts(
+          list.filter((o) => o.payment_type === "deferred").map((o) => o.total_amount)
+        );
+        const paymentsSum = sumAmounts(payList.map((p) => p.amount));
+        setFinancials({
+          allTimeTotal: sumAmounts(list.map((o) => o.total_amount)),
+          deferredTotal,
+          paymentsTotal: paymentsSum,
+          deferredOutstanding: Math.max(0, deferredTotal - paymentsSum),
+        });
+      }
     } catch {
+      if (requestId !== loadRequestId.current) return;
       setLoadFailed(true);
       toastError(t.storeDetail.loadFailed);
     }
@@ -302,10 +330,33 @@ export default function StoreDetailPage() {
       cancelText: t.orders.cancelDelete,
     });
     if (!ok) return;
+    const removed = orders.find((o) => o.id === orderId);
+    const previousOrders = orders;
+    const previousFinancials = financials;
+    if (removed) {
+      const amount = parseFloat(removed.total_amount) || 0;
+      setOrders((prev) => prev.filter((o) => o.id !== orderId));
+      setFinancials((prev) => {
+        if (!prev) return prev;
+        const deferredTotal =
+          removed.payment_type === "deferred"
+            ? Math.max(0, prev.deferredTotal - amount)
+            : prev.deferredTotal;
+        return {
+          ...prev,
+          allTimeTotal: Math.max(0, prev.allTimeTotal - amount),
+          deferredTotal,
+          deferredOutstanding: Math.max(0, deferredTotal - prev.paymentsTotal),
+        };
+      });
+    }
     try {
       await api.delete(`/orders/${orderId}`);
+      toastSuccess(t.orders.deleted);
       await load();
     } catch (e) {
+      setOrders(previousOrders);
+      setFinancials(previousFinancials);
       toastError(pickAxiosErrorMessage(e, t.orders.deleteFailed));
     }
   }

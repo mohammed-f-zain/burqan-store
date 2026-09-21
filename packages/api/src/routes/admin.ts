@@ -3103,7 +3103,11 @@ router.get(
            SELECT store_id,
                   SUM(total_amount) FILTER (WHERE payment_type = 'deferred') AS deferred_total,
                   COUNT(*) FILTER (WHERE payment_type = 'deferred')::int AS deferred_order_count
-           FROM orders
+           FROM (
+             SELECT store_id, payment_type, total_amount FROM orders
+             UNION ALL
+             SELECT store_id, payment_type, total_amount FROM external_sales WHERE store_id IS NOT NULL
+           ) sales
            GROUP BY store_id
          ) d ON d.store_id = s.id
          LEFT JOIN (
@@ -3152,20 +3156,59 @@ router.get(
   async (req, res, next) => {
     try {
       const id = z.coerce.number().int().positive().parse(req.params.id);
-      const { rows } = await query(
-        `
-        SELECT s.*, a.name AS area_name, qc.public_token AS qr_public_token,
-          r.full_name AS registered_by_rep_name
-        FROM stores s
-        JOIN areas a ON a.id = s.area_id
-        JOIN qr_codes qc ON qc.id = s.qr_code_id
-        LEFT JOIN representatives r ON r.id = s.registered_by_representative_id
-        WHERE s.id = $1
-      `,
-        [id]
-      );
-      if (!rows[0]) throw new HttpError(404, "Store not found");
-      res.json({ store: rows[0] });
+      const [storeResult, financialsResult] = await Promise.all([
+        query(
+          `
+          SELECT s.*, a.name AS area_name, qc.public_token AS qr_public_token,
+            r.full_name AS registered_by_rep_name
+          FROM stores s
+          JOIN areas a ON a.id = s.area_id
+          JOIN qr_codes qc ON qc.id = s.qr_code_id
+          LEFT JOIN representatives r ON r.id = s.registered_by_representative_id
+          WHERE s.id = $1
+        `,
+          [id]
+        ),
+        query<{
+          all_time_total: string;
+          deferred_total: string;
+          payments_total: string;
+        }>(
+          `SELECT
+             COALESCE((
+               SELECT SUM(total_amount) FROM (
+                 SELECT total_amount FROM orders WHERE store_id = $1
+                 UNION ALL
+                 SELECT total_amount FROM external_sales WHERE store_id = $1
+               ) sales
+             ), 0)::text AS all_time_total,
+             COALESCE((
+               SELECT SUM(total_amount) FROM (
+                 SELECT total_amount FROM orders WHERE store_id = $1 AND payment_type = 'deferred'
+                 UNION ALL
+                 SELECT total_amount FROM external_sales WHERE store_id = $1 AND payment_type = 'deferred'
+               ) deferred_sales
+             ), 0)::text AS deferred_total,
+             COALESCE((
+               SELECT SUM(amount) FROM store_payments WHERE store_id = $1
+             ), 0)::text AS payments_total`,
+          [id]
+        ),
+      ]);
+      if (!storeResult.rows[0]) throw new HttpError(404, "Store not found");
+      const f = financialsResult.rows[0];
+      const allTimeTotal = parseFloat(f?.all_time_total ?? "0") || 0;
+      const deferredTotal = parseFloat(f?.deferred_total ?? "0") || 0;
+      const paymentsTotal = parseFloat(f?.payments_total ?? "0") || 0;
+      res.json({
+        store: storeResult.rows[0],
+        financials: {
+          allTimeTotal,
+          deferredTotal,
+          paymentsTotal,
+          deferredOutstanding: Math.max(0, deferredTotal - paymentsTotal),
+        },
+      });
     } catch (e) {
       next(e);
     }
@@ -3740,17 +3783,42 @@ router.delete(
       const c = await pool.connect();
       try {
         await c.query("BEGIN");
-        const { rows: orderRows } = await c.query<{ id: string; representative_id: number }>(
-          `SELECT id, representative_id FROM orders WHERE id = $1 FOR UPDATE`,
-          [parsed.id]
-        );
+        const { rows: orderRows } = await c.query<{
+          id: string;
+          representative_id: number;
+          store_id: number;
+        }>(`SELECT id, representative_id, store_id FROM orders WHERE id = $1 FOR UPDATE`, [parsed.id]);
         const order = orderRows[0];
         if (!order) throw new HttpError(404, "Order not found");
 
-        const { rows: lines } = await c.query<{ product_id: number; quantity: number }>(
-          `SELECT product_id, quantity FROM order_lines WHERE order_id = $1`,
-          [parsed.id]
+        const { rows: lines } = await c.query<{
+          product_id: number;
+          quantity: number;
+          loyalty_points_earned: number;
+        }>(`SELECT product_id, quantity, loyalty_points_earned FROM order_lines WHERE order_id = $1`, [
+          parsed.id,
+        ]);
+
+        const loyaltyToReverse = lines.reduce(
+          (sum, line) => sum + (Number(line.loyalty_points_earned) || 0),
+          0
         );
+        if (loyaltyToReverse > 0) {
+          try {
+            await adjustStoreLoyaltyPoints(order.store_id, -loyaltyToReverse, c);
+          } catch (err) {
+            if (!(err instanceof Error) || err.message !== "INSUFFICIENT_BALANCE") throw err;
+            // Points may already have been redeemed; still allow deleting the order.
+            await c.query(
+              `UPDATE stores SET
+                 loyalty_points_balance = 0,
+                 loyalty_period_started_at = NULL,
+                 updated_at = now()
+               WHERE id = $1`,
+              [order.store_id]
+            );
+          }
+        }
 
         for (const line of lines) {
           await c.query(
