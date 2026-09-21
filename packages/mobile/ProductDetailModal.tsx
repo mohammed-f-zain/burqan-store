@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useEffect, useState, type ComponentProps } from "react";
 import {
   Image,
   Modal,
@@ -6,9 +7,9 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   useWindowDimensions,
   View,
-  type ComponentProps,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -45,6 +46,7 @@ type Labels = {
   noImage: string;
   currency: string;
   inCart: string;
+  qtyHint?: string;
 };
 
 type Props = {
@@ -57,6 +59,8 @@ type Props = {
   onClose: () => void;
   onMinus: () => void;
   onPlus: () => void;
+  /** Set absolute quantity (keyboard entry). Clamped by parent to van stock. */
+  onSetQty?: (qty: number) => void;
 };
 
 function displayValue(value: string | null | undefined, fallback: string): string {
@@ -104,6 +108,11 @@ export default function ProductDetailModal(props: Props) {
   const isTablet = isTabletDevice();
   const contentMax = isTablet ? tabletContentMaxWidth(winW, winH) : undefined;
   const heroHeight = isTablet ? 320 : 260;
+  const [qtyDraft, setQtyDraft] = useState(String(cartQty));
+
+  useEffect(() => {
+    if (visible) setQtyDraft(String(cartQty));
+  }, [visible, cartQty, product?.id]);
 
   if (!product) return null;
 
@@ -216,12 +225,35 @@ export default function ProductDetailModal(props: Props) {
                 <Text style={styles.qtyBtnText}>−</Text>
               </Pressable>
               <View style={styles.qtyCenter}>
-                <Text style={styles.qtyNum}>{cartQty}</Text>
+                <TextInput
+                  style={styles.qtyInput}
+                  value={qtyDraft}
+                  onChangeText={(raw) => {
+                    const digits = raw.replace(/[^\d]/g, "");
+                    setQtyDraft(digits);
+                    if (digits === "") {
+                      props.onSetQty?.(0);
+                      return;
+                    }
+                    const n = parseInt(digits, 10);
+                    if (Number.isFinite(n)) props.onSetQty?.(n);
+                  }}
+                  onBlur={() => {
+                    setQtyDraft(String(cartQty));
+                  }}
+                  keyboardType="number-pad"
+                  inputMode="numeric"
+                  selectTextOnFocus
+                  maxLength={5}
+                  textAlign="center"
+                  accessibilityLabel={labels.inCart}
+                />
               </View>
               <Pressable style={styles.qtyBtn} onPress={props.onPlus} disabled={atMax}>
                 <Text style={[styles.qtyBtnText, atMax && styles.qtyBtnDisabled]}>+</Text>
               </Pressable>
             </View>
+            {labels.qtyHint ? <Text style={styles.qtyHint}>{labels.qtyHint}</Text> : null}
           </View>
         ) : null}
       </SafeAreaView>
@@ -410,10 +442,25 @@ const styles = StyleSheet.create({
   qtyCenter: {
     alignItems: "center",
     minWidth: 72,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
     borderRadius: theme.radius.md,
     backgroundColor: "#f8fafc",
   },
   qtyNum: { color: theme.text, fontWeight: "800", fontSize: 26 },
+  qtyInput: {
+    color: theme.text,
+    fontWeight: "800",
+    fontSize: 26,
+    minWidth: 64,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    textAlign: "center",
+  },
+  qtyHint: {
+    color: theme.muted,
+    fontSize: 12,
+    textAlign: "center",
+    marginTop: 10,
+  },
 });

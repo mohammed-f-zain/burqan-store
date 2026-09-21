@@ -8,6 +8,8 @@ export type ProspectCard = {
   areaName?: string | null;
   visitedToday?: boolean;
   todayVisitNote?: string | null;
+  /** Most recent prospect visit note (any day). */
+  lastVisitNote?: string | null;
 };
 
 export type DailyStoreCard = {
@@ -25,6 +27,10 @@ export type DailyStoreCard = {
   visitNote?: string | null;
   /** ISO timestamp of the most recent visit to this store (any rep), if any. */
   lastVisitedAt?: string | null;
+  /** Visit note on the last activity day (typically a no-buy reason). */
+  lastVisitNote?: string | null;
+  /** True when there was a purchase on the last activity day. */
+  lastVisitHadPurchase?: boolean;
   googleMapsUrl?: string | null;
   googlePlaceId?: string | null;
   /** Nearest-first route tab (meters from rep GPS). */
@@ -95,6 +101,8 @@ export function normalizeDailyStoreCard(raw: Record<string, unknown>): DailyStor
     visitedToday: Boolean(raw.visitedToday ?? raw.visited_today ?? false),
     visitNote: (raw.visitNote ?? raw.visit_note ?? raw.todayVisitNote ?? null) as string | null,
     lastVisitedAt,
+    lastVisitNote: (raw.lastVisitNote ?? raw.last_visit_note ?? null) as string | null,
+    lastVisitHadPurchase: Boolean(raw.lastVisitHadPurchase ?? raw.last_visit_had_purchase ?? false),
     googleMapsUrl: (raw.googleMapsUrl ?? raw.google_maps_url ?? null) as string | null,
     googlePlaceId: (raw.googlePlaceId ?? raw.google_place_id ?? null) as string | null,
     distanceM: raw.distanceM != null ? Number(raw.distanceM) : undefined,

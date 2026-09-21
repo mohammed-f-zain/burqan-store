@@ -332,6 +332,31 @@ const STORE_LAST_VISITED_AT_SQL = `(
   ) activity
 )`;
 
+/** Amman calendar day of {@link STORE_LAST_VISITED_AT_SQL} (null when never visited/sold). */
+const STORE_LAST_ACTIVITY_DAY_SQL = `(
+  SELECT (MAX(ts) AT TIME ZONE 'Asia/Amman')::date FROM (
+    SELECT v.visited_at AS ts FROM visits v WHERE v.store_id = s.id
+    UNION ALL
+    SELECT o.created_at AS ts FROM orders o WHERE o.store_id = s.id
+  ) activity
+)`;
+
+/** True when the store had an order on the same Amman day as the last activity. */
+const STORE_LAST_VISIT_HAD_PURCHASE_SQL = `EXISTS (
+  SELECT 1 FROM orders o
+  WHERE o.store_id = s.id
+    AND (o.created_at AT TIME ZONE 'Asia/Amman')::date = ${STORE_LAST_ACTIVITY_DAY_SQL}
+)`;
+
+/** Visit note from the last activity day (no-buy reason when there was no sale that day). */
+const STORE_LAST_VISIT_NOTE_SQL = `(
+  SELECT v.note FROM visits v
+  WHERE v.store_id = s.id
+    AND (v.visited_at AT TIME ZONE 'Asia/Amman')::date = ${STORE_LAST_ACTIVITY_DAY_SQL}
+  ORDER BY v.visited_at DESC
+  LIMIT 1
+)`;
+
 async function loadStoreForRep(storeId: number, rep: { id: number }) {
   const today = await getRepTodayWorkAreaIds(rep.id);
   const { rows } = await query<{
@@ -576,6 +601,7 @@ router.get("/prospect-stores", repAuthMiddleware, async (req, res, next) => {
       visited_today: boolean;
       today_visit_note: string | null;
       last_visited_at: Date | string | null;
+      last_visit_note: string | null;
     }>(
       `SELECT ps.id, ps.name, ps.phone, ps.owner_name, ps.location_lat, ps.location_lng,
               ps.address_text, ps.image_url, ps.area_id, ps.status, ps.converted_store_id,
@@ -599,7 +625,13 @@ router.get("/prospect-stores", repAuthMiddleware, async (req, res, next) => {
               (
                 SELECT MAX(pv.visited_at) FROM prospect_visits pv
                 WHERE pv.prospect_store_id = ps.id
-              ) AS last_visited_at
+              ) AS last_visited_at,
+              (
+                SELECT pv.note FROM prospect_visits pv
+                WHERE pv.prospect_store_id = ps.id
+                ORDER BY pv.visited_at DESC
+                LIMIT 1
+              ) AS last_visit_note
        FROM prospect_stores ps
        JOIN areas a ON a.id = ps.area_id
        WHERE ps.status = 'open'
@@ -613,6 +645,7 @@ router.get("/prospect-stores", repAuthMiddleware, async (req, res, next) => {
         visitedToday: r.visited_today,
         todayVisitNote: r.today_visit_note,
         lastVisitedAt: toIsoOrNull(r.last_visited_at),
+        lastVisitNote: r.last_visit_note,
       })),
     });
   } catch (e) {
@@ -1021,6 +1054,8 @@ router.get("/stores/route", repAuthMiddleware, async (req, res, next) => {
       visited_today: boolean;
       visit_note: string | null;
       last_visited_at: Date | string | null;
+      last_visit_note: string | null;
+      last_visit_had_purchase: boolean;
     }>(
       `SELECT s.id, s.name, s.phone, s.owner_name, s.location_lat, s.location_lng,
               s.address_text, s.image_url, s.deferred_payment_enabled,
@@ -1041,7 +1076,9 @@ router.get("/stores/route", repAuthMiddleware, async (req, res, next) => {
                 ORDER BY v.visited_at DESC
                 LIMIT 1
               ) AS visit_note,
-              ${STORE_LAST_VISITED_AT_SQL} AS last_visited_at
+              ${STORE_LAST_VISITED_AT_SQL} AS last_visited_at,
+              ${STORE_LAST_VISIT_NOTE_SQL} AS last_visit_note,
+              ${STORE_LAST_VISIT_HAD_PURCHASE_SQL} AS last_visit_had_purchase
        FROM stores s
        JOIN areas a ON a.id = s.area_id
        WHERE s.area_id = ANY($1::int[])
@@ -1076,6 +1113,8 @@ router.get("/stores/route", repAuthMiddleware, async (req, res, next) => {
         visitedToday: s.visited_today,
         visitNote: s.visit_note,
         lastVisitedAt: toIsoOrNull(s.last_visited_at),
+        lastVisitNote: s.last_visit_note,
+        lastVisitHadPurchase: Boolean(s.last_visit_had_purchase),
         distanceM: Math.round(s.distance_m),
         distanceLabel: formatDistanceM(s.distance_m),
       })),
@@ -1117,6 +1156,8 @@ router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
       visited_today: boolean;
       visit_note: string | null;
       last_visited_at: Date | string | null;
+      last_visit_note: string | null;
+      last_visit_had_purchase: boolean;
     }>(
       `SELECT s.id, s.name, s.phone, s.owner_name, s.location_lat, s.location_lng,
               s.address_text, s.image_url, s.deferred_payment_enabled,
@@ -1137,7 +1178,9 @@ router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
                 ORDER BY v.visited_at DESC
                 LIMIT 1
               ) AS visit_note,
-              ${STORE_LAST_VISITED_AT_SQL} AS last_visited_at
+              ${STORE_LAST_VISITED_AT_SQL} AS last_visited_at,
+              ${STORE_LAST_VISIT_NOTE_SQL} AS last_visit_note,
+              ${STORE_LAST_VISIT_HAD_PURCHASE_SQL} AS last_visit_had_purchase
        FROM stores s
        JOIN areas a ON a.id = s.area_id
        WHERE s.area_id = ANY($1::int[])
@@ -1169,6 +1212,8 @@ router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
         visitedToday: s.visited_today,
         visitNote: s.visit_note,
         lastVisitedAt: toIsoOrNull(s.last_visited_at),
+        lastVisitNote: s.last_visit_note,
+        lastVisitHadPurchase: Boolean(s.last_visit_had_purchase),
       })),
       googlePlacesReady,
       googlePlacesTotal,

@@ -23,6 +23,8 @@ export type PossibleClientsLabels = {
   searchPlaceholder: string;
   pill: string;
   loadMore: (remaining: number) => string;
+  /** Visit / not-register reason under the prospect card. */
+  reasonLabel?: string;
 };
 
 const INITIAL_VISIBLE = 4;
@@ -113,6 +115,15 @@ export default function PossibleClientsSection(props: Props) {
                 </Text>
                 {p.areaName ? <Text style={styles.area}>{p.areaName}</Text> : null}
                 {p.addressText ? <Text style={styles.address}>{p.addressText}</Text> : null}
+                {(() => {
+                  const reason = (p.todayVisitNote ?? p.lastVisitNote ?? "").trim();
+                  if (!reason) return null;
+                  return (
+                    <Text style={styles.reason} numberOfLines={2}>
+                      {reason}
+                    </Text>
+                  );
+                })()}
               </Pressable>
               <Pressable style={styles.linkBtn} onPress={() => onLinkQr(p)}>
                 <Ionicons name="qr-code-outline" size={18} color={theme.accentDark} />
@@ -207,6 +218,14 @@ const styles = StyleSheet.create({
   meta: { color: theme.muted, fontSize: 13, marginTop: 4, textAlign: "right" },
   area: { color: theme.accentDark, fontSize: 12, marginTop: 4, textAlign: "right", fontWeight: "600" },
   address: { color: theme.muted, fontSize: 12, marginTop: 4, textAlign: "right" },
+  reason: {
+    color: theme.muted,
+    fontSize: 12,
+    marginTop: 6,
+    textAlign: "right",
+    fontStyle: "italic",
+    lineHeight: 18,
+  },
   linkBtn: {
     marginTop: 12,
     flexDirection: "row-reverse",

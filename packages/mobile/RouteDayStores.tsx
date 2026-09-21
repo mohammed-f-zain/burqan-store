@@ -18,6 +18,7 @@ import type { MapRegion } from "./registerMapConfig";
 import { dailyStoresToPins } from "./zoneMapTypes";
 import { formatMarketDate } from "./formatMarketDateTime";
 import { compareStoresByMode, type StoreSortMode } from "./geoDistance";
+import { lastVisitOutcomeText } from "./lastVisitOutcome";
 
 export type RouteDayLabels = {
   title: string;
@@ -38,6 +39,7 @@ export type RouteDayLabels = {
   pending: string;
   lastVisit: (date: string) => string;
   lastVisitNever: string;
+  purchasedPreviousVisit: string;
   searchPlaceholder: string;
   filterAll: string;
   filterPending: string;
@@ -502,6 +504,21 @@ export default function RouteDayStores(props: Props) {
                                 ? labels.lastVisit(formatMarketDate(new Date()))
                                 : labels.lastVisitNever}
                           </Text>
+                          {(() => {
+                            const outcome = lastVisitOutcomeText(s, labels.purchasedPreviousVisit);
+                            if (!outcome) return null;
+                            return (
+                              <Text
+                                style={[
+                                  styles.storeVisitNote,
+                                  s.lastVisitHadPurchase && styles.storeVisitNotePurchased,
+                                ]}
+                                numberOfLines={2}
+                              >
+                                {outcome}
+                              </Text>
+                            );
+                          })()}
                           {s.visitedToday ? (
                             <View style={styles.donePill}>
                               <Text style={styles.donePillText}>{labels.visited}</Text>
@@ -761,6 +778,14 @@ const styles = StyleSheet.create({
   distText: { color: theme.accentDark, fontSize: 11, fontWeight: "800" },
   storeMeta: { color: theme.muted, fontSize: 13, textAlign: "right", flex: 1 },
   storeLastVisit: { color: theme.muted, fontSize: 12, marginTop: 4, textAlign: "right" },
+  storeVisitNote: {
+    color: theme.muted,
+    fontSize: 12,
+    marginTop: 4,
+    textAlign: "right",
+    fontStyle: "italic",
+  },
+  storeVisitNotePurchased: { color: "#16a34a", fontStyle: "normal", fontWeight: "600" },
   donePill: {
     alignSelf: "flex-end",
     marginTop: 8,

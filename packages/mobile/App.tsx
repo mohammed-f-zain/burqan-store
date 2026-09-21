@@ -191,6 +191,7 @@ const t = {
   notSpecified: "—",
   vanStock: "مخزون السيارة",
   inCart: "في السلة",
+  qtyTypeHint: "يمكنك الكتابة بالكيبورد أو استخدام + / −",
   phone: "الهاتف",
   location: "الموقع",
   locationUnknown: "لم يُسجَّل عنوان",
@@ -289,6 +290,7 @@ const t = {
   dailyStoresVisitQr: "زيارة",
   dailyStoresLastVisit: (date: string) => `آخر زيارة: ${date}`,
   dailyStoresLastVisitNever: "آخر زيارة: لا توجد",
+  dailyStoresPurchasedPrevious: "تم الشراء في الزيارة السابقة",
   prospectsTitle: "عملاء محتملون",
   prospectsHint: "عملاء محتملون في مناطق مسار اليوم فقط",
   prospectsEmpty: "لا يوجد عملاء محتملون",
@@ -709,6 +711,7 @@ export default function App() {
         areaName?: string | null;
         visitedToday?: boolean;
         todayVisitNote?: string | null;
+        lastVisitNote?: string | null;
       }>;
       setProspects(
         rows.map((p) => ({
@@ -721,6 +724,7 @@ export default function App() {
           areaName: p.areaName,
           visitedToday: p.visitedToday,
           todayVisitNote: p.todayVisitNote ?? null,
+          lastVisitNote: p.lastVisitNote ?? null,
         }))
       );
     } catch {
@@ -796,6 +800,7 @@ export default function App() {
             visitedToday?: boolean;
             todayVisitNote?: string | null;
             lastVisitedAt?: string | null;
+            lastVisitNote?: string | null;
           }>;
         }>,
       ]);
@@ -821,6 +826,8 @@ export default function App() {
         visitedToday: p.visitedToday,
         visitNote: p.todayVisitNote ?? null,
         lastVisitedAt: p.lastVisitedAt ?? null,
+        lastVisitNote: p.lastVisitNote ?? p.todayVisitNote ?? null,
+        lastVisitHadPurchase: false,
       }));
       setRouteStores(sortDailyStoreCardsByDistance([...burqan, ...prospects], pos.lat, pos.lng, storeSortMode));
     } catch (e) {
@@ -1243,6 +1250,17 @@ export default function App() {
     });
   }
 
+  function setQtyExact(pid: number, value: number) {
+    const max = products.find((p) => p.id === pid)?.quantity ?? 0;
+    setCart((c) => {
+      const next = { ...c };
+      const q = Math.floor(value);
+      if (!Number.isFinite(q) || q <= 0) delete next[pid];
+      else next[pid] = Math.min(q, max);
+      return next;
+    });
+  }
+
   function setExchangeReturnQty(pid: number, delta: number) {
     setExchangeReturnCart((c) => {
       const q = (c[pid] ?? 0) + delta;
@@ -1613,6 +1631,7 @@ export default function App() {
       noImage: t.noImage,
       currency: t.currency,
       inCart: t.inCart,
+      qtyHint: t.qtyTypeHint,
     }),
     []
   );
@@ -1758,6 +1777,7 @@ export default function App() {
                   pending: t.dailyStoresPending,
                   lastVisit: t.dailyStoresLastVisit,
                   lastVisitNever: t.dailyStoresLastVisitNever,
+                  purchasedPreviousVisit: t.dailyStoresPurchasedPrevious,
                   searchPlaceholder: t.dailyStoresSearchPlaceholder,
                   filterAll: t.dailyStoresFilterAll,
                   filterPending: t.dailyStoresFilterPending,
@@ -1793,6 +1813,7 @@ export default function App() {
                       areaName: s.areaName,
                       visitedToday: s.visitedToday,
                       todayVisitNote: s.visitNote ?? null,
+                      lastVisitNote: s.lastVisitNote ?? null,
                     });
                     return;
                   }
@@ -1905,6 +1926,7 @@ export default function App() {
               pending: t.dailyStoresPending,
               lastVisit: t.dailyStoresLastVisit,
               lastVisitNever: t.dailyStoresLastVisitNever,
+              purchasedPreviousVisit: t.dailyStoresPurchasedPrevious,
               unknownArea: t.dailyStoresUnknownArea,
               storeCount: t.dailyStoresAreaCount,
               pendingCount: t.dailyStoresPendingCount,
@@ -2600,6 +2622,7 @@ export default function App() {
         onClose={() => setSelectedProduct(null)}
         onMinus={() => selectedProduct && setQty(selectedProduct.id, -1)}
         onPlus={() => selectedProduct && setQty(selectedProduct.id, 1)}
+        onSetQty={(qty) => selectedProduct && setQtyExact(selectedProduct.id, qty)}
       />
       <OrderConfirmModal
         visible={orderConfirmOpen}
@@ -2684,6 +2707,7 @@ export default function App() {
         storeName={activeStore?.name ?? ""}
         outstanding={deferredOutstanding}
         busy={deferredPayBusy}
+        serverError={deferredPayError}
         formatMoney={(n) => `${n.toFixed(2)} ${t.currency}`}
         labels={{
           title: t.collectDeferredTitle,
@@ -2697,17 +2721,26 @@ export default function App() {
           amountTooHigh: t.collectDeferredTooHigh,
         }}
         onClose={() => {
-          if (!deferredPayBusy) setDeferredPayOpen(false);
+          if (!deferredPayBusy) {
+            setDeferredPayOpen(false);
+            setDeferredPayError(null);
+          }
         }}
         onSubmit={({ amount, note }) => {
           if (!activeStore) return;
           setDeferredPayBusy(true);
+          setDeferredPayError(null);
           void apiPost(`/api/v1/rep/stores/${activeStore.id}/payments`, { amount, note })
             .then(() => {
               setDeferredPayOpen(false);
+              setDeferredPayError(null);
               showToast(t.collectDeferredDone, "success");
             })
-            .catch((e) => showToast(toArabicUserMessage(e, t.collectDeferredFailed), "error"))
+            .catch((e) => {
+              const msg = toArabicUserMessage(e, t.collectDeferredFailed);
+              setDeferredPayError(msg);
+              showToast(msg, "error");
+            })
             .finally(() => setDeferredPayBusy(false));
         }}
       />

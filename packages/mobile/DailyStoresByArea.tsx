@@ -13,6 +13,7 @@ import { theme } from "./theme";
 import type { DailyStoreCard } from "./storeTypes";
 import { formatMarketDate } from "./formatMarketDateTime";
 import { compareStoresByMode, type StoreSortMode } from "./geoDistance";
+import { lastVisitOutcomeText } from "./lastVisitOutcome";
 
 const { card, text, muted, line, accent, accentSoft, accentSoftCyan, radius, shadow } = theme;
 
@@ -36,6 +37,8 @@ export type DailyStoresLabels = {
   visitQr: string;
   lastVisit: (date: string) => string;
   lastVisitNever: string;
+  /** Under last visit when the previous activity day had a sale. */
+  purchasedPreviousVisit: string;
   nearestFirst?: string;
   refreshLocation?: string;
   sortByDistance?: string;
@@ -440,6 +443,7 @@ export default function DailyStoresByArea({
                         visitQrLabel={labels.visitQr}
                         lastVisitLabel={labels.lastVisit}
                         lastVisitNever={labels.lastVisitNever}
+                        purchasedPreviousVisit={labels.purchasedPreviousVisit}
                         onPress={() => onSelectStore(s)}
                       />
                     ))
@@ -461,6 +465,7 @@ function StoreRow({
   visitQrLabel,
   lastVisitLabel,
   lastVisitNever,
+  purchasedPreviousVisit,
   onPress,
 }: {
   store: DailyStoreCard;
@@ -470,6 +475,7 @@ function StoreRow({
   visitQrLabel: string;
   lastVisitLabel: (date: string) => string;
   lastVisitNever: string;
+  purchasedPreviousVisit: string;
   onPress: () => void;
 }) {
   const done = !!store.visitedToday;
@@ -478,6 +484,7 @@ function StoreRow({
     : done
       ? lastVisitLabel(formatMarketDate(new Date()))
       : lastVisitNever;
+  const outcome = lastVisitOutcomeText(store, purchasedPreviousVisit);
   return (
     <Pressable
       style={({ pressed }) => [
@@ -518,9 +525,12 @@ function StoreRow({
         <Text style={styles.storeLastVisit} numberOfLines={1}>
           {lastVisitText}
         </Text>
-        {done && store.visitNote ? (
-          <Text style={styles.storeNote} numberOfLines={2}>
-            {store.visitNote}
+        {outcome ? (
+          <Text
+            style={[styles.storeNote, store.lastVisitHadPurchase && styles.storeNotePurchased]}
+            numberOfLines={2}
+          >
+            {outcome}
           </Text>
         ) : null}
       </View>
@@ -784,6 +794,7 @@ const styles = StyleSheet.create({
   storeMeta: { color: muted, fontSize: 13, marginTop: 3, textAlign: "right" },
   storeLastVisit: { color: muted, fontSize: 12, marginTop: 4, textAlign: "right" },
   storeNote: { color: muted, fontSize: 12, marginTop: 6, textAlign: "right", fontStyle: "italic" },
+  storeNotePurchased: { color: "#16a34a", fontStyle: "normal", fontWeight: "600" },
   visitedPill: {
     flexDirection: "row-reverse",
     alignItems: "center",
