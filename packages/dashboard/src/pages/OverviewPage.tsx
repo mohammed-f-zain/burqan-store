@@ -99,7 +99,7 @@ type Analytics = {
   }[];
   recentOrders: {
     id: string;
-    storeId: number;
+    storeId: number | null;
     storeName: string;
     paymentType: string;
     totalAmount: number;

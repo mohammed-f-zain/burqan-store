@@ -233,11 +233,27 @@ router.get(
           payments_recorded: string;
         }>(
           `SELECT
-             (SELECT COUNT(*)::text FROM orders) AS order_count,
+             (SELECT COUNT(*)::text FROM (
+                SELECT id FROM orders
+                UNION ALL
+                SELECT id FROM external_sales
+              ) all_orders) AS order_count,
              (SELECT COUNT(*)::text FROM visits) AS visit_count,
-             (SELECT COALESCE(SUM(total_amount), 0)::text FROM orders) AS revenue,
-             (SELECT COALESCE(SUM(CASE WHEN payment_type = 'cash' THEN total_amount ELSE 0 END), 0)::text FROM orders) AS cash_revenue,
-             (SELECT COALESCE(SUM(CASE WHEN payment_type = 'deferred' THEN total_amount ELSE 0 END), 0)::text FROM orders) AS deferred_revenue,
+             (SELECT COALESCE(SUM(total_amount), 0)::text FROM (
+                SELECT total_amount FROM orders
+                UNION ALL
+                SELECT total_amount FROM external_sales
+              ) sales) AS revenue,
+             (SELECT COALESCE(SUM(total_amount), 0)::text FROM (
+                SELECT total_amount FROM orders WHERE payment_type = 'cash'
+                UNION ALL
+                SELECT total_amount FROM external_sales WHERE payment_type = 'cash'
+              ) cash_sales) AS cash_revenue,
+             (SELECT COALESCE(SUM(total_amount), 0)::text FROM (
+                SELECT total_amount FROM orders WHERE payment_type = 'deferred'
+                UNION ALL
+                SELECT total_amount FROM external_sales WHERE payment_type = 'deferred'
+              ) deferred_sales) AS deferred_revenue,
              (SELECT COALESCE(SUM(amount), 0)::text FROM store_payments) AS payments_recorded`
         ),
         query<{
@@ -247,10 +263,22 @@ router.get(
           week_orders: string;
         }>(
           `SELECT
-             (SELECT COUNT(*)::text FROM orders WHERE created_at >= ${monthStart}) AS month_orders,
-             (SELECT COALESCE(SUM(total_amount), 0)::text FROM orders WHERE created_at >= ${monthStart}) AS month_revenue,
+             (SELECT COUNT(*)::text FROM (
+                SELECT id FROM orders WHERE created_at >= ${monthStart}
+                UNION ALL
+                SELECT id FROM external_sales WHERE created_at >= ${monthStart}
+              ) month_orders) AS month_orders,
+             (SELECT COALESCE(SUM(total_amount), 0)::text FROM (
+                SELECT total_amount FROM orders WHERE created_at >= ${monthStart}
+                UNION ALL
+                SELECT total_amount FROM external_sales WHERE created_at >= ${monthStart}
+              ) month_sales) AS month_revenue,
              (SELECT COUNT(*)::text FROM visits WHERE visited_at >= ${monthStart}) AS month_visits,
-             (SELECT COUNT(*)::text FROM orders WHERE created_at >= ${weekStart}) AS week_orders`
+             (SELECT COUNT(*)::text FROM (
+                SELECT id FROM orders WHERE created_at >= ${weekStart}
+                UNION ALL
+                SELECT id FROM external_sales WHERE created_at >= ${weekStart}
+              ) week_orders) AS week_orders`
         ),
         query<{
           product_id: number;
@@ -260,13 +288,18 @@ router.get(
           revenue: string;
         }>(
           `SELECT p.id AS product_id, p.name, p.image_url,
-                  SUM(ol.quantity)::text AS quantity,
-                  SUM(ol.line_total)::text AS revenue
-           FROM order_lines ol
-           JOIN orders o ON o.id = ol.order_id
-           JOIN products p ON p.id = ol.product_id
+                  SUM(lines.quantity)::text AS quantity,
+                  SUM(lines.line_total)::text AS revenue
+           FROM (
+             SELECT ol.product_id, ol.quantity, ol.line_total
+             FROM order_lines ol
+             UNION ALL
+             SELECT el.product_id, el.quantity, el.line_total
+             FROM external_sale_lines el
+           ) lines
+           JOIN products p ON p.id = lines.product_id
            GROUP BY p.id, p.name, p.image_url
-           ORDER BY SUM(ol.quantity) DESC, p.name ASC`
+           ORDER BY SUM(lines.quantity) DESC, p.name ASC`
         ),
         query<{
           store_id: number;
@@ -276,13 +309,17 @@ router.get(
           revenue: string;
         }>(
           `SELECT s.id AS store_id, s.name, a.name AS area_name,
-                  COUNT(o.id)::text AS order_count,
-                  COALESCE(SUM(o.total_amount), 0)::text AS revenue
-           FROM orders o
-           JOIN stores s ON s.id = o.store_id
+                  COUNT(*)::text AS order_count,
+                  COALESCE(SUM(sales.total_amount), 0)::text AS revenue
+           FROM (
+             SELECT store_id, total_amount FROM orders
+             UNION ALL
+             SELECT store_id, total_amount FROM external_sales WHERE store_id IS NOT NULL
+           ) sales
+           JOIN stores s ON s.id = sales.store_id
            JOIN areas a ON a.id = s.area_id
            GROUP BY s.id, s.name, a.name
-           ORDER BY SUM(o.total_amount) DESC NULLS LAST
+           ORDER BY SUM(sales.total_amount) DESC NULLS LAST
            LIMIT 8`
         ),
         query<{
@@ -293,12 +330,16 @@ router.get(
           revenue: string;
         }>(
           `SELECT r.id AS rep_id, r.full_name AS name, r.image_url,
-                  COUNT(o.id)::text AS order_count,
-                  COALESCE(SUM(o.total_amount), 0)::text AS revenue
+                  COUNT(sales.total_amount)::text AS order_count,
+                  COALESCE(SUM(sales.total_amount), 0)::text AS revenue
            FROM representatives r
-           LEFT JOIN orders o ON o.representative_id = r.id
+           LEFT JOIN (
+             SELECT representative_id, total_amount FROM orders
+             UNION ALL
+             SELECT representative_id, total_amount FROM external_sales
+           ) sales ON sales.representative_id = r.id
            GROUP BY r.id, r.full_name, r.image_url
-           ORDER BY COALESCE(SUM(o.total_amount), 0) DESC NULLS LAST, r.full_name ASC`
+           ORDER BY COALESCE(SUM(sales.total_amount), 0) DESC NULLS LAST, r.full_name ASC`
         ),
         query<{ total_points: string; month_points: string }>(
           `SELECT
@@ -319,19 +360,30 @@ router.get(
         ),
         query<{
           id: string;
-          store_id: number;
+          store_id: number | null;
           store_name: string;
           payment_type: string;
           total_amount: string;
           created_at: string;
           rep_name: string;
         }>(
-          `SELECT o.id::text, o.store_id, s.name AS store_name, o.payment_type,
-                  o.total_amount::text AS total_amount, o.created_at, r.full_name AS rep_name
-           FROM orders o
-           JOIN stores s ON s.id = o.store_id
-           JOIN representatives r ON r.id = o.representative_id
-           ORDER BY o.id DESC
+          `SELECT * FROM (
+             SELECT o.id::text AS id, o.store_id, s.name AS store_name, o.payment_type,
+                    o.total_amount::text AS total_amount, o.created_at, r.full_name AS rep_name,
+                    o.id AS sort_id, o.created_at AS sort_at
+             FROM orders o
+             JOIN stores s ON s.id = o.store_id
+             JOIN representatives r ON r.id = o.representative_id
+             UNION ALL
+             SELECT ('ext-' || e.id::text) AS id, e.store_id,
+                    COALESCE(s2.name, e.store_name, 'بيع خارجي') AS store_name,
+                    e.payment_type, e.total_amount::text AS total_amount, e.created_at,
+                    r.full_name AS rep_name, e.id AS sort_id, e.created_at AS sort_at
+             FROM external_sales e
+             JOIN representatives r ON r.id = e.representative_id
+             LEFT JOIN stores s2 ON s2.id = e.store_id
+           ) recent
+           ORDER BY recent.sort_at DESC, recent.sort_id DESC
            LIMIT 8`
         ),
         query<{ note: string; count: string }>(
@@ -374,32 +426,67 @@ router.get(
         ),
         query<{ revenue: string; order_count: string; visit_count: string }>(
           `SELECT
-             COALESCE(SUM(o.total_amount), 0)::text AS revenue,
-             COUNT(o.id)::text AS order_count,
+             COALESCE((
+               SELECT SUM(total_amount) FROM (
+                 SELECT total_amount FROM orders
+                 WHERE (created_at AT TIME ZONE 'Asia/Amman')::date = timezone('Asia/Amman', now())::date
+                 UNION ALL
+                 SELECT total_amount FROM external_sales
+                 WHERE (created_at AT TIME ZONE 'Asia/Amman')::date = timezone('Asia/Amman', now())::date
+               ) today_sales
+             ), 0)::text AS revenue,
+             (
+               SELECT COUNT(*)::text FROM (
+                 SELECT id FROM orders
+                 WHERE (created_at AT TIME ZONE 'Asia/Amman')::date = timezone('Asia/Amman', now())::date
+                 UNION ALL
+                 SELECT id FROM external_sales
+                 WHERE (created_at AT TIME ZONE 'Asia/Amman')::date = timezone('Asia/Amman', now())::date
+               ) today_orders
+             ) AS order_count,
              (SELECT COUNT(*)::text FROM visits v
-              WHERE (v.visited_at AT TIME ZONE 'Asia/Amman')::date = timezone('Asia/Amman', now())::date) AS visit_count
-           FROM orders o
-           WHERE (o.created_at AT TIME ZONE 'Asia/Amman')::date = timezone('Asia/Amman', now())::date`
+              WHERE (v.visited_at AT TIME ZONE 'Asia/Amman')::date = timezone('Asia/Amman', now())::date) AS visit_count`
         ),
         query<{ revenue: string; order_count: string }>(
           `SELECT
-             COALESCE(SUM(o.total_amount), 0)::text AS revenue,
-             COUNT(o.id)::text AS order_count
-           FROM orders o
-           WHERE (o.created_at AT TIME ZONE 'Asia/Amman')::date = timezone('Asia/Amman', now())::date - 1`
+             COALESCE((
+               SELECT SUM(total_amount) FROM (
+                 SELECT total_amount FROM orders
+                 WHERE (created_at AT TIME ZONE 'Asia/Amman')::date = timezone('Asia/Amman', now())::date - 1
+                 UNION ALL
+                 SELECT total_amount FROM external_sales
+                 WHERE (created_at AT TIME ZONE 'Asia/Amman')::date = timezone('Asia/Amman', now())::date - 1
+               ) yesterday_sales
+             ), 0)::text AS revenue,
+             (
+               SELECT COUNT(*)::text FROM (
+                 SELECT id FROM orders
+                 WHERE (created_at AT TIME ZONE 'Asia/Amman')::date = timezone('Asia/Amman', now())::date - 1
+                 UNION ALL
+                 SELECT id FROM external_sales
+                 WHERE (created_at AT TIME ZONE 'Asia/Amman')::date = timezone('Asia/Amman', now())::date - 1
+               ) yesterday_orders
+             ) AS order_count`
         ),
         query<{ day: string; revenue: string; order_count: string; visit_count: string }>(
           `WITH days AS (
              SELECT (timezone('Asia/Amman', now())::date - offs) AS day
              FROM generate_series(13, 0, -1) AS offs
+           ),
+           sales AS (
+             SELECT (created_at AT TIME ZONE 'Asia/Amman')::date AS day, total_amount
+             FROM orders
+             UNION ALL
+             SELECT (created_at AT TIME ZONE 'Asia/Amman')::date AS day, total_amount
+             FROM external_sales
            )
            SELECT d.day::text AS day,
-                  COALESCE(SUM(o.total_amount), 0)::text AS revenue,
-                  COUNT(o.id)::text AS order_count,
+                  COALESCE(SUM(s.total_amount), 0)::text AS revenue,
+                  COUNT(s.total_amount)::text AS order_count,
                   (SELECT COUNT(*)::text FROM visits v
                    WHERE (v.visited_at AT TIME ZONE 'Asia/Amman')::date = d.day) AS visit_count
            FROM days d
-           LEFT JOIN orders o ON (o.created_at AT TIME ZONE 'Asia/Amman')::date = d.day
+           LEFT JOIN sales s ON s.day = d.day
            GROUP BY d.day
            ORDER BY d.day ASC`
         ),
@@ -407,12 +494,20 @@ router.get(
           `SELECT
              COALESCE(SUM(CASE WHEN payment_type = 'cash' THEN total_amount ELSE 0 END), 0)::text AS cash_revenue,
              COALESCE(SUM(CASE WHEN payment_type = 'deferred' THEN total_amount ELSE 0 END), 0)::text AS deferred_revenue
-           FROM orders
+           FROM (
+             SELECT payment_type, total_amount, created_at FROM orders
+             UNION ALL
+             SELECT payment_type, total_amount, created_at FROM external_sales
+           ) sales
            WHERE created_at >= ${monthStart}`
         ),
         query<{ count: string }>(
           `SELECT COUNT(DISTINCT representative_id)::text AS count
-           FROM orders
+           FROM (
+             SELECT representative_id, created_at FROM orders
+             UNION ALL
+             SELECT representative_id, created_at FROM external_sales
+           ) sales
            WHERE (created_at AT TIME ZONE 'Asia/Amman')::date = timezone('Asia/Amman', now())::date`
         ),
         query<{ count: string }>(
