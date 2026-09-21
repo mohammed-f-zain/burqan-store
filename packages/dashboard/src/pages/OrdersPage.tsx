@@ -6,6 +6,7 @@ import { useAuth } from "../auth/AuthContext";
 import PaginationBar from "../components/PaginationBar";
 import TableFilterBar from "../components/TableFilterBar";
 import { useTableFilters } from "../hooks/useTableFilters";
+import { PAGE_SIZE_OPTIONS } from "../hooks/useClientPagination";
 import { useLocale } from "../i18n/LocaleContext";
 import { pickAxiosErrorMessage } from "../lib/apiError";
 import { ownerFormatMoney } from "../owner/ownerFormat";
@@ -37,6 +38,15 @@ type OrderSummary = {
   totalRevenue: number;
   monthOrderCount: number;
   monthRevenue: number;
+  filteredCount: number;
+  filteredRevenue: number;
+};
+
+type OrdersPagination = {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
 };
 
 type RedemptionRow = {
@@ -55,6 +65,7 @@ type RedemptionRow = {
 
 type AreaOption = { id: number; name: string };
 type ProductOption = { id: number; name: string };
+type RepOption = { id: number; full_name: string };
 
 const ORDER_FILTER_KEYS = [
   "dateFrom",
@@ -69,37 +80,89 @@ const ORDER_FILTER_KEYS = [
   "source",
 ] as const;
 
+function parsePositiveInt(raw: string | null, fallback: number): number {
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
+}
+
 export default function OrdersPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { can } = useAuth();
   const { t, locale } = useLocale();
-  const orderInitialFilters = useMemo(
-    () => filtersFromSearchParams(searchParams, ORDER_FILTER_KEYS),
-    [searchParams]
+
+  const [pageTab, setPageTab] = useState<PageTab>(() =>
+    searchParams.get("tab") === "redemptions" ? "redemptions" : "sales"
   );
-  const [pageTab, setPageTab] = useState<PageTab>(() => (searchParams.get("tab") === "redemptions" ? "redemptions" : "sales"));
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [redemptions, setRedemptions] = useState<RedemptionRow[]>([]);
   const [summary, setSummary] = useState<OrderSummary | null>(null);
+  const [serverPagination, setServerPagination] = useState<OrdersPagination>({
+    page: 1,
+    pageSize: 20,
+    total: 0,
+    totalPages: 1,
+  });
+  const [ordersLoading, setOrdersLoading] = useState(false);
   const [redemptionsLoading, setRedemptionsLoading] = useState(false);
   const [areas, setAreas] = useState<AreaOption[]>([]);
   const [products, setProducts] = useState<ProductOption[]>([]);
+  const [reps, setReps] = useState<RepOption[]>([]);
+
+  const [search, setSearchState] = useState(() => searchParams.get("q") ?? "");
+  const [filters, setFilters] = useState<Record<string, string>>(() =>
+    filtersFromSearchParams(searchParams, ORDER_FILTER_KEYS)
+  );
+  const [showFilters, setShowFilters] = useState(
+    () =>
+      (searchParams.get("q") ?? "").trim() !== "" ||
+      ORDER_FILTER_KEYS.some((k) => (searchParams.get(k) ?? "").trim() !== "")
+  );
+  const [page, setPage] = useState(() => parsePositiveInt(searchParams.get("page"), 1));
+  const [pageSize, setPageSizeState] = useState(() => {
+    const n = parsePositiveInt(searchParams.get("pageSize"), 20);
+    return PAGE_SIZE_OPTIONS.includes(n as (typeof PAGE_SIZE_OPTIONS)[number]) ? n : 20;
+  });
+
   const canDelete = can("orders.delete");
   const canRedeemRead = can("redeem.read");
   const canRedeemDelete = can("redeem.write") || can("orders.delete");
 
-  const repFilterOptions = useMemo(() => {
-    const names = new Set<string>();
-    for (const o of orders) {
-      const n = o.rep_name?.trim();
-      if (n) names.add(n);
-    }
-    return [...names]
-      .sort((a, b) => a.localeCompare(b, "ar"))
-      .map((name) => ({ value: name, label: name }));
-  }, [orders]);
+  const filtersKey = useMemo(() => JSON.stringify(filters), [filters]);
+
+  const hasActiveFilters =
+    search.trim() !== "" || Object.values(filters).some((v) => v !== "");
+
+  function setSearch(value: string) {
+    setSearchState(value);
+    setPage(1);
+  }
+
+  function setFilter(id: string, value: string) {
+    setFilters((prev) => ({ ...prev, [id]: value }));
+    setPage(1);
+  }
+
+  function clearFilters() {
+    setSearchState("");
+    setFilters({});
+    setPage(1);
+  }
+
+  function setPageSize(n: number) {
+    setPageSizeState(n);
+    setPage(1);
+  }
+
+  const repFilterOptions = useMemo(
+    () =>
+      reps
+        .slice()
+        .sort((a, b) => a.full_name.localeCompare(b.full_name, "ar"))
+        .map((r) => ({ value: r.full_name, label: r.full_name })),
+    [reps]
+  );
 
   const paymentTypeOptions = useMemo(
     () => [
@@ -137,59 +200,55 @@ export default function OrdersPage() {
 
   const orderFilterFields = useMemo(
     () => [
-      { id: "id", label: t.orders.colId, type: "text" as const, getValue: (o: OrderRow) => o.id },
-      { id: "store", label: t.orders.colStore, type: "text" as const, getValue: (o: OrderRow) => o.store_name },
+      { id: "id", label: t.orders.colId, type: "text" as const, getValue: () => "" },
+      { id: "store", label: t.orders.colStore, type: "text" as const, getValue: () => "" },
       {
         id: "area",
         label: t.orders.colArea,
         type: "searchableSelect" as const,
-        getValue: (o: OrderRow) => o.area_name ?? "",
+        getValue: () => "",
         options: areaFilterOptions,
       },
       {
         id: "productId",
         label: t.orders.colProducts,
         type: "searchableSelect" as const,
-        getValue: (o: OrderRow) => o.product_ids ?? "",
+        getValue: () => "",
         options: productFilterOptions,
-        matches: (o: OrderRow, filterVal: string) => {
-          const ids = (o.product_ids ?? "").split("|").filter(Boolean);
-          return ids.includes(filterVal);
-        },
       },
       {
         id: "source",
         label: t.orders.colSource,
         type: "select" as const,
-        getValue: (o: OrderRow) => o.source ?? "store",
+        getValue: () => "",
         options: sourceOptions,
       },
       {
         id: "rep",
         label: t.orders.colRep,
         type: "searchableSelect" as const,
-        getValue: (o: OrderRow) => o.rep_name,
+        getValue: () => "",
         options: repFilterOptions,
       },
       {
         id: "type",
         label: t.orders.colType,
         type: "select" as const,
-        getValue: (o: OrderRow) => o.payment_type,
+        getValue: () => "",
         options: paymentTypeOptions,
       },
-      { id: "total", label: t.orders.colTotal, type: "text" as const, getValue: (o: OrderRow) => o.total_amount },
+      { id: "total", label: t.orders.colTotal, type: "text" as const, getValue: () => "" },
       {
         id: "dateFrom",
         label: t.orders.dateFrom,
         type: "dateFrom" as const,
-        getValue: (o: OrderRow) => o.created_at,
+        getValue: () => "",
       },
       {
         id: "dateTo",
         label: t.orders.dateTo,
         type: "dateTo" as const,
-        getValue: (o: OrderRow) => o.created_at,
+        getValue: () => "",
       },
     ],
     [
@@ -211,30 +270,25 @@ export default function OrdersPage() {
     ]
   );
 
-  const orderTable = useTableFilters(orders, {
-    searchAccessors: [
-      "id",
-      "store_name",
-      "area_name",
-      "rep_name",
-      "payment_type",
-      "total_amount",
-      "product_names",
-      (o) => o.source ?? "store",
-      (o) => formatMarketDateTime(o.created_at),
-    ],
-    fields: orderFilterFields,
-    initialFilters: orderInitialFilters,
-    initialSearch: searchParams.get("q") ?? "",
-  });
-  const orderPgn = orderTable.pagination;
-
-  const selectedRepName = (orderTable.filters.rep ?? "").trim();
+  const selectedRepName = (filters.rep ?? "").trim();
   const selectedRepId = useMemo(() => {
     if (!selectedRepName) return null;
-    const hit = orders.find((o) => o.rep_name?.trim() === selectedRepName);
-    return hit?.representative_id ?? null;
-  }, [orders, selectedRepName]);
+    const hit = reps.find((r) => r.full_name.trim() === selectedRepName);
+    return hit?.id ?? null;
+  }, [reps, selectedRepName]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const productsRes = await api
+          .get<{ products: ProductOption[] }>("/products")
+          .catch(() => ({ data: { products: [] as ProductOption[] } }));
+        setProducts((productsRes.data.products ?? []).map((p) => ({ id: p.id, name: p.name })));
+      } catch {
+        setProducts([]);
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     void (async () => {
@@ -250,26 +304,29 @@ export default function OrdersPage() {
   }, [selectedRepId]);
 
   useEffect(() => {
-    const areaVal = (orderTable.filters.area ?? "").trim();
+    const areaVal = (filters.area ?? "").trim();
     if (!areaVal) return;
     if (areas.length === 0) return;
     if (!areas.some((a) => a.name === areaVal)) {
-      orderTable.setFilter("area", "");
+      setFilters((prev) => ({ ...prev, area: "" }));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when area options or selected area change
-  }, [areas, orderTable.filters.area]);
+  }, [areas, filters.area]);
 
   useEffect(() => {
     if (pageTab !== "sales") return;
     const next = searchParamsFromTableState({
-      filters: orderTable.filters,
-      search: orderTable.search,
+      filters,
+      search,
+      extra: {
+        page: page > 1 ? String(page) : undefined,
+        pageSize: pageSize !== 20 ? String(pageSize) : undefined,
+      },
     });
     const cur = searchParams.toString();
     const nxt = next.toString();
     if (cur !== nxt) setSearchParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- sync sales filters to URL
-  }, [orderTable.filters, orderTable.search, pageTab]);
+  }, [filters, search, page, pageSize, pageTab]);
 
   useEffect(() => {
     if (pageTab === "redemptions") {
@@ -283,6 +340,64 @@ export default function OrdersPage() {
       );
     }
   }, [pageTab, setSearchParams]);
+
+  useEffect(() => {
+    if (pageTab !== "sales") return;
+    let cancelled = false;
+    const handle = window.setTimeout(() => {
+      void (async () => {
+        setOrdersLoading(true);
+        try {
+          const params: Record<string, string | number> = {
+            page,
+            pageSize,
+          };
+          const q = search.trim();
+          if (q) params.q = q;
+          for (const key of ORDER_FILTER_KEYS) {
+            const v = (filters[key] ?? "").trim();
+            if (!v) continue;
+            if (key === "productId") {
+              const id = Number(v);
+              if (Number.isFinite(id) && id > 0) params.productId = id;
+              continue;
+            }
+            params[key] = v;
+          }
+          const { data } = await api.get<{
+            orders: OrderRow[];
+            summary: OrderSummary;
+            pagination: OrdersPagination;
+            filterOptions?: { reps: RepOption[] };
+          }>("/orders", { params });
+          if (cancelled) return;
+          setOrders(data.orders ?? []);
+          setSummary(data.summary);
+          setServerPagination(
+            data.pagination ?? {
+              page,
+              pageSize,
+              total: data.summary?.filteredCount ?? 0,
+              totalPages: 1,
+            }
+          );
+          if (data.filterOptions?.reps) {
+            setReps(data.filterOptions.reps);
+          }
+        } catch (e) {
+          if (!cancelled) {
+            toastError(pickAxiosErrorMessage(e, t.orders.loadFailed));
+          }
+        } finally {
+          if (!cancelled) setOrdersLoading(false);
+        }
+      })();
+    }, 280);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(handle);
+    };
+  }, [page, pageSize, filtersKey, search, pageTab, filters, t.orders.loadFailed]);
 
   const redemptionFilterFields = useMemo(
     () => [
@@ -338,11 +453,6 @@ export default function OrdersPage() {
   });
   const redemptionPgn = redemptionTable.pagination;
 
-  const filteredTotalAmount = useMemo(
-    () => orderTable.filtered.reduce((sum, o) => sum + (parseFloat(o.total_amount) || 0), 0),
-    [orderTable.filtered]
-  );
-
   const filteredPointsTotal = useMemo(
     () => redemptionTable.filtered.reduce((sum, r) => sum + r.totalPointsSpent, 0),
     [redemptionTable.filtered]
@@ -360,14 +470,43 @@ export default function OrdersPage() {
     return lines.map((l) => `${l.productName} ×${l.quantity}`).join(" · ");
   }
 
-  async function loadOrders() {
-    const [{ data }, productsRes] = await Promise.all([
-      api.get<{ orders: OrderRow[]; summary: OrderSummary }>("/orders"),
-      api.get<{ products: ProductOption[] }>("/products").catch(() => ({ data: { products: [] as ProductOption[] } })),
-    ]);
-    setOrders(data.orders);
-    setSummary(data.summary);
-    setProducts((productsRes.data.products ?? []).map((p) => ({ id: p.id, name: p.name })));
+  async function reloadOrders() {
+    try {
+      const params: Record<string, string | number> = { page, pageSize };
+      const q = search.trim();
+      if (q) params.q = q;
+      for (const key of ORDER_FILTER_KEYS) {
+        const v = (filters[key] ?? "").trim();
+        if (!v) continue;
+        if (key === "productId") {
+          const id = Number(v);
+          if (Number.isFinite(id) && id > 0) params.productId = id;
+          continue;
+        }
+        params[key] = v;
+      }
+      const { data } = await api.get<{
+        orders: OrderRow[];
+        summary: OrderSummary;
+        pagination: OrdersPagination;
+        filterOptions?: { reps: RepOption[] };
+      }>("/orders", { params });
+      setOrders(data.orders ?? []);
+      setSummary(data.summary);
+      setServerPagination(
+        data.pagination ?? {
+          page,
+          pageSize,
+          total: data.summary?.filteredCount ?? 0,
+          totalPages: 1,
+        }
+      );
+      if (data.filterOptions?.reps) {
+        setReps(data.filterOptions.reps);
+      }
+    } catch (e) {
+      toastError(pickAxiosErrorMessage(e, t.orders.loadFailed));
+    }
   }
 
   async function loadRedemptions() {
@@ -384,10 +523,6 @@ export default function OrdersPage() {
       setRedemptionsLoading(false);
     }
   }
-
-  useEffect(() => {
-    void loadOrders();
-  }, []);
 
   useEffect(() => {
     if (pageTab === "redemptions" && canRedeemRead) {
@@ -412,7 +547,7 @@ export default function OrdersPage() {
     if (!ok) return;
     try {
       await api.delete(`/orders/${id}`);
-      await loadOrders();
+      await reloadOrders();
       toastSuccess(t.orders.deleted);
     } catch (err) {
       toastError(pickAxiosErrorMessage(err, t.orders.deleteFailed));
@@ -438,8 +573,14 @@ export default function OrdersPage() {
     }
   }
 
-  const showingFiltered = orderTable.hasActiveFilters;
+  const showingFiltered = hasActiveFilters;
   const showingRedemptionFiltered = redemptionTable.hasActiveFilters;
+  const filteredCount = summary?.filteredCount ?? serverPagination.total;
+  const filteredRevenue = summary?.filteredRevenue ?? 0;
+  const pgnFrom =
+    filteredCount === 0 ? 0 : (serverPagination.page - 1) * serverPagination.pageSize + 1;
+  const pgnTo =
+    filteredCount === 0 ? 0 : Math.min(serverPagination.page * serverPagination.pageSize, filteredCount);
 
   return (
     <div className="grid">
@@ -472,11 +613,17 @@ export default function OrdersPage() {
           <>
             <p className="muted small">{t.orders.rowHint}</p>
             <TableFilterBar
-              {...orderTable}
-              onSearchChange={orderTable.setSearch}
-              onFilterChange={orderTable.setFilter}
-              onClear={orderTable.clearFilters}
-              onToggleFilters={() => orderTable.setShowFilters((v) => !v)}
+              search={search}
+              filters={filters}
+              showFilters={showFilters}
+              fields={orderFilterFields}
+              totalCount={summary?.totalCount ?? 0}
+              filteredCount={filteredCount}
+              hasActiveFilters={hasActiveFilters}
+              onSearchChange={setSearch}
+              onFilterChange={setFilter}
+              onClear={clearFilters}
+              onToggleFilters={() => setShowFilters((v) => !v)}
               pinnedFieldIds={["dateFrom", "dateTo", "type", "rep", "area", "productId"]}
               labels={t.tableFilters}
             />
@@ -486,40 +633,46 @@ export default function OrdersPage() {
                   <span className="muted small">
                     {showingFiltered ? t.orders.filteredOrders : t.orders.allOrdersCount}
                   </span>
-                  <strong>{showingFiltered ? orderTable.filteredCount : summary.totalCount}</strong>
+                  <strong>{showingFiltered ? filteredCount : summary.totalCount}</strong>
                 </div>
                 <div className="stat-pill stat-pill--accent">
                   <span className="muted small">{t.overview.monthRevenue}</span>
                   <strong>{formatMoney(summary.monthRevenue)}</strong>
-                  <span className="muted small orders-stat-sub">{t.orders.monthOrdersCount(summary.monthOrderCount)}</span>
+                  <span className="muted small orders-stat-sub">
+                    {t.orders.monthOrdersCount(summary.monthOrderCount)}
+                  </span>
                 </div>
                 <div className="stat-pill">
                   <span className="muted small">
                     {showingFiltered ? t.orders.filteredTotal : t.overview.totalRevenue}
                   </span>
-                  <strong>{formatMoney(showingFiltered ? filteredTotalAmount : summary.totalRevenue)}</strong>
+                  <strong>
+                    {formatMoney(showingFiltered ? filteredRevenue : summary.totalRevenue)}
+                  </strong>
                 </div>
                 {showingFiltered ? (
                   <span className="muted small orders-filter-totals-hint">
-                    {t.orders.filteredTotalsHint} · {t.tableFilters.filteredSummary(orderTable.filteredCount, orders.length)}
+                    {t.orders.filteredTotalsHint} ·{" "}
+                    {t.tableFilters.filteredSummary(filteredCount, summary.totalCount)}
                   </span>
                 ) : (
                   <span className="muted small orders-filter-totals-hint">{t.orders.totalsMatchHome}</span>
                 )}
               </div>
             )}
-            {orderTable.filteredCount > 0 && (
+            {ordersLoading ? <p className="muted">{t.common.loading}</p> : null}
+            {filteredCount > 0 && (
               <PaginationBar
                 className="pagination-bar--flush"
-                page={orderPgn.page}
-                totalPages={orderPgn.totalPages}
-                totalItems={orderPgn.total}
-                from={orderPgn.from}
-                to={orderPgn.to}
-                pageSize={orderPgn.pageSize}
-                pageSizeOptions={orderPgn.pageSizeOptions}
-                onPageChange={orderPgn.setPage}
-                onPageSizeChange={orderPgn.setPageSize}
+                page={serverPagination.page}
+                totalPages={serverPagination.totalPages}
+                totalItems={filteredCount}
+                from={pgnFrom}
+                to={pgnTo}
+                pageSize={pageSize}
+                pageSizeOptions={PAGE_SIZE_OPTIONS}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
               />
             )}
             <div className="table-wrap">
@@ -538,37 +691,53 @@ export default function OrdersPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {orderPgn.slice.map((o) => (
-                    <tr
-                      key={o.id}
-                      className="store-row"
-                      onClick={() => openOrder(String(o.id))}
-                      role="link"
-                      tabIndex={0}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          openOrder(String(o.id));
-                        }
-                      }}
-                    >
-                      <td className="strong">#{o.id}</td>
-                      <td>{o.store_name}</td>
-                      <td className="small">{o.product_names || "—"}</td>
-                      <td>{(o.source ?? "store") === "external" ? t.orders.sourceExternal : t.orders.sourceStore}</td>
-                      <td>{o.rep_name}</td>
-                      <td>{paymentTypeLabel(o.payment_type)}</td>
-                      <td>{formatMoney(parseFloat(o.total_amount) || 0)}</td>
-                      <td className="small muted">{formatMarketDateTime(o.created_at)}</td>
-                      {canDelete && (
-                        <td onClick={(e) => e.stopPropagation()}>
-                          <button type="button" className="ghost danger" onClick={(e) => void removeOrder(e, o.id)}>
-                            {t.orders.delete}
-                          </button>
-                        </td>
-                      )}
+                  {!ordersLoading && orders.length === 0 ? (
+                    <tr>
+                      <td colSpan={canDelete ? 9 : 8} className="muted">
+                        {t.tableFilters.noResults}
+                      </td>
                     </tr>
-                  ))}
+                  ) : (
+                    orders.map((o) => (
+                      <tr
+                        key={o.id}
+                        className="store-row"
+                        onClick={() => openOrder(String(o.id))}
+                        role="link"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            openOrder(String(o.id));
+                          }
+                        }}
+                      >
+                        <td className="strong">#{o.id}</td>
+                        <td>{o.store_name}</td>
+                        <td className="small">{o.product_names || "—"}</td>
+                        <td>
+                          {(o.source ?? "store") === "external"
+                            ? t.orders.sourceExternal
+                            : t.orders.sourceStore}
+                        </td>
+                        <td>{o.rep_name}</td>
+                        <td>{paymentTypeLabel(o.payment_type)}</td>
+                        <td>{formatMoney(parseFloat(o.total_amount) || 0)}</td>
+                        <td className="small muted">{formatMarketDateTime(o.created_at)}</td>
+                        {canDelete && (
+                          <td onClick={(e) => e.stopPropagation()}>
+                            <button
+                              type="button"
+                              className="ghost danger"
+                              onClick={(e) => void removeOrder(e, o.id)}
+                            >
+                              {t.orders.delete}
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -600,7 +769,13 @@ export default function OrdersPage() {
                   </div>
                   <div className="stat-pill stat-pill--accent">
                     <span className="muted small">{t.orders.colPoints}</span>
-                    <strong>{t.overview.loyaltyPoints(showingRedemptionFiltered ? filteredPointsTotal : redemptions.reduce((s, r) => s + r.totalPointsSpent, 0))}</strong>
+                    <strong>
+                      {t.overview.loyaltyPoints(
+                        showingRedemptionFiltered
+                          ? filteredPointsTotal
+                          : redemptions.reduce((s, r) => s + r.totalPointsSpent, 0)
+                      )}
+                    </strong>
                   </div>
                 </div>
                 {redemptionTable.filteredCount > 0 && (
@@ -642,7 +817,11 @@ export default function OrdersPage() {
                           <tr key={r.id}>
                             <td className="strong">#{r.id}</td>
                             <td>
-                              <Link to={`/app/stores/${r.storeId}`} className="linkish" onClick={(e) => e.stopPropagation()}>
+                              <Link
+                                to={`/app/stores/${r.storeId}`}
+                                className="linkish"
+                                onClick={(e) => e.stopPropagation()}
+                              >
                                 {r.storeName}
                               </Link>
                             </td>

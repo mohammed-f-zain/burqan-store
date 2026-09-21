@@ -3638,118 +3638,197 @@ router.patch(
   }
 );
 
+const ordersListQuerySchema = z.object({
+  storeId: z.coerce.number().int().positive().optional(),
+  page: z.coerce.number().int().positive().optional().default(1),
+  pageSize: z.coerce.number().int().positive().max(100).optional().default(20),
+  q: z.string().trim().max(200).optional(),
+  dateFrom: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  dateTo: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  type: z.enum(["cash", "deferred"]).optional(),
+  source: z.enum(["store", "external"]).optional(),
+  rep: z.string().trim().max(255).optional(),
+  area: z.string().trim().max(255).optional(),
+  store: z.string().trim().max(255).optional(),
+  id: z.string().trim().max(40).optional(),
+  total: z.string().trim().max(40).optional(),
+  productId: z.coerce.number().int().positive().optional(),
+});
+
 router.get(
   "/orders",
   adminAuthMiddleware,
   requireAdminPermission("orders.read"),
   async (req, res, next) => {
     try {
-      const storeId = req.query.storeId ? z.coerce.number().int().positive().parse(req.query.storeId) : null;
+      const q = ordersListQuerySchema.parse(req.query);
       const monthStart = `date_trunc('month', timezone('Asia/Amman', now()))`;
+      /** Store detail needs the full list for one store; list page paginates. */
+      const paginate = q.storeId == null;
+      const limit = paginate ? q.pageSize : 10_000;
+      const offset = paginate ? (q.page - 1) * q.pageSize : 0;
 
-      const [ordersResult, summaryResult] = await Promise.all([
-        storeId
-          ? query(
-              `SELECT * FROM (
-                 SELECT o.id::text AS id, 'store'::text AS source, o.representative_id, o.store_id,
-                        o.payment_type, o.total_amount, o.created_at,
-                        s.name AS store_name, a.id AS area_id, a.name AS area_name,
-                        r.full_name AS rep_name,
-                        COALESCE((
-                          SELECT string_agg(p.name, ', ' ORDER BY p.name)
-                          FROM order_lines ol
-                          JOIN products p ON p.id = ol.product_id
-                          WHERE ol.order_id = o.id
-                        ), '') AS product_names,
-                        COALESCE((
-                          SELECT string_agg(ol.product_id::text, '|' ORDER BY ol.product_id)
-                          FROM order_lines ol
-                          WHERE ol.order_id = o.id
-                        ), '') AS product_ids
-                 FROM orders o
-                 INNER JOIN stores s ON s.id = o.store_id
-                 INNER JOIN areas a ON a.id = s.area_id
-                 INNER JOIN representatives r ON r.id = o.representative_id
-                 WHERE o.store_id = $1
-                 UNION ALL
-                 SELECT ('ext-' || e.id::text) AS id, 'external'::text AS source, e.representative_id, e.store_id,
-                        e.payment_type, e.total_amount, e.created_at,
-                        COALESCE(s2.name, e.store_name) AS store_name,
-                        s2.area_id AS area_id, a2.name AS area_name,
-                        r.full_name AS rep_name,
-                        COALESCE((
-                          SELECT string_agg(p.name, ', ' ORDER BY p.name)
-                          FROM external_sale_lines el
-                          JOIN products p ON p.id = el.product_id
-                          WHERE el.external_sale_id = e.id
-                        ), '') AS product_names,
-                        COALESCE((
-                          SELECT string_agg(el.product_id::text, '|' ORDER BY el.product_id)
-                          FROM external_sale_lines el
-                          WHERE el.external_sale_id = e.id
-                        ), '') AS product_ids
-                 FROM external_sales e
-                 INNER JOIN representatives r ON r.id = e.representative_id
-                 LEFT JOIN stores s2 ON s2.id = e.store_id
-                 LEFT JOIN areas a2 ON a2.id = s2.area_id
-                 WHERE e.store_id = $1
-               ) x
-               ORDER BY x.created_at DESC, x.id DESC`,
-              [storeId]
-            )
-          : query(
-              `SELECT * FROM (
-                 SELECT o.id::text AS id, 'store'::text AS source, o.representative_id, o.store_id,
-                        o.payment_type, o.total_amount, o.created_at,
-                        s.name AS store_name, a.id AS area_id, a.name AS area_name,
-                        r.full_name AS rep_name,
-                        COALESCE((
-                          SELECT string_agg(p.name, ', ' ORDER BY p.name)
-                          FROM order_lines ol
-                          JOIN products p ON p.id = ol.product_id
-                          WHERE ol.order_id = o.id
-                        ), '') AS product_names,
-                        COALESCE((
-                          SELECT string_agg(ol.product_id::text, '|' ORDER BY ol.product_id)
-                          FROM order_lines ol
-                          WHERE ol.order_id = o.id
-                        ), '') AS product_ids
-                 FROM orders o
-                 INNER JOIN stores s ON s.id = o.store_id
-                 INNER JOIN areas a ON a.id = s.area_id
-                 INNER JOIN representatives r ON r.id = o.representative_id
-                 UNION ALL
-                 SELECT ('ext-' || e.id::text) AS id, 'external'::text AS source, e.representative_id,
-                        e.store_id, e.payment_type, e.total_amount, e.created_at,
-                        COALESCE(s2.name, e.store_name) AS store_name,
-                        s2.area_id AS area_id, a2.name AS area_name,
-                        r.full_name AS rep_name,
-                        COALESCE((
-                          SELECT string_agg(p.name, ', ' ORDER BY p.name)
-                          FROM external_sale_lines el
-                          JOIN products p ON p.id = el.product_id
-                          WHERE el.external_sale_id = e.id
-                        ), '') AS product_names,
-                        COALESCE((
-                          SELECT string_agg(el.product_id::text, '|' ORDER BY el.product_id)
-                          FROM external_sale_lines el
-                          WHERE el.external_sale_id = e.id
-                        ), '') AS product_ids
-                 FROM external_sales e
-                 INNER JOIN representatives r ON r.id = e.representative_id
-                 LEFT JOIN stores s2 ON s2.id = e.store_id
-                 LEFT JOIN areas a2 ON a2.id = s2.area_id
-               ) x
-               ORDER BY x.created_at DESC, x.id DESC`
-            ),
-        storeId
-          ? query<{
-              total_count: number;
-              total_revenue: string;
-              month_count: number;
-              month_revenue: string;
-            }>(
-              `SELECT
+      const params: unknown[] = [];
+      const add = (value: unknown) => {
+        params.push(value);
+        return `$${params.length}`;
+      };
+
+      const storeIdParam = q.storeId != null ? add(q.storeId) : null;
+      const dateFromParam = q.dateFrom ? add(q.dateFrom) : null;
+      const dateToParam = q.dateTo ? add(q.dateTo) : null;
+      const typeParam = q.type ? add(q.type) : null;
+      const repParam = q.rep ? add(q.rep) : null;
+      const areaParam = q.area ? add(q.area) : null;
+      const storeParam = q.store ? add(`%${q.store}%`) : null;
+      const idParam = q.id ? add(q.id) : null;
+      const totalParam = q.total ? add(`%${q.total}%`) : null;
+      const productIdParam = q.productId != null ? add(q.productId) : null;
+      const searchParam = q.q ? add(`%${q.q}%`) : null;
+      const sourceStoreOnly = q.source === "store";
+      const sourceExtOnly = q.source === "external";
+
+      const storeWhere = [
+        storeIdParam ? `o.store_id = ${storeIdParam}` : null,
+        typeParam ? `o.payment_type = ${typeParam}` : null,
+        dateFromParam
+          ? `(o.created_at AT TIME ZONE 'Asia/Amman')::date >= ${dateFromParam}::date`
+          : null,
+        dateToParam ? `(o.created_at AT TIME ZONE 'Asia/Amman')::date <= ${dateToParam}::date` : null,
+        repParam ? `r.full_name = ${repParam}` : null,
+        areaParam ? `a.name = ${areaParam}` : null,
+        storeParam ? `s.name ILIKE ${storeParam}` : null,
+        idParam ? `o.id::text = ${idParam}` : null,
+        totalParam ? `o.total_amount::text ILIKE ${totalParam}` : null,
+        productIdParam
+          ? `EXISTS (SELECT 1 FROM order_lines olx WHERE olx.order_id = o.id AND olx.product_id = ${productIdParam})`
+          : null,
+        sourceExtOnly ? "FALSE" : null,
+      ]
+        .filter(Boolean)
+        .join(" AND ");
+
+      const extWhere = [
+        storeIdParam ? `e.store_id = ${storeIdParam}` : null,
+        typeParam ? `e.payment_type = ${typeParam}` : null,
+        dateFromParam
+          ? `(e.created_at AT TIME ZONE 'Asia/Amman')::date >= ${dateFromParam}::date`
+          : null,
+        dateToParam ? `(e.created_at AT TIME ZONE 'Asia/Amman')::date <= ${dateToParam}::date` : null,
+        repParam ? `r.full_name = ${repParam}` : null,
+        areaParam ? `a2.name = ${areaParam}` : null,
+        storeParam ? `COALESCE(s2.name, e.store_name) ILIKE ${storeParam}` : null,
+        idParam
+          ? `(('ext-' || e.id::text) = ${idParam} OR e.id::text = ${idParam})`
+          : null,
+        totalParam ? `e.total_amount::text ILIKE ${totalParam}` : null,
+        productIdParam
+          ? `EXISTS (SELECT 1 FROM external_sale_lines elx WHERE elx.external_sale_id = e.id AND elx.product_id = ${productIdParam})`
+          : null,
+        sourceStoreOnly ? "FALSE" : null,
+      ]
+        .filter(Boolean)
+        .join(" AND ");
+
+      const searchStoreSql = searchParam
+        ? `(o.id::text ILIKE ${searchParam}
+            OR s.name ILIKE ${searchParam}
+            OR a.name ILIKE ${searchParam}
+            OR r.full_name ILIKE ${searchParam}
+            OR o.payment_type ILIKE ${searchParam}
+            OR o.total_amount::text ILIKE ${searchParam}
+            OR COALESCE(pn.names, '') ILIKE ${searchParam})`
+        : null;
+      const searchExtSql = searchParam
+        ? `(('ext-' || e.id::text) ILIKE ${searchParam}
+            OR e.id::text ILIKE ${searchParam}
+            OR COALESCE(s2.name, e.store_name) ILIKE ${searchParam}
+            OR COALESCE(a2.name, '') ILIKE ${searchParam}
+            OR r.full_name ILIKE ${searchParam}
+            OR e.payment_type ILIKE ${searchParam}
+            OR e.total_amount::text ILIKE ${searchParam}
+            OR COALESCE(pn.names, '') ILIKE ${searchParam})`
+        : null;
+
+      const storeFilterSql = [storeWhere, searchStoreSql].filter(Boolean).join(" AND ");
+      const extFilterSql = [extWhere, searchExtSql].filter(Boolean).join(" AND ");
+
+      const storeSql = `
+        SELECT o.id::text AS id, 'store'::text AS source, o.representative_id, o.store_id,
+               o.payment_type, o.total_amount, o.created_at,
+               s.name AS store_name, a.id AS area_id, a.name AS area_name,
+               r.full_name AS rep_name,
+               COALESCE(pn.names, '') AS product_names,
+               COALESCE(pn.ids, '') AS product_ids
+        FROM orders o
+        INNER JOIN stores s ON s.id = o.store_id
+        INNER JOIN areas a ON a.id = s.area_id
+        INNER JOIN representatives r ON r.id = o.representative_id
+        LEFT JOIN LATERAL (
+          SELECT string_agg(p.name, ', ' ORDER BY p.name) AS names,
+                 string_agg(ol.product_id::text, '|' ORDER BY ol.product_id) AS ids
+          FROM order_lines ol
+          JOIN products p ON p.id = ol.product_id
+          WHERE ol.order_id = o.id
+        ) pn ON TRUE
+        ${storeFilterSql ? `WHERE ${storeFilterSql}` : ""}`;
+
+      const extSql = `
+        SELECT ('ext-' || e.id::text) AS id, 'external'::text AS source, e.representative_id, e.store_id,
+               e.payment_type, e.total_amount, e.created_at,
+               COALESCE(s2.name, e.store_name) AS store_name,
+               s2.area_id AS area_id, a2.name AS area_name,
+               r.full_name AS rep_name,
+               COALESCE(pn.names, '') AS product_names,
+               COALESCE(pn.ids, '') AS product_ids
+        FROM external_sales e
+        INNER JOIN representatives r ON r.id = e.representative_id
+        LEFT JOIN stores s2 ON s2.id = e.store_id
+        LEFT JOIN areas a2 ON a2.id = s2.area_id
+        LEFT JOIN LATERAL (
+          SELECT string_agg(p.name, ', ' ORDER BY p.name) AS names,
+                 string_agg(el.product_id::text, '|' ORDER BY el.product_id) AS ids
+          FROM external_sale_lines el
+          JOIN products p ON p.id = el.product_id
+          WHERE el.external_sale_id = e.id
+        ) pn ON TRUE
+        ${extFilterSql ? `WHERE ${extFilterSql}` : ""}`;
+
+      const unionSql = `(${storeSql}) UNION ALL (${extSql})`;
+
+      const limitParam = add(limit);
+      const offsetParam = add(offset);
+
+      const listParams = [...params];
+      const summaryParams = params.slice(0, params.length - 2); // without limit/offset
+
+      const [ordersResult, filteredSummaryResult, allTimeSummaryResult, repsResult] = await Promise.all([
+        query(
+          `SELECT * FROM (${unionSql}) x
+           ORDER BY x.created_at DESC, x.id DESC
+           LIMIT ${limitParam} OFFSET ${offsetParam}`,
+          listParams
+        ),
+        query<{ filtered_count: number; filtered_revenue: string }>(
+          `SELECT COUNT(*)::int AS filtered_count,
+                  COALESCE(SUM(total_amount), 0)::text AS filtered_revenue
+           FROM (${unionSql}) x`,
+          summaryParams
+        ),
+        query<{
+          total_count: number;
+          total_revenue: string;
+          month_count: number;
+          month_revenue: string;
+        }>(
+          q.storeId != null
+            ? `SELECT
                  COUNT(*)::int AS total_count,
                  COALESCE(SUM(total_amount), 0)::text AS total_revenue,
                  COUNT(*) FILTER (WHERE created_at >= ${monthStart})::int AS month_count,
@@ -3758,16 +3837,8 @@ router.get(
                  SELECT total_amount, created_at FROM orders WHERE store_id = $1
                  UNION ALL
                  SELECT total_amount, created_at FROM external_sales WHERE store_id = $1
-               ) sales`,
-              [storeId]
-            )
-          : query<{
-              total_count: number;
-              total_revenue: string;
-              month_count: number;
-              month_revenue: string;
-            }>(
-              `SELECT
+               ) sales`
+            : `SELECT
                  COUNT(*)::int AS total_count,
                  COALESCE(SUM(total_amount), 0)::text AS total_revenue,
                  COUNT(*) FILTER (WHERE created_at >= ${monthStart})::int AS month_count,
@@ -3776,19 +3847,42 @@ router.get(
                  SELECT total_amount, created_at FROM orders
                  UNION ALL
                  SELECT total_amount, created_at FROM external_sales
-               ) sales`
-            ),
+               ) sales`,
+          q.storeId != null ? [q.storeId] : []
+        ),
+        paginate
+          ? query<{ id: number; full_name: string }>(
+              `SELECT id, full_name FROM representatives ORDER BY full_name ASC`
+            )
+          : Promise.resolve({ rows: [] as { id: number; full_name: string }[] }),
       ]);
 
-      const s = summaryResult.rows[0];
+      const filteredCount = filteredSummaryResult.rows[0]?.filtered_count ?? 0;
+      const filteredRevenue = parseFloat(filteredSummaryResult.rows[0]?.filtered_revenue ?? "0") || 0;
+      const s = allTimeSummaryResult.rows[0];
+      const totalPages = filteredCount === 0 ? 1 : Math.ceil(filteredCount / (paginate ? q.pageSize : Math.max(filteredCount, 1)));
+
       res.json({
         orders: ordersResult.rows,
+        pagination: {
+          page: paginate ? q.page : 1,
+          pageSize: paginate ? q.pageSize : filteredCount,
+          total: filteredCount,
+          totalPages,
+        },
         summary: {
           totalCount: s?.total_count ?? 0,
           totalRevenue: parseFloat(s?.total_revenue ?? "0"),
           monthOrderCount: s?.month_count ?? 0,
           monthRevenue: parseFloat(s?.month_revenue ?? "0"),
+          filteredCount,
+          filteredRevenue,
         },
+        filterOptions: paginate
+          ? {
+              reps: repsResult.rows.map((r) => ({ id: r.id, full_name: r.full_name })),
+            }
+          : undefined,
       });
     } catch (e) {
       next(e);
