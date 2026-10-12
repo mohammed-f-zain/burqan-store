@@ -9,6 +9,7 @@ import {
   type ScheduleRow,
 } from "./RepRouteScheduleFields";
 import { useLocale } from "../i18n/LocaleContext";
+import { marketYearMonth } from "../lib/filterTableRows";
 import { pickAxiosErrorMessage } from "../lib/apiError";
 import { toastError, toastSuccess } from "../lib/toast";
 
@@ -18,23 +19,13 @@ type Props = {
   onClose: () => void;
 };
 
-function currentAmmanMonth(): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Amman",
-    year: "numeric",
-    month: "2-digit",
-  })
-    .format(new Date())
-    .slice(0, 7);
-}
-
 export default function RepRouteScheduleModal({ repId, repName, onClose }: Props) {
   const { t } = useLocale();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [zones, setZones] = useState<RouteZoneOption[]>([]);
   const [weeklyRows, setWeeklyRows] = useState<ScheduleRow[]>([]);
-  const [month, setMonth] = useState(currentAmmanMonth);
+  const [month, setMonth] = useState(marketYearMonth);
   const [days, setDays] = useState<CalendarDay[]>([]);
   const [pendingOverrides, setPendingOverrides] = useState<Record<string, number | null | "remove">>({});
 

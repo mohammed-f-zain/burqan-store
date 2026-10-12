@@ -14,22 +14,35 @@ function norm(s: string): string {
   return s.trim().toLowerCase();
 }
 
-/** YYYY-MM-DD in Asia/Amman for order date filtering. */
+/**
+ * YYYY-MM-DD in Asia/Amman.
+ * Uses formatToParts + Latin digits — do not rely on en-CA `.format()` string shape;
+ * some browsers/locales return MM/YYYY, Arabic-Indic digits, or other layouts and break APIs.
+ */
 export function toMarketDateString(value: string | number | Date): string {
-  return new Intl.DateTimeFormat("en-CA", {
+  const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "Asia/Amman",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).format(new Date(value));
+    numberingSystem: "latn",
+  }).formatToParts(new Date(value));
+  const pick = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? "";
+  return `${pick("year")}-${pick("month")}-${pick("day")}`;
 }
 
 export function marketToday(): string {
   return toMarketDateString(new Date());
 }
 
+/** YYYY-MM in Asia/Amman (route calendar month param). */
+export function marketYearMonth(today = marketToday()): string {
+  return today.slice(0, 7);
+}
+
 export function marketMonthStart(today = marketToday()): string {
-  return `${today.slice(0, 7)}-01`;
+  return `${marketYearMonth(today)}-01`;
 }
 
 /** Shift a YYYY-MM-DD calendar date by whole days (timezone-safe). */
