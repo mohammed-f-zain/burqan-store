@@ -9,6 +9,7 @@ export type RepRequestUser = {
   email: string;
   fullName: string;
   areaIds: number[];
+  isWholesaler: boolean;
 };
 
 declare global {
@@ -25,7 +26,12 @@ async function loadRep(repId: number): Promise<RepRequestUser | null> {
     email: string;
     full_name: string;
     is_active: boolean;
-  }>(`SELECT id, email, full_name, is_active FROM representatives WHERE id = $1`, [repId]);
+    is_wholesaler: boolean;
+  }>(
+    `SELECT id, email, full_name, is_active, COALESCE(is_wholesaler, false) AS is_wholesaler
+     FROM representatives WHERE id = $1`,
+    [repId]
+  );
   const row = rows[0];
   if (!row || !row.is_active) return null;
   return {
@@ -33,6 +39,7 @@ async function loadRep(repId: number): Promise<RepRequestUser | null> {
     email: row.email,
     fullName: row.full_name,
     areaIds: [],
+    isWholesaler: Boolean(row.is_wholesaler),
   };
 }
 

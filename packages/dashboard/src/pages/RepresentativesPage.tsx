@@ -29,6 +29,7 @@ type Rep = {
   phone: string;
   car_plate: string | null;
   is_active: boolean;
+  is_wholesaler?: boolean;
   route_schedule: unknown;
   image_url: string | null;
 };
@@ -71,6 +72,7 @@ export default function RepresentativesPage() {
   const [eCarPlate, setECarPlate] = useState("");
   const [eImagePath, setEImagePath] = useState("");
   const [eIsActive, setEIsActive] = useState(true);
+  const [eIsWholesaler, setEIsWholesaler] = useState(false);
   const [eNewPassword, setENewPassword] = useState("");
   const [eUploading, setEUploading] = useState(false);
   const [scheduleRep, setScheduleRep] = useState<{ id: number; name: string } | null>(null);
@@ -201,6 +203,7 @@ export default function RepresentativesPage() {
     setECarPlate(r.car_plate ?? "");
     setEImagePath(r.image_url ?? "");
     setEIsActive(r.is_active);
+    setEIsWholesaler(Boolean(r.is_wholesaler));
     setENewPassword("");
     void loadRepSchedule(r.id);
   }
@@ -221,6 +224,7 @@ export default function RepresentativesPage() {
         carPlate: eCarPlate.trim() || null,
         imageUrl: eImagePath === "" ? null : eImagePath || undefined,
         isActive: eIsActive,
+        isWholesaler: eIsWholesaler,
         newPassword: eNewPassword.trim().length >= 10 ? eNewPassword.trim() : undefined,
       });
       await saveRepSchedule(editId);
@@ -264,8 +268,23 @@ export default function RepresentativesPage() {
       { id: "car", label: t.reps.colCar, type: "text" as const, getValue: (r: Rep) => r.car_plate },
       { id: "schedule", label: t.reps.colSchedule, type: "text" as const, getValue: (r: Rep) => formatScheduleCell(r) },
       { id: "active", label: t.reps.colActive, type: "boolean" as const, getValue: (r: Rep) => r.is_active },
+      {
+        id: "wholesaler",
+        label: t.reps.colWholesaler,
+        type: "boolean" as const,
+        getValue: (r: Rep) => Boolean(r.is_wholesaler),
+      },
     ],
-    [t.reps.colActive, t.reps.colCar, t.reps.colEmail, t.reps.colName, t.reps.colSchedule, t.reps.phone, dayShort]
+    [
+      t.reps.colActive,
+      t.reps.colCar,
+      t.reps.colEmail,
+      t.reps.colName,
+      t.reps.colSchedule,
+      t.reps.colWholesaler,
+      t.reps.phone,
+      dayShort,
+    ]
   );
 
   const repTable = useTableFilters(reps, {
@@ -358,6 +377,7 @@ export default function RepresentativesPage() {
                 <th>{t.reps.colEmail}</th>
                 <th>{t.reps.colCar}</th>
                 <th>{t.reps.colSchedule}</th>
+                <th>{t.reps.colWholesaler}</th>
                 <th>{t.reps.colActive}</th>
                 {write && <th>{t.reps.colActions}</th>}
               </tr>
@@ -376,6 +396,11 @@ export default function RepresentativesPage() {
                   <td>{r.email}</td>
                   <td>{r.car_plate ?? "—"}</td>
                   <td className="small">{formatScheduleCell(r) || "—"}</td>
+                  <td>
+                    <span className={r.is_wholesaler ? "pill on" : "pill off"}>
+                      {r.is_wholesaler ? t.reps.wholesalerOn : t.reps.wholesalerOff}
+                    </span>
+                  </td>
                   <td>
                     {write ? (
                       <button
@@ -442,6 +467,15 @@ export default function RepresentativesPage() {
                 {t.reps.colActive}{" "}
                 <input type="checkbox" checked={eIsActive} onChange={(e) => setEIsActive(e.target.checked)} />
               </label>
+              <label>
+                {t.reps.colWholesaler}{" "}
+                <input
+                  type="checkbox"
+                  checked={eIsWholesaler}
+                  onChange={(e) => setEIsWholesaler(e.target.checked)}
+                />
+              </label>
+              <p className="muted small">{t.reps.wholesalerHint}</p>
               <label>
                 {t.reps.newPasswordHint}
                 <input value={eNewPassword} onChange={(e) => setENewPassword(e.target.value)} type="password" autoComplete="new-password" />

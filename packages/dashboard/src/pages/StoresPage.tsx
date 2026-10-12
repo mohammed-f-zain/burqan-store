@@ -21,6 +21,7 @@ type Store = {
   phone: string;
   owner_name: string;
   deferred_payment_enabled: boolean;
+  is_wholesale?: boolean;
   area_id: number;
   area_name: string;
   qr_public_token: string;
@@ -134,6 +135,12 @@ export default function StoresPage() {
         type: "boolean" as const,
         getValue: (s: Store) => s.deferred_payment_enabled,
       },
+      {
+        id: "wholesale",
+        label: t.stores.colWholesale,
+        type: "boolean" as const,
+        getValue: (s: Store) => Boolean(s.is_wholesale),
+      },
     ],
     [
       areaFilterOptions,
@@ -143,6 +150,7 @@ export default function StoresPage() {
       t.storeDetail.phone,
       t.stores.colArea,
       t.stores.colDeferred,
+      t.stores.colWholesale,
       t.stores.colOwner,
       t.stores.colQr,
       t.stores.colRegisteredBy,
@@ -321,7 +329,14 @@ export default function StoresPage() {
                   }}
                 >
                   <td>
-                    <div className="strong">{s.name}</div>
+                    <div className="strong" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      {s.name}
+                      {s.is_wholesale ? (
+                        <span className="pill on" title={t.stores.wholesaleHint}>
+                          {t.stores.wholesaleOn}
+                        </span>
+                      ) : null}
+                    </div>
                     <div className="muted small">{s.phone}</div>
                   </td>
                   <td>{s.area_name}</td>

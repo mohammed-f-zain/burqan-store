@@ -2114,6 +2114,7 @@ const repPatchSchema = z.object({
   imageUrl: optionalStoredImagePathNullableSchema,
   carPlate: z.string().nullable().optional(),
   isActive: z.boolean().optional(),
+  isWholesaler: z.boolean().optional(),
   newPassword: z.string().min(10).optional(),
 });
 
@@ -2132,6 +2133,7 @@ router.patch(
         body.imageUrl !== undefined ||
         body.carPlate !== undefined ||
         body.isActive !== undefined ||
+        body.isWholesaler !== undefined ||
         body.newPassword !== undefined;
       if (!hasAny) throw new HttpError(400, "لا توجد حقول للتحديث");
 
@@ -2156,6 +2158,7 @@ router.patch(
         if (body.imageUrl !== undefined) map.push(["image_url", body.imageUrl === null ? null : body.imageUrl]);
         if (body.carPlate !== undefined) map.push(["car_plate", body.carPlate]);
         if (body.isActive !== undefined) map.push(["is_active", body.isActive]);
+        if (body.isWholesaler !== undefined) map.push(["is_wholesaler", body.isWholesaler]);
         if (body.newPassword !== undefined) {
           const ph = await hashPassword(body.newPassword);
           map.push(["password_hash", ph]);
@@ -3550,6 +3553,7 @@ const patchStoreSchema = z.object({
   addressText: z.string().max(2000).nullable().optional(),
   imageUrl: optionalStoredImagePathNullableSchema.optional(),
   areaId: z.number().int().positive().optional(),
+  isWholesale: z.boolean().optional(),
 });
 
 router.patch(
@@ -3600,6 +3604,10 @@ router.patch(
       if (body.areaId !== undefined) {
         sets.push(`area_id = $${i++}`);
         vals.push(body.areaId);
+      }
+      if (body.isWholesale !== undefined) {
+        sets.push(`is_wholesale = $${i++}`);
+        vals.push(body.isWholesale);
       }
 
       if (sets.length === 0) throw new HttpError(400, "لا توجد حقول للتحديث");
@@ -3806,6 +3814,30 @@ router.patch(
         [id, body.enabled]
       );
       if (!rows[0]) throw new HttpError(404, "Store not found");
+      res.json({ store: rows[0] });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+const wholesaleSchema = z.object({ enabled: z.boolean() });
+
+router.patch(
+  "/stores/:id/wholesale",
+  adminAuthMiddleware,
+  requireAdminPermission("stores.write"),
+  async (req, res, next) => {
+    try {
+      const id = z.coerce.number().int().positive().parse(req.params.id);
+      const body = wholesaleSchema.parse(req.body);
+      const { rows } = await query(
+        `UPDATE stores SET is_wholesale = $2, updated_at = now()
+         WHERE id = $1
+         RETURNING id, is_wholesale`,
+        [id, body.enabled]
+      );
+      if (!rows[0]) throw new HttpError(404, "المتجر غير موجود");
       res.json({ store: rows[0] });
     } catch (e) {
       next(e);

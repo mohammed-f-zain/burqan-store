@@ -30,6 +30,7 @@ type StoreDetail = {
   area_name: string;
   area_id: number;
   deferred_payment_enabled: boolean;
+  is_wholesale?: boolean;
   qr_public_token: string;
   owner_portal_token: string;
   registered_by_rep_name: string | null;
@@ -303,6 +304,18 @@ export default function StoreDetailPage() {
     await load();
   }
 
+  async function toggleWholesale() {
+    if (!store || !can("stores.write")) return;
+    const next = !store.is_wholesale;
+    try {
+      await api.patch(`/stores/${store.id}/wholesale`, { enabled: next });
+      toastSuccess(next ? t.stores.wholesaleEnabled : t.stores.wholesaleDisabled);
+      await load();
+    } catch (e) {
+      toastError(pickAxiosErrorMessage(e, t.stores.saveFailed));
+    }
+  }
+
   async function removeStore() {
     if (!store || !canDeleteStore) return;
     const ok = await confirmDanger({
@@ -426,6 +439,16 @@ export default function StoreDetailPage() {
             {can("stores.deferred_toggle") && (
               <button type="button" className={store.deferred_payment_enabled ? "pill on" : "pill off"} onClick={() => void toggleDeferred()}>
                 {store.deferred_payment_enabled ? t.stores.open : t.stores.closed}
+              </button>
+            )}
+            {can("stores.write") && (
+              <button
+                type="button"
+                className={store.is_wholesale ? "pill on" : "pill off"}
+                onClick={() => void toggleWholesale()}
+                title={t.stores.wholesaleHint}
+              >
+                {store.is_wholesale ? t.stores.wholesaleOn : t.stores.wholesaleOff}
               </button>
             )}
             {can("orders.record_payment") && (

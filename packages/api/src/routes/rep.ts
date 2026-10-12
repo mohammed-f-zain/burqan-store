@@ -102,6 +102,7 @@ router.get("/me", repAuthMiddleware, async (req, res, next) => {
         phone: profile?.phone ?? "",
         imageUrl: profile?.image_url ?? null,
         carPlate: profile?.car_plate ?? null,
+        isWholesaler: Boolean(rep.isWholesaler),
         areas: today.route
           ? today.route.routeZone.areaNames.map((name, i) => ({
               id: today.route!.routeZone.areaIds[i] ?? i,
@@ -304,7 +305,17 @@ async function recordRepVisit(repId: number, storeId: number, note?: string | nu
   return rows[0];
 }
 
-function repCanAccessStore(store: { area_id: number }, expandedAreaIds: number[]): boolean {
+/**
+ * Wholesale stores: only wholesaler reps (any area).
+ * Normal stores: only non-wholesaler reps within today's route areas.
+ */
+function repCanAccessStore(
+  store: { area_id: number; is_wholesale?: boolean },
+  expandedAreaIds: number[],
+  isWholesaler: boolean
+): boolean {
+  if (store.is_wholesale) return isWholesaler;
+  if (isWholesaler) return false;
   return expandedAreaIds.includes(store.area_id);
 }
 
@@ -357,7 +368,7 @@ const STORE_LAST_VISIT_NOTE_SQL = `(
   LIMIT 1
 )`;
 
-async function loadStoreForRep(storeId: number, rep: { id: number }) {
+async function loadStoreForRep(storeId: number, rep: { id: number; isWholesaler: boolean }) {
   const today = await getRepTodayWorkAreaIds(rep.id);
   const { rows } = await query<{
     id: number;
@@ -371,6 +382,7 @@ async function loadStoreForRep(storeId: number, rep: { id: number }) {
     area_id: number;
     registered_by_representative_id: number | null;
     deferred_payment_enabled: boolean;
+    is_wholesale: boolean;
     owner_portal_token: string;
     qr_public_token: string;
     area_name: string;
@@ -386,8 +398,15 @@ async function loadStoreForRep(storeId: number, rep: { id: number }) {
   );
   const s = rows[0];
   if (!s) throw new HttpError(404, "المتجر غير موجود");
-  if (!repCanAccessStore(s, today.expandedAreaIds)) {
-    throw new HttpError(403, "المتجر ليس ضمن مسار اليوم");
+  if (!repCanAccessStore(s, today.expandedAreaIds, rep.isWholesaler)) {
+    throw new HttpError(
+      403,
+      s.is_wholesale
+        ? "متجر جملة — متاح لمندوبي الجملة فقط"
+        : rep.isWholesaler
+          ? "مندوب الجملة يرى متاجر الجملة فقط"
+          : "المتجر ليس ضمن مسار اليوم"
+    );
   }
   const ownerPortalUrl = `${config.ownerPortalBaseUrl}/owner?t=${encodeURIComponent(s.owner_portal_token)}`;
   return {
@@ -401,6 +420,7 @@ async function loadStoreForRep(storeId: number, rep: { id: number }) {
     imageUrl: s.image_url,
     areaId: s.area_id,
     deferredPaymentEnabled: s.deferred_payment_enabled,
+    isWholesale: Boolean(s.is_wholesale),
     qrPublicToken: s.qr_public_token,
     ownerPortalUrl,
     loyaltyPointsBalance: s.loyalty_points_balance,
@@ -1019,17 +1039,96 @@ router.get("/route/zone-status", repAuthMiddleware, async (req, res, next) => {
   }
 });
 
-/** Stores in today's route zone, nearest first from rep GPS. */
+/** Stores in today's route zone, nearest first from rep GPS (or all wholesale for wholesaler reps). */
 router.get("/stores/route", repAuthMiddleware, async (req, res, next) => {
   try {
     const rep = req.rep!;
     const loc = routeStoresQuerySchema.parse(req.query);
     const dayOfWeek = await ammanDayOfWeek();
+
+    if (rep.isWholesaler) {
+      const { rows } = await query<{
+        id: number;
+        name: string;
+        phone: string;
+        owner_name: string;
+        location_lat: number;
+        location_lng: number;
+        address_text: string | null;
+        deferred_payment_enabled: boolean;
+        image_url: string | null;
+        area_name: string;
+        governorate: string | null;
+        visited_today: boolean;
+        visit_note: string | null;
+        last_visited_at: Date | string | null;
+        last_visit_note: string | null;
+        last_visit_had_purchase: boolean;
+      }>(
+        `SELECT s.id, s.name, s.phone, s.owner_name, s.location_lat, s.location_lng,
+                s.address_text, s.image_url, s.deferred_payment_enabled,
+                a.name AS area_name, a.governorate,
+                EXISTS (
+                  SELECT 1 FROM visits v
+                  WHERE v.store_id = s.id
+                    AND v.representative_id = $1
+                    AND (v.visited_at AT TIME ZONE 'Asia/Amman')::date =
+                        (NOW() AT TIME ZONE 'Asia/Amman')::date
+                ) AS visited_today,
+                (
+                  SELECT v.note FROM visits v
+                  WHERE v.store_id = s.id
+                    AND v.representative_id = $1
+                    AND (v.visited_at AT TIME ZONE 'Asia/Amman')::date =
+                        (NOW() AT TIME ZONE 'Asia/Amman')::date
+                  ORDER BY v.visited_at DESC
+                  LIMIT 1
+                ) AS visit_note,
+                ${STORE_LAST_VISITED_AT_SQL} AS last_visited_at,
+                ${STORE_LAST_VISIT_NOTE_SQL} AS last_visit_note,
+                ${STORE_LAST_VISIT_HAD_PURCHASE_SQL} AS last_visit_had_purchase
+         FROM stores s
+         JOIN areas a ON a.id = s.area_id
+         WHERE s.is_wholesale = true
+         ORDER BY s.name ASC`,
+        [rep.id]
+      );
+      const sorted = sortStoresByDistance(rows, loc.lat, loc.lng);
+      return res.json({
+        active: true,
+        isWholesaler: true,
+        dayOfWeek,
+        dayName: ARABIC_WEEKDAY_NAMES[dayOfWeek],
+        routeZone: null,
+        stores: sorted.map((s) => ({
+          id: s.id,
+          source: "burqan" as const,
+          name: s.name,
+          phone: s.phone,
+          ownerName: s.owner_name,
+          location: { lat: s.location_lat, lng: s.location_lng },
+          addressText: s.address_text,
+          imageUrl: s.image_url,
+          areaName: formatAreaLabel(s.area_name, s.governorate),
+          deferredPaymentEnabled: s.deferred_payment_enabled,
+          isWholesale: true,
+          visitedToday: s.visited_today,
+          visitNote: s.visit_note,
+          lastVisitedAt: toIsoOrNull(s.last_visited_at),
+          lastVisitNote: s.last_visit_note,
+          lastVisitHadPurchase: Boolean(s.last_visit_had_purchase),
+          distanceM: Math.round(s.distance_m),
+          distanceLabel: formatDistanceM(s.distance_m),
+        })),
+      });
+    }
+
     const route = await getRepRouteZoneForDay(rep.id, dayOfWeek);
 
     if (!route?.expandedAreaIds.length) {
       return res.json({
         active: false,
+        isWholesaler: false,
         dayOfWeek,
         dayName: route?.dayName ?? ARABIC_WEEKDAY_NAMES[dayOfWeek],
         stores: [],
@@ -1082,6 +1181,7 @@ router.get("/stores/route", repAuthMiddleware, async (req, res, next) => {
        FROM stores s
        JOIN areas a ON a.id = s.area_id
        WHERE s.area_id = ANY($1::int[])
+         AND COALESCE(s.is_wholesale, false) = false
        ORDER BY s.name ASC`,
       [route.expandedAreaIds, rep.id]
     );
@@ -1090,6 +1190,7 @@ router.get("/stores/route", repAuthMiddleware, async (req, res, next) => {
 
     res.json({
       active: true,
+      isWholesaler: false,
       dayOfWeek: route.dayOfWeek,
       dayName: route.dayName,
       routeZone: {
@@ -1110,6 +1211,7 @@ router.get("/stores/route", repAuthMiddleware, async (req, res, next) => {
         imageUrl: s.image_url,
         areaName: formatAreaLabel(s.area_name, s.governorate),
         deferredPaymentEnabled: s.deferred_payment_enabled,
+        isWholesale: false,
         visitedToday: s.visited_today,
         visitNote: s.visit_note,
         lastVisitedAt: toIsoOrNull(s.last_visited_at),
@@ -1124,16 +1226,92 @@ router.get("/stores/route", repAuthMiddleware, async (req, res, next) => {
   }
 });
 
-/** Burqan stores in today's route zone for the home tab. */
+/** Burqan stores in today's route zone for the home tab (or all wholesale stores for wholesaler reps). */
 router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
   try {
     const rep = req.rep!;
     const today = await getRepTodayWorkAreaIds(rep.id);
+
+    if (rep.isWholesaler) {
+      const { rows } = await query<{
+        id: number;
+        name: string;
+        phone: string;
+        owner_name: string;
+        location_lat: number;
+        location_lng: number;
+        address_text: string | null;
+        deferred_payment_enabled: boolean;
+        image_url: string | null;
+        area_name: string;
+        governorate: string | null;
+        visited_today: boolean;
+        visit_note: string | null;
+        last_visited_at: Date | string | null;
+        last_visit_note: string | null;
+        last_visit_had_purchase: boolean;
+      }>(
+        `SELECT s.id, s.name, s.phone, s.owner_name, s.location_lat, s.location_lng,
+                s.address_text, s.image_url, s.deferred_payment_enabled,
+                a.name AS area_name, a.governorate,
+                EXISTS (
+                  SELECT 1 FROM visits v
+                  WHERE v.store_id = s.id
+                    AND v.representative_id = $1
+                    AND (v.visited_at AT TIME ZONE 'Asia/Amman')::date =
+                        (NOW() AT TIME ZONE 'Asia/Amman')::date
+                ) AS visited_today,
+                (
+                  SELECT v.note FROM visits v
+                  WHERE v.store_id = s.id
+                    AND v.representative_id = $1
+                    AND (v.visited_at AT TIME ZONE 'Asia/Amman')::date =
+                        (NOW() AT TIME ZONE 'Asia/Amman')::date
+                  ORDER BY v.visited_at DESC
+                  LIMIT 1
+                ) AS visit_note,
+                ${STORE_LAST_VISITED_AT_SQL} AS last_visited_at,
+                ${STORE_LAST_VISIT_NOTE_SQL} AS last_visit_note,
+                ${STORE_LAST_VISIT_HAD_PURCHASE_SQL} AS last_visit_had_purchase
+         FROM stores s
+         JOIN areas a ON a.id = s.area_id
+         WHERE s.is_wholesale = true
+         ORDER BY visited_today ASC, a.name ASC, s.name ASC`,
+        [rep.id]
+      );
+      return res.json({
+        stores: rows.map((s) => ({
+          id: s.id,
+          source: "burqan" as const,
+          name: s.name,
+          phone: s.phone,
+          ownerName: s.owner_name,
+          location: { lat: s.location_lat, lng: s.location_lng },
+          addressText: s.address_text,
+          imageUrl: s.image_url,
+          areaName: formatAreaLabel(s.area_name, s.governorate),
+          deferredPaymentEnabled: s.deferred_payment_enabled,
+          isWholesale: true,
+          visitedToday: s.visited_today,
+          visitNote: s.visit_note,
+          lastVisitedAt: toIsoOrNull(s.last_visited_at),
+          lastVisitNote: s.last_visit_note,
+          lastVisitHadPurchase: Boolean(s.last_visit_had_purchase),
+        })),
+        googlePlacesReady: false,
+        googlePlacesTotal: 0,
+        isWholesaler: true,
+        routeToday: null,
+        message: rows.length === 0 ? "لا توجد متاجر جملة بعد" : undefined,
+      });
+    }
+
     if (!today.expandedAreaIds.length) {
       return res.json({
         stores: [],
         googlePlacesReady: false,
         googlePlacesTotal: 0,
+        isWholesaler: false,
         routeToday: today.route
           ? { dayName: today.dayName, zoneName: today.route.routeZone.name }
           : null,
@@ -1184,6 +1362,7 @@ router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
        FROM stores s
        JOIN areas a ON a.id = s.area_id
        WHERE s.area_id = ANY($1::int[])
+         AND COALESCE(s.is_wholesale, false) = false
        ORDER BY visited_today ASC, a.name ASC, s.name ASC`,
       [areaFilterIds, rep.id]
     );
@@ -1209,6 +1388,7 @@ router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
         imageUrl: s.image_url,
         areaName: formatAreaLabel(s.area_name, s.governorate),
         deferredPaymentEnabled: s.deferred_payment_enabled,
+        isWholesale: false,
         visitedToday: s.visited_today,
         visitNote: s.visit_note,
         lastVisitedAt: toIsoOrNull(s.last_visited_at),
@@ -1217,6 +1397,7 @@ router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
       })),
       googlePlacesReady,
       googlePlacesTotal,
+      isWholesaler: false,
       routeToday: today.route
         ? { dayName: today.dayName, zoneName: today.route.routeZone.name }
         : null,
@@ -1657,7 +1838,7 @@ const orderSchema = z.object({
   repLng: z.number().min(-180).max(180),
 });
 
-async function loadStoreRowForRep(storeId: number, rep: { id: number }) {
+async function loadStoreRowForRep(storeId: number, rep: { id: number; isWholesaler: boolean }) {
   const today = await getRepTodayWorkAreaIds(rep.id);
   const { rows } = await query<{
     id: number;
@@ -1666,15 +1847,24 @@ async function loadStoreRowForRep(storeId: number, rep: { id: number }) {
     location_lat: number;
     location_lng: number;
     deferred_payment_enabled: boolean;
+    is_wholesale: boolean;
   }>(
-    `SELECT id, area_id, registered_by_representative_id, location_lat, location_lng, deferred_payment_enabled
+    `SELECT id, area_id, registered_by_representative_id, location_lat, location_lng,
+            deferred_payment_enabled, COALESCE(is_wholesale, false) AS is_wholesale
      FROM stores WHERE id = $1`,
     [storeId]
   );
   const s = rows[0];
   if (!s) throw new HttpError(404, "المتجر غير موجود");
-  if (!repCanAccessStore(s, today.expandedAreaIds)) {
-    throw new HttpError(403, "المتجر ليس ضمن مسار اليوم");
+  if (!repCanAccessStore(s, today.expandedAreaIds, rep.isWholesaler)) {
+    throw new HttpError(
+      403,
+      s.is_wholesale
+        ? "متجر جملة — متاح لمندوبي الجملة فقط"
+        : rep.isWholesaler
+          ? "مندوب الجملة يرى متاجر الجملة فقط"
+          : "المتجر ليس ضمن مسار اليوم"
+    );
   }
   return s;
 }
