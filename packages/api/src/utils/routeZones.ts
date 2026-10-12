@@ -10,6 +10,14 @@ export async function ammanDayOfWeek(): Promise<number> {
   return rows[0]?.dow ?? new Date().getDay();
 }
 
+/** YYYY-MM-DD in Asia/Amman. */
+export async function ammanDateString(): Promise<string> {
+  const { rows } = await query<{ d: string }>(
+    `SELECT to_char((NOW() AT TIME ZONE 'Asia/Amman')::date, 'YYYY-MM-DD') AS d`
+  );
+  return rows[0]?.d ?? new Date().toISOString().slice(0, 10);
+}
+
 export const ARABIC_WEEKDAY_NAMES = [
   "الأحد",
   "الإثنين",
@@ -41,6 +49,8 @@ export async function expandRouteZoneAreaIds(routeZoneId: number): Promise<numbe
 export type RepRouteZoneToday = {
   dayOfWeek: number;
   dayName: string;
+  workDate?: string;
+  source?: "override" | "weekly";
   routeZone: {
     id: number;
     name: string;
@@ -50,6 +60,42 @@ export type RepRouteZoneToday = {
   };
   expandedAreaIds: number[];
 };
+
+async function buildRoutePayload(
+  routeZoneId: number,
+  zoneName: string,
+  zoneNotes: string | null,
+  dayOfWeek: number,
+  workDate?: string,
+  source?: "override" | "weekly"
+): Promise<RepRouteZoneToday> {
+  const areaIds = await getRouteZoneAreaIds(routeZoneId);
+  const expandedAreaIds = areaIds.length ? await expandRepAreaIds(areaIds) : [];
+
+  let areaNames: string[] = [];
+  if (areaIds.length) {
+    const { rows: areaRows } = await query<{ name: string }>(
+      `SELECT name FROM areas WHERE id = ANY($1::int[]) ORDER BY name ASC`,
+      [areaIds]
+    );
+    areaNames = areaRows.map((a) => a.name);
+  }
+
+  return {
+    dayOfWeek,
+    dayName: arabicWeekdayName(dayOfWeek),
+    workDate,
+    source,
+    routeZone: {
+      id: routeZoneId,
+      name: zoneName,
+      notes: zoneNotes,
+      areaIds,
+      areaNames,
+    },
+    expandedAreaIds,
+  };
+}
 
 export async function getRepRouteZoneForDay(
   repId: number,
@@ -70,30 +116,54 @@ export async function getRepRouteZoneForDay(
   const row = rows[0];
   if (!row || !row.is_active) return null;
 
-  const areaIds = await getRouteZoneAreaIds(row.route_zone_id);
-  const expandedAreaIds = areaIds.length ? await expandRepAreaIds(areaIds) : [];
+  return buildRoutePayload(row.route_zone_id, row.zone_name, row.zone_notes, dayOfWeek, undefined, "weekly");
+}
 
-  let areaNames: string[] = [];
-  if (areaIds.length) {
-    const { rows: areaRows } = await query<{ name: string }>(
-      `SELECT name FROM areas WHERE id = ANY($1::int[]) ORDER BY name ASC`,
-      [areaIds]
+/**
+ * Resolve route for a calendar date (Asia/Amman YYYY-MM-DD):
+ * 1) date override (NULL zone = explicit off)
+ * 2) else weekday template
+ */
+export async function getRepRouteZoneForDate(
+  repId: number,
+  yyyyMmDd: string
+): Promise<RepRouteZoneToday | null> {
+  const { rows: meta } = await query<{ dow: number }>(
+    `SELECT EXTRACT(DOW FROM $1::date)::int AS dow`,
+    [yyyyMmDd]
+  );
+  const dayOfWeek = meta[0]?.dow ?? 0;
+
+  const { rows: overrideRows } = await query<{
+    route_zone_id: number | null;
+    zone_name: string | null;
+    zone_notes: string | null;
+    is_active: boolean | null;
+  }>(
+    `SELECT o.route_zone_id, rz.name AS zone_name, rz.notes AS zone_notes, rz.is_active
+     FROM rep_route_date_overrides o
+     LEFT JOIN route_zones rz ON rz.id = o.route_zone_id
+     WHERE o.representative_id = $1 AND o.work_date = $2::date`,
+    [repId, yyyyMmDd]
+  );
+
+  if (overrideRows[0]) {
+    const o = overrideRows[0];
+    if (o.route_zone_id == null) return null; // explicit off
+    if (!o.is_active || !o.zone_name) return null;
+    return buildRoutePayload(
+      o.route_zone_id,
+      o.zone_name,
+      o.zone_notes,
+      dayOfWeek,
+      yyyyMmDd,
+      "override"
     );
-    areaNames = areaRows.map((a) => a.name);
   }
 
-  return {
-    dayOfWeek,
-    dayName: arabicWeekdayName(dayOfWeek),
-    routeZone: {
-      id: row.route_zone_id,
-      name: row.zone_name,
-      notes: row.zone_notes,
-      areaIds,
-      areaNames,
-    },
-    expandedAreaIds,
-  };
+  const weekly = await getRepRouteZoneForDay(repId, dayOfWeek);
+  if (!weekly) return null;
+  return { ...weekly, workDate: yyyyMmDd, source: "weekly" };
 }
 
 export function sortStoresByDistance<
@@ -110,14 +180,21 @@ export function sortStoresByDistance<
 export async function getRepTodayWorkAreaIds(repId: number): Promise<{
   dayOfWeek: number;
   dayName: string;
+  workDate: string;
   route: RepRouteZoneToday | null;
   expandedAreaIds: number[];
 }> {
-  const dayOfWeek = await ammanDayOfWeek();
-  const route = await getRepRouteZoneForDay(repId, dayOfWeek);
+  const workDate = await ammanDateString();
+  const { rows: meta } = await query<{ dow: number }>(
+    `SELECT EXTRACT(DOW FROM $1::date)::int AS dow`,
+    [workDate]
+  );
+  const dayOfWeek = meta[0]?.dow ?? (await ammanDayOfWeek());
+  const route = await getRepRouteZoneForDate(repId, workDate);
   return {
     dayOfWeek,
     dayName: arabicWeekdayName(dayOfWeek),
+    workDate,
     route,
     expandedAreaIds: route?.expandedAreaIds ?? [],
   };

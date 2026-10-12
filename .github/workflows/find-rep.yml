@@ -31,9 +31,15 @@ jobs:
               DB_URL="$(grep -E '^DATABASE_URL=' packages/api/.env | head -1 | cut -d= -f2-)"
             fi
             Q="%${SEARCH_Q}%"
+            echo "=== trim messy rep names ==="
+            psql "$DB_URL" -P pager=off -c \
+              "UPDATE representatives
+               SET full_name = regexp_replace(btrim(full_name), '[[:space:]]+', ' ', 'g')
+               WHERE full_name <> regexp_replace(btrim(full_name), '[[:space:]]+', ' ', 'g')
+               RETURNING id, quote_literal(full_name);"
             echo "=== representatives ==="
             psql "$DB_URL" -P pager=off -c \
-              "SELECT id, full_name, email, is_active,
+              "SELECT id, quote_literal(full_name) AS full_name, email, is_active,
                       length(full_name) AS len,
                       encode(convert_to(full_name, 'UTF8'), 'hex') AS name_hex
                FROM representatives
@@ -49,4 +55,4 @@ jobs:
                ORDER BY r.id;"
             echo "=== all reps (id + name) ==="
             psql "$DB_URL" -P pager=off -c \
-              "SELECT id, full_name FROM representatives ORDER BY full_name;"
+              "SELECT id, quote_literal(full_name) FROM representatives ORDER BY full_name;"
