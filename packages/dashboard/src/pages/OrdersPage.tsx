@@ -160,7 +160,7 @@ export default function OrdersPage() {
       reps
         .slice()
         .sort((a, b) => a.full_name.localeCompare(b.full_name, "ar"))
-        .map((r) => ({ value: r.full_name, label: r.full_name })),
+        .map((r) => ({ value: String(r.id), label: r.full_name })),
     [reps]
   );
 
@@ -270,12 +270,25 @@ export default function OrdersPage() {
     ]
   );
 
-  const selectedRepName = (filters.rep ?? "").trim();
   const selectedRepId = useMemo(() => {
-    if (!selectedRepName) return null;
-    const hit = reps.find((r) => r.full_name.trim() === selectedRepName);
+    const raw = (filters.rep ?? "").trim();
+    if (!raw) return null;
+    if (/^\d+$/.test(raw)) {
+      const id = Number(raw);
+      return Number.isFinite(id) && id > 0 ? id : null;
+    }
+    // Legacy URL used rep display name — resolve to id once options load.
+    const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
+    const hit = reps.find((r) => norm(r.full_name) === norm(raw));
     return hit?.id ?? null;
-  }, [reps, selectedRepName]);
+  }, [reps, filters.rep]);
+
+  // Migrate legacy ?rep=<name> URLs to ?rep=<id> once we can resolve the name.
+  useEffect(() => {
+    const raw = (filters.rep ?? "").trim();
+    if (!raw || /^\d+$/.test(raw) || selectedRepId == null) return;
+    setFilters((prev) => ({ ...prev, rep: String(selectedRepId) }));
+  }, [filters.rep, selectedRepId]);
 
   useEffect(() => {
     void (async () => {
@@ -360,6 +373,15 @@ export default function OrdersPage() {
             if (key === "productId") {
               const id = Number(v);
               if (Number.isFinite(id) && id > 0) params.productId = id;
+              continue;
+            }
+            if (key === "rep") {
+              if (/^\d+$/.test(v)) {
+                const id = Number(v);
+                if (Number.isFinite(id) && id > 0) params.repId = id;
+              } else {
+                params.rep = v;
+              }
               continue;
             }
             params[key] = v;
@@ -481,6 +503,15 @@ export default function OrdersPage() {
         if (key === "productId") {
           const id = Number(v);
           if (Number.isFinite(id) && id > 0) params.productId = id;
+          continue;
+        }
+        if (key === "rep") {
+          if (/^\d+$/.test(v)) {
+            const id = Number(v);
+            if (Number.isFinite(id) && id > 0) params.repId = id;
+          } else {
+            params.rep = v;
+          }
           continue;
         }
         params[key] = v;

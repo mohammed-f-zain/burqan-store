@@ -1,0 +1,52 @@
+name: Find representative by name
+
+on:
+  workflow_dispatch:
+    inputs:
+      q:
+        description: Name fragment to search
+        required: true
+        default: harbi
+
+jobs:
+  find:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Search representatives and their orders
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          SEARCH_Q: ${{ inputs.q }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          envs: SEARCH_Q
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.DEPLOY_PATH }}"
+            DB_URL=""
+            if [[ -f /root/.burqan-db-url ]]; then
+              DB_URL="$(cat /root/.burqan-db-url | sed 's/^DATABASE_URL=//')"
+            elif [[ -f packages/api/.env ]]; then
+              DB_URL="$(grep -E '^DATABASE_URL=' packages/api/.env | head -1 | cut -d= -f2-)"
+            fi
+            Q="%${SEARCH_Q}%"
+            echo "=== representatives ==="
+            psql "$DB_URL" -P pager=off -c \
+              "SELECT id, full_name, email, is_active,
+                      length(full_name) AS len,
+                      encode(convert_to(full_name, 'UTF8'), 'hex') AS name_hex
+               FROM representatives
+               WHERE full_name ILIKE '$Q' OR email ILIKE '$Q'
+               ORDER BY id;"
+            echo "=== order counts by matching reps ==="
+            psql "$DB_URL" -P pager=off -c \
+              "SELECT r.id, r.full_name,
+                      (SELECT COUNT(*) FROM orders o WHERE o.representative_id = r.id) AS store_orders,
+                      (SELECT COUNT(*) FROM external_sales e WHERE e.representative_id = r.id) AS external_orders
+               FROM representatives r
+               WHERE r.full_name ILIKE '$Q' OR r.email ILIKE '$Q'
+               ORDER BY r.id;"
+            echo "=== all reps (id + name) ==="
+            psql "$DB_URL" -P pager=off -c \
+              "SELECT id, full_name FROM representatives ORDER BY full_name;"

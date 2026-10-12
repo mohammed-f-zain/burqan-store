@@ -3653,6 +3653,9 @@ const ordersListQuerySchema = z.object({
     .optional(),
   type: z.enum(["cash", "deferred"]).optional(),
   source: z.enum(["store", "external"]).optional(),
+  /** Preferred: filter by representative id (stable). */
+  repId: z.coerce.number().int().positive().optional(),
+  /** Legacy: filter by display name; trimmed + whitespace-normalized. */
   rep: z.string().trim().max(255).optional(),
   area: z.string().trim().max(255).optional(),
   store: z.string().trim().max(255).optional(),
@@ -3684,7 +3687,9 @@ router.get(
       const dateFromParam = q.dateFrom ? add(q.dateFrom) : null;
       const dateToParam = q.dateTo ? add(q.dateTo) : null;
       const typeParam = q.type ? add(q.type) : null;
-      const repParam = q.rep ? add(q.rep) : null;
+      const repIdParam = q.repId != null ? add(q.repId) : null;
+      const repNameNorm = q.repId == null && q.rep ? q.rep.replace(/\s+/g, " ").trim() : null;
+      const repNameParam = repNameNorm ? add(repNameNorm) : null;
       const areaParam = q.area ? add(q.area) : null;
       const storeParam = q.store ? add(`%${q.store}%`) : null;
       const idParam = q.id ? add(q.id) : null;
@@ -3694,6 +3699,17 @@ router.get(
       const sourceStoreOnly = q.source === "store";
       const sourceExtOnly = q.source === "external";
 
+      const repStoreSql = repIdParam
+        ? `o.representative_id = ${repIdParam}`
+        : repNameParam
+          ? `lower(regexp_replace(btrim(r.full_name), '\\s+', ' ', 'g')) = lower(${repNameParam})`
+          : null;
+      const repExtSql = repIdParam
+        ? `e.representative_id = ${repIdParam}`
+        : repNameParam
+          ? `lower(regexp_replace(btrim(r.full_name), '\\s+', ' ', 'g')) = lower(${repNameParam})`
+          : null;
+
       const storeWhere = [
         storeIdParam ? `o.store_id = ${storeIdParam}` : null,
         typeParam ? `o.payment_type = ${typeParam}` : null,
@@ -3701,7 +3717,7 @@ router.get(
           ? `(o.created_at AT TIME ZONE 'Asia/Amman')::date >= ${dateFromParam}::date`
           : null,
         dateToParam ? `(o.created_at AT TIME ZONE 'Asia/Amman')::date <= ${dateToParam}::date` : null,
-        repParam ? `r.full_name = ${repParam}` : null,
+        repStoreSql,
         areaParam ? `a.name = ${areaParam}` : null,
         storeParam ? `s.name ILIKE ${storeParam}` : null,
         idParam ? `o.id::text = ${idParam}` : null,
@@ -3721,7 +3737,7 @@ router.get(
           ? `(e.created_at AT TIME ZONE 'Asia/Amman')::date >= ${dateFromParam}::date`
           : null,
         dateToParam ? `(e.created_at AT TIME ZONE 'Asia/Amman')::date <= ${dateToParam}::date` : null,
-        repParam ? `r.full_name = ${repParam}` : null,
+        repExtSql,
         areaParam ? `a2.name = ${areaParam}` : null,
         storeParam ? `COALESCE(s2.name, e.store_name) ILIKE ${storeParam}` : null,
         idParam
