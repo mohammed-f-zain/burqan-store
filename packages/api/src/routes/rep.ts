@@ -1064,10 +1064,12 @@ router.get("/stores/route", repAuthMiddleware, async (req, res, next) => {
         last_visited_at: Date | string | null;
         last_visit_note: string | null;
         last_visit_had_purchase: boolean;
+        qr_public_token: string;
       }>(
         `SELECT s.id, s.name, s.phone, s.owner_name, s.location_lat, s.location_lng,
                 s.address_text, s.image_url, s.deferred_payment_enabled,
                 a.name AS area_name, a.governorate,
+                qc.public_token AS qr_public_token,
                 EXISTS (
                   SELECT 1 FROM visits v
                   WHERE v.store_id = s.id
@@ -1089,6 +1091,7 @@ router.get("/stores/route", repAuthMiddleware, async (req, res, next) => {
                 ${STORE_LAST_VISIT_HAD_PURCHASE_SQL} AS last_visit_had_purchase
          FROM stores s
          JOIN areas a ON a.id = s.area_id
+         JOIN qr_codes qc ON qc.id = s.qr_code_id
          WHERE s.is_wholesale = true
          ORDER BY s.name ASC`,
         [rep.id]
@@ -1112,6 +1115,7 @@ router.get("/stores/route", repAuthMiddleware, async (req, res, next) => {
           areaName: formatAreaLabel(s.area_name, s.governorate),
           deferredPaymentEnabled: s.deferred_payment_enabled,
           isWholesale: true,
+          qrPublicToken: s.qr_public_token,
           visitedToday: s.visited_today,
           visitNote: s.visit_note,
           lastVisitedAt: toIsoOrNull(s.last_visited_at),
@@ -1155,10 +1159,12 @@ router.get("/stores/route", repAuthMiddleware, async (req, res, next) => {
       last_visited_at: Date | string | null;
       last_visit_note: string | null;
       last_visit_had_purchase: boolean;
+      qr_public_token: string;
     }>(
       `SELECT s.id, s.name, s.phone, s.owner_name, s.location_lat, s.location_lng,
               s.address_text, s.image_url, s.deferred_payment_enabled,
               a.name AS area_name, a.governorate,
+              qc.public_token AS qr_public_token,
               EXISTS (
                 SELECT 1 FROM visits v
                 WHERE v.store_id = s.id
@@ -1180,6 +1186,7 @@ router.get("/stores/route", repAuthMiddleware, async (req, res, next) => {
               ${STORE_LAST_VISIT_HAD_PURCHASE_SQL} AS last_visit_had_purchase
        FROM stores s
        JOIN areas a ON a.id = s.area_id
+       JOIN qr_codes qc ON qc.id = s.qr_code_id
        WHERE s.area_id = ANY($1::int[])
          AND COALESCE(s.is_wholesale, false) = false
        ORDER BY s.name ASC`,
@@ -1212,6 +1219,7 @@ router.get("/stores/route", repAuthMiddleware, async (req, res, next) => {
         areaName: formatAreaLabel(s.area_name, s.governorate),
         deferredPaymentEnabled: s.deferred_payment_enabled,
         isWholesale: false,
+        qrPublicToken: s.qr_public_token,
         visitedToday: s.visited_today,
         visitNote: s.visit_note,
         lastVisitedAt: toIsoOrNull(s.last_visited_at),
@@ -1250,10 +1258,12 @@ router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
         last_visited_at: Date | string | null;
         last_visit_note: string | null;
         last_visit_had_purchase: boolean;
+        qr_public_token: string;
       }>(
         `SELECT s.id, s.name, s.phone, s.owner_name, s.location_lat, s.location_lng,
                 s.address_text, s.image_url, s.deferred_payment_enabled,
                 a.name AS area_name, a.governorate,
+                qc.public_token AS qr_public_token,
                 EXISTS (
                   SELECT 1 FROM visits v
                   WHERE v.store_id = s.id
@@ -1275,6 +1285,7 @@ router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
                 ${STORE_LAST_VISIT_HAD_PURCHASE_SQL} AS last_visit_had_purchase
          FROM stores s
          JOIN areas a ON a.id = s.area_id
+         JOIN qr_codes qc ON qc.id = s.qr_code_id
          WHERE s.is_wholesale = true
          ORDER BY visited_today ASC, a.name ASC, s.name ASC`,
         [rep.id]
@@ -1292,6 +1303,7 @@ router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
           areaName: formatAreaLabel(s.area_name, s.governorate),
           deferredPaymentEnabled: s.deferred_payment_enabled,
           isWholesale: true,
+          qrPublicToken: s.qr_public_token,
           visitedToday: s.visited_today,
           visitNote: s.visit_note,
           lastVisitedAt: toIsoOrNull(s.last_visited_at),
@@ -1336,10 +1348,12 @@ router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
       last_visited_at: Date | string | null;
       last_visit_note: string | null;
       last_visit_had_purchase: boolean;
+      qr_public_token: string;
     }>(
       `SELECT s.id, s.name, s.phone, s.owner_name, s.location_lat, s.location_lng,
               s.address_text, s.image_url, s.deferred_payment_enabled,
               a.name AS area_name, a.governorate,
+              qc.public_token AS qr_public_token,
               EXISTS (
                 SELECT 1 FROM visits v
                 WHERE v.store_id = s.id
@@ -1361,6 +1375,7 @@ router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
               ${STORE_LAST_VISIT_HAD_PURCHASE_SQL} AS last_visit_had_purchase
        FROM stores s
        JOIN areas a ON a.id = s.area_id
+       JOIN qr_codes qc ON qc.id = s.qr_code_id
        WHERE s.area_id = ANY($1::int[])
          AND COALESCE(s.is_wholesale, false) = false
        ORDER BY visited_today ASC, a.name ASC, s.name ASC`,
@@ -1389,6 +1404,7 @@ router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
         areaName: formatAreaLabel(s.area_name, s.governorate),
         deferredPaymentEnabled: s.deferred_payment_enabled,
         isWholesale: false,
+        qrPublicToken: s.qr_public_token,
         visitedToday: s.visited_today,
         visitNote: s.visit_note,
         lastVisitedAt: toIsoOrNull(s.last_visited_at),

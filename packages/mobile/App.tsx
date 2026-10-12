@@ -69,6 +69,7 @@ import OrderInvoiceModal from "./OrderInvoiceModal";
 import OrderConfirmModal from "./OrderConfirmModal";
 import StoreCartPanel from "./StoreCartPanel";
 import StorePeekModal from "./StorePeekModal";
+import StoreQrBlock from "./StoreQrBlock";
 import RegisterErrorBoundary from "./RegisterErrorBoundary";
 import type { ReceiptData } from "./receiptFormat";
 import { normalizeStoreBrief, normalizeDailyStoreCard } from "./storeTypes";
@@ -197,6 +198,8 @@ const t = {
   locationUnknown: "لم يُسجَّل عنوان",
   openInMaps: "فتح على الخريطة",
   visitAutoHint: "تُسجَّل الزيارة تلقائياً عند مسح رمز المتجر.",
+  storeQr: "رمز QR للمتجر",
+  storeQrHint: "نفس رمز البطاقة المطبوعة — اعرضه لصاحب المتجر إذا فقد بطاقته.",
   editStore: "تعديل بيانات المتجر",
   storeUpdated: "تم تحديث بيانات المتجر.",
   payment: "الدفع",
@@ -2074,6 +2077,13 @@ export default function App() {
                   <Text style={styles.infoMapsHint}>{t.openInMaps}</Text>
                 </Pressable>
               </View>
+              {activeStore.qrPublicToken ? (
+                <StoreQrBlock
+                  qrPublicToken={activeStore.qrPublicToken}
+                  title={t.storeQr}
+                  hint={t.storeQrHint}
+                />
+              ) : null}
               <Text style={styles.muted}>{t.visitAutoHint}</Text>
               {activeStore.deferredPaymentEnabled ? (
                 <Pressable
@@ -2794,6 +2804,8 @@ export default function App() {
           callStore: t.callStore,
           deferredOn: t.deferredOn,
           deferredOff: t.deferredOff,
+          storeQr: t.storeQr,
+          storeQrHint: t.storeQrHint,
         }}
         formatLocation={(s) => formatStoreLocation(s, t.locationUnknown)}
         onClose={() => setPeekStore(null)}

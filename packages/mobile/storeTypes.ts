@@ -36,6 +36,8 @@ export type DailyStoreCard = {
   /** Nearest-first route tab (meters from rep GPS). */
   distanceM?: number;
   distanceLabel?: string;
+  /** Public QR token for burqan stores (same as printed card). */
+  qrPublicToken?: string | null;
 };
 
 export type StoreBrief = {
@@ -50,6 +52,8 @@ export type StoreBrief = {
   deferredPaymentEnabled: boolean;
   ownerPortalUrl?: string;
   loyaltyPointsBalance?: number;
+  /** Public QR token (same as printed card). */
+  qrPublicToken?: string | null;
 };
 
 /** Normalize API store payload (camelCase or legacy snake_case). */
@@ -73,6 +77,7 @@ export function normalizeStoreBrief(raw: Record<string, unknown>): StoreBrief {
       raw.loyaltyPointsBalance != null || raw.loyalty_points_balance != null
         ? Number(raw.loyaltyPointsBalance ?? raw.loyalty_points_balance ?? 0)
         : undefined,
+    qrPublicToken: (raw.qrPublicToken ?? raw.qr_public_token ?? null) as string | null,
   };
 }
 
@@ -107,6 +112,7 @@ export function normalizeDailyStoreCard(raw: Record<string, unknown>): DailyStor
     googlePlaceId: (raw.googlePlaceId ?? raw.google_place_id ?? null) as string | null,
     distanceM: raw.distanceM != null ? Number(raw.distanceM) : undefined,
     distanceLabel: raw.distanceLabel != null ? String(raw.distanceLabel) : undefined,
+    qrPublicToken: (raw.qrPublicToken ?? raw.qr_public_token ?? null) as string | null,
   };
 }
 

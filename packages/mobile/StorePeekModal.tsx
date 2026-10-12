@@ -1,7 +1,8 @@
-import { Linking, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { openInGoogleMaps } from "./openGoogleMaps";
+import StoreQrBlock from "./StoreQrBlock";
 import type { DailyStoreCard } from "./storeTypes";
 import { theme } from "./theme";
 
@@ -15,6 +16,8 @@ type Labels = {
   callStore: string;
   deferredOn: string;
   deferredOff: string;
+  storeQr: string;
+  storeQrHint: string;
 };
 
 type Props = {
@@ -49,7 +52,7 @@ export default function StorePeekModal(props: Props) {
             <Text style={styles.closeBtn}>{labels.close}</Text>
           </Pressable>
         </View>
-        <View style={styles.body}>
+        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
           <Text style={styles.title}>{store.name}</Text>
           <View style={styles.badgeRow}>
             {isGoogle ? (
@@ -91,6 +94,14 @@ export default function StorePeekModal(props: Props) {
             <Text style={styles.value}>{props.formatLocation(store)}</Text>
           </View>
 
+          {!isGoogle && store.qrPublicToken ? (
+            <StoreQrBlock
+              qrPublicToken={store.qrPublicToken}
+              title={labels.storeQr}
+              hint={labels.storeQrHint}
+            />
+          ) : null}
+
           <Pressable style={styles.mapsBtn} onPress={onOpenMaps}>
             <Text style={styles.mapsBtnText}>{labels.openInMaps}</Text>
           </Pressable>
@@ -100,7 +111,7 @@ export default function StorePeekModal(props: Props) {
               <Text style={styles.callBtnText}>{labels.callStore}</Text>
             </Pressable>
           ) : null}
-        </View>
+        </ScrollView>
       </SafeAreaView>
     </Modal>
   );
