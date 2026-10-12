@@ -216,6 +216,18 @@ export default function StoresPage() {
     await load();
   }
 
+  async function toggleWholesale(s: Store) {
+    if (!canWrite) return;
+    const next = !s.is_wholesale;
+    try {
+      await api.patch(`/stores/${s.id}/wholesale`, { enabled: next });
+      toastSuccess(next ? t.stores.wholesaleEnabled : t.stores.wholesaleDisabled);
+      await load();
+    } catch (err) {
+      toastError(pickAxiosErrorMessage(err, t.stores.saveFailed));
+    }
+  }
+
   async function removeStore(id: number) {
     if (!canWrite) return;
     const ok = await confirmDanger({
@@ -309,6 +321,7 @@ export default function StoresPage() {
                 <th>{t.stores.colLocation}</th>
                 <th>{t.stores.colQr}</th>
                 <th>{t.stores.colDeferred}</th>
+                <th>{t.stores.colWholesale}</th>
                 {can("orders.record_payment") && <th>{t.stores.pay}</th>}
                 {canWrite && <th>{t.stores.colActions}</th>}
               </tr>
@@ -329,14 +342,7 @@ export default function StoresPage() {
                   }}
                 >
                   <td>
-                    <div className="strong" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                      {s.name}
-                      {s.is_wholesale ? (
-                        <span className="pill on" title={t.stores.wholesaleHint}>
-                          {t.stores.wholesaleOn}
-                        </span>
-                      ) : null}
-                    </div>
+                    <div className="strong">{s.name}</div>
                     <div className="muted small">{s.phone}</div>
                   </td>
                   <td>{s.area_name}</td>
@@ -364,6 +370,22 @@ export default function StoresPage() {
                       t.stores.open
                     ) : (
                       t.stores.closed
+                    )}
+                  </td>
+                  <td onClick={(e) => e.stopPropagation()}>
+                    {canWrite ? (
+                      <button
+                        type="button"
+                        className={s.is_wholesale ? "pill on" : "pill off"}
+                        title={t.stores.wholesaleHint}
+                        onClick={() => void toggleWholesale(s)}
+                      >
+                        {s.is_wholesale ? t.stores.wholesaleOn : t.stores.wholesaleOff}
+                      </button>
+                    ) : s.is_wholesale ? (
+                      t.stores.wholesaleOn
+                    ) : (
+                      t.stores.wholesaleOff
                     )}
                   </td>
                   {can("orders.record_payment") && (
