@@ -2559,15 +2559,32 @@ const repRouteOverrideEntrySchema = z.object({
   remove: z.boolean().optional(),
 });
 
+/** Accept YYYY-MM from Arabic Windows (Eastern digits) or MM/YYYY layouts. */
+function normalizeRouteMonthParam(raw: unknown): string | undefined {
+  if (raw == null || raw === "") return undefined;
+  let s = String(Array.isArray(raw) ? raw[0] : raw).trim();
+  s = s
+    .replace(/[\u0660-\u0669]/g, (c) => String(c.charCodeAt(0) - 0x0660))
+    .replace(/[\u06f0-\u06f9]/g, (c) => String(c.charCodeAt(0) - 0x06f0));
+  if (/^\d{4}-\d{2}$/.test(s)) return s;
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 7);
+  let m = s.match(/^(\d{1,2})[/.-](\d{4})$/);
+  if (m) return `${m[2]}-${m[1]!.padStart(2, "0")}`;
+  m = s.match(/^(\d{4})[/.-](\d{1,2})$/);
+  if (m) return `${m[1]}-${m[2]!.padStart(2, "0")}`;
+  return s;
+}
+
+const routeMonthSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}$/);
+
 const repRouteSchedulePutSchema = z.object({
   /** Weekly template (legacy + still primary default). */
   entries: z.array(repRouteScheduleEntrySchema).optional(),
   weekly: z.array(repRouteScheduleEntrySchema).optional(),
   overrides: z.array(repRouteOverrideEntrySchema).optional(),
-  month: z
-    .string()
-    .regex(/^\d{4}-\d{2}$/)
-    .optional(),
+  month: routeMonthSchema.optional(),
 });
 
 type ScheduleDbRow = {
@@ -2841,11 +2858,8 @@ router.get(
   async (req, res, next) => {
     try {
       const id = z.coerce.number().int().positive().parse(req.params.id);
-      const month = z
-        .string()
-        .regex(/^\d{4}-\d{2}$/)
-        .optional()
-        .parse(req.query.month);
+      const monthRaw = normalizeRouteMonthParam(req.query.month);
+      const month = monthRaw == null ? undefined : routeMonthSchema.parse(monthRaw);
       const { rows: repRows } = await query(`SELECT id FROM representatives WHERE id = $1`, [id]);
       if (!repRows[0]) throw new HttpError(404, "المندوب غير موجود");
 
@@ -2869,7 +2883,17 @@ router.put(
   async (req, res, next) => {
     try {
       const id = z.coerce.number().int().positive().parse(req.params.id);
-      const body = repRouteSchedulePutSchema.parse(req.body);
+      const bodyIn =
+        req.body && typeof req.body === "object"
+          ? {
+              ...req.body,
+              month:
+                req.body.month == null || req.body.month === ""
+                  ? undefined
+                  : normalizeRouteMonthParam(req.body.month),
+            }
+          : req.body;
+      const body = repRouteSchedulePutSchema.parse(bodyIn);
       const { rows: repRows } = await query(`SELECT id FROM representatives WHERE id = $1`, [id]);
       if (!repRows[0]) throw new HttpError(404, "المندوب غير موجود");
 

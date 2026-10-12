@@ -14,22 +14,53 @@ function norm(s: string): string {
   return s.trim().toLowerCase();
 }
 
+/** Eastern/Arabic-Indic → ASCII digits (common on Arabic Windows). */
+function toLatinDigits(s: string): string {
+  return s
+    .replace(/[\u0660-\u0669]/g, (c) => String(c.charCodeAt(0) - 0x0660))
+    .replace(/[\u06f0-\u06f9]/g, (c) => String(c.charCodeAt(0) - 0x06f0));
+}
+
 /**
- * YYYY-MM-DD in Asia/Amman.
- * Uses formatToParts + Latin digits — do not rely on en-CA `.format()` string shape;
- * some browsers/locales return MM/YYYY, Arabic-Indic digits, or other layouts and break APIs.
+ * Asia/Amman wall-clock Y/M/D without trusting locale string shapes.
+ * Jordan is UTC+3 year-round since late 2022; used as fallback when Intl is weak
+ * (Arabic Windows 7 / old Chromium).
  */
+function ammanYmdParts(value: Date): { year: string; month: string; day: string } {
+  const AMMAN_OFFSET_MS = 3 * 60 * 60 * 1000;
+  try {
+    if (typeof Intl?.DateTimeFormat?.prototype?.formatToParts === "function") {
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: "Asia/Amman",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        numberingSystem: "latn",
+      }).formatToParts(value);
+      const pick = (type: Intl.DateTimeFormatPartTypes) =>
+        toLatinDigits(parts.find((p) => p.type === type)?.value ?? "");
+      const year = pick("year");
+      const month = pick("month");
+      const day = pick("day");
+      if (/^\d{4}$/.test(year) && /^\d{2}$/.test(month) && /^\d{2}$/.test(day)) {
+        return { year, month, day };
+      }
+    }
+  } catch {
+    /* fall through */
+  }
+  const shifted = new Date(value.getTime() + AMMAN_OFFSET_MS);
+  return {
+    year: String(shifted.getUTCFullYear()),
+    month: String(shifted.getUTCMonth() + 1).padStart(2, "0"),
+    day: String(shifted.getUTCDate()).padStart(2, "0"),
+  };
+}
+
+/** YYYY-MM-DD in Asia/Amman — safe on Arabic Windows / weak Intl. */
 export function toMarketDateString(value: string | number | Date): string {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Amman",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    numberingSystem: "latn",
-  }).formatToParts(new Date(value));
-  const pick = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((p) => p.type === type)?.value ?? "";
-  return `${pick("year")}-${pick("month")}-${pick("day")}`;
+  const { year, month, day } = ammanYmdParts(new Date(value));
+  return `${year}-${month}-${day}`;
 }
 
 export function marketToday(): string {
