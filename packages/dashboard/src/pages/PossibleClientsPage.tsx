@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import { api } from "../api";
@@ -21,6 +21,7 @@ type Prospect = {
   area_name: string;
   address_text: string | null;
   status: string;
+  is_wholesale?: boolean;
   created_by_rep_name: string;
   converted_store_id: number | null;
   converted_store_name: string | null;
@@ -155,6 +156,19 @@ export default function PossibleClientsPage() {
     }
   }
 
+  async function toggleWholesale(p: Prospect, e: MouseEvent) {
+    e.stopPropagation();
+    if (!canWrite || p.status !== "open") return;
+    const next = !p.is_wholesale;
+    try {
+      await api.patch(`/prospect-stores/${p.id}/wholesale`, { enabled: next });
+      toastSuccess(next ? t.prospects.wholesaleEnabled : t.prospects.wholesaleDisabled);
+      await load();
+    } catch (err) {
+      toastError(pickAxiosErrorMessage(err, t.prospects.loadFailed));
+    }
+  }
+
   return (
     <div className="grid">
       <div className="card">
@@ -225,6 +239,7 @@ export default function PossibleClientsPage() {
                   <th>{t.prospects.colOwner}</th>
                   <th>{t.prospects.colArea}</th>
                   <th>{t.prospects.colRep}</th>
+                  <th>{t.prospects.colWholesale}</th>
                   <th>{t.prospects.colStatus}</th>
                   <th>{t.prospects.colReason}</th>
                   <th>{t.prospects.colCreated}</th>
@@ -254,6 +269,22 @@ export default function PossibleClientsPage() {
                     <td>{p.owner_name}</td>
                     <td>{p.area_name}</td>
                     <td>{p.created_by_rep_name}</td>
+                    <td onClick={(e) => e.stopPropagation()}>
+                      {canWrite && p.status === "open" ? (
+                        <button
+                          type="button"
+                          className={p.is_wholesale ? "pill on" : "pill off"}
+                          title={t.prospects.wholesaleHint}
+                          onClick={(e) => void toggleWholesale(p, e)}
+                        >
+                          {p.is_wholesale ? t.prospects.wholesaleOn : t.prospects.wholesaleOff}
+                        </button>
+                      ) : p.is_wholesale ? (
+                        t.prospects.wholesaleOn
+                      ) : (
+                        t.prospects.wholesaleOff
+                      )}
+                    </td>
                     <td>
                       <span className={`status-pill status-pill--${p.status}`}>
                         {statusLabel(p.status, t)}

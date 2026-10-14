@@ -1,6 +1,6 @@
 import type { DailyStoreCard } from "./storeTypes";
 
-/** Great-circle distance in meters (same formula as API). */
+/** Great-circle distance in meters (same asin formula as API). */
 export function haversineMeters(
   lat1: number,
   lng1: number,
@@ -9,12 +9,14 @@ export function haversineMeters(
 ): number {
   const R = 6371000;
   const toRad = (d: number) => (d * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
+  const φ1 = toRad(Number(lat1));
+  const φ2 = toRad(Number(lat2));
+  const dLat = toRad(Number(lat2) - Number(lat1));
+  const dLng = toRad(Number(lng2) - Number(lng1));
   const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    Math.sin(dLat / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(dLng / 2) ** 2;
+  const c = Math.min(1, Math.max(0, a)); // clamp float noise
+  return 2 * R * Math.asin(Math.sqrt(c));
 }
 
 export function formatDistanceM(m: number): string {

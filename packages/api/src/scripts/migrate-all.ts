@@ -36,6 +36,7 @@ const FILES = [
   "024_product_exchanges.sql",
   "025_rep_route_date_overrides.sql",
   "026_wholesale_flags.sql",
+  "027_prospect_wholesale.sql",
 ] as const;
 
 async function main() {

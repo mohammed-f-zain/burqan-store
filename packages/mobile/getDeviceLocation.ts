@@ -93,10 +93,13 @@ export async function getRepPosition(opts?: {
   const { status } = await Location.requestForegroundPermissionsAsync();
   if (status !== "granted") throw new LocationDeniedError();
 
-  const accuracy = Location.Accuracy.High;
+  // BestForNavigation when available — High alone can be network/wifi and skew distances.
+  const accuracy =
+    (Location.Accuracy as { BestForNavigation?: Location.Accuracy }).BestForNavigation ??
+    Location.Accuracy.High;
   let lastInaccurate: LocationInaccurateError | undefined;
 
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const position = await readCurrentPosition(accuracy, timeoutMs);
       assertAccuracy(position.accuracyM, maxAccuracyM);

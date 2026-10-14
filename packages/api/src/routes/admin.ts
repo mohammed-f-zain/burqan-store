@@ -3046,6 +3046,7 @@ router.get(
         `SELECT ps.id, ps.name, ps.phone, ps.owner_name, ps.location_lat, ps.location_lng,
                 ps.address_text, ps.image_url, ps.area_id, ps.status, ps.converted_store_id,
                 ps.dismiss_reason, ps.created_at, ps.updated_at,
+                COALESCE(ps.is_wholesale, false) AS is_wholesale,
                 a.name AS area_name,
                 r.full_name AS created_by_rep_name,
                 cs.name AS converted_store_name,
@@ -3082,6 +3083,7 @@ router.get(
         `SELECT ps.id, ps.name, ps.phone, ps.owner_name, ps.location_lat, ps.location_lng,
                 ps.address_text, ps.image_url, ps.area_id, ps.status, ps.converted_store_id,
                 ps.dismiss_reason, ps.created_at, ps.updated_at,
+                COALESCE(ps.is_wholesale, false) AS is_wholesale,
                 a.name AS area_name,
                 r.full_name AS created_by_rep_name,
                 cs.name AS converted_store_name
@@ -3863,6 +3865,28 @@ router.patch(
       );
       if (!rows[0]) throw new HttpError(404, "المتجر غير موجود");
       res.json({ store: rows[0] });
+    } catch (e) {
+      next(e);
+    }
+  }
+);
+
+router.patch(
+  "/prospect-stores/:id/wholesale",
+  adminAuthMiddleware,
+  requireAdminPermission("stores.write"),
+  async (req, res, next) => {
+    try {
+      const id = z.coerce.number().int().positive().parse(req.params.id);
+      const body = wholesaleSchema.parse(req.body);
+      const { rows } = await query(
+        `UPDATE prospect_stores SET is_wholesale = $2, updated_at = now()
+         WHERE id = $1
+         RETURNING id, is_wholesale`,
+        [id, body.enabled]
+      );
+      if (!rows[0]) throw new HttpError(404, "العميل المحتمل غير موجود");
+      res.json({ prospect: rows[0] });
     } catch (e) {
       next(e);
     }

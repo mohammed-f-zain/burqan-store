@@ -169,11 +169,21 @@ export async function getRepRouteZoneForDate(
 export function sortStoresByDistance<
   T extends { location_lat: number; location_lng: number }
 >(stores: T[], repLat: number, repLng: number): (T & { distance_m: number })[] {
+  const rLat = Number(repLat);
+  const rLng = Number(repLng);
   return stores
-    .map((s) => ({
-      ...s,
-      distance_m: haversineMeters(repLat, repLng, s.location_lat, s.location_lng),
-    }))
+    .map((s) => {
+      const sLat = Number(s.location_lat);
+      const sLng = Number(s.location_lng);
+      const distance_m =
+        Number.isFinite(rLat) &&
+        Number.isFinite(rLng) &&
+        Number.isFinite(sLat) &&
+        Number.isFinite(sLng)
+          ? haversineMeters(rLat, rLng, sLat, sLng)
+          : Number.POSITIVE_INFINITY;
+      return { ...s, distance_m };
+    })
     .sort((a, b) => a.distance_m - b.distance_m);
 }
 

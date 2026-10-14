@@ -32,10 +32,7 @@ import {
   getStoreLoyaltyState,
 } from "../utils/loyaltyExpiry.js";
 import {
-  ammanDayOfWeek,
-  ARABIC_WEEKDAY_NAMES,
   formatDistanceM,
-  getRepRouteZoneForDay,
   getRepTodayWorkAreaIds,
   sortStoresByDistance,
 } from "../utils/routeZones.js";
@@ -550,13 +547,14 @@ function mapProspectRow(row: {
   status: string;
   converted_store_id: number | null;
   created_at: string;
+  is_wholesale?: boolean;
 }) {
   return {
     id: row.id,
     name: row.name,
     phone: row.phone,
     ownerName: row.owner_name,
-    location: { lat: row.location_lat, lng: row.location_lng },
+    location: { lat: Number(row.location_lat), lng: Number(row.location_lng) },
     addressText: row.address_text,
     imageUrl: row.image_url,
     areaId: row.area_id,
@@ -564,10 +562,14 @@ function mapProspectRow(row: {
     status: row.status,
     convertedStoreId: row.converted_store_id,
     createdAt: row.created_at,
+    isWholesale: Boolean(row.is_wholesale),
   };
 }
 
-async function loadProspectForRep(prospectId: number, rep: { id: number }) {
+async function loadProspectForRep(
+  prospectId: number,
+  rep: { id: number; isWholesaler: boolean }
+) {
   const today = await getRepTodayWorkAreaIds(rep.id);
   const { rows } = await query<{
     id: number;
@@ -584,6 +586,7 @@ async function loadProspectForRep(prospectId: number, rep: { id: number }) {
     converted_store_id: number | null;
     created_by_representative_id: number;
     created_at: string;
+    is_wholesale: boolean;
   }>(
     `SELECT ps.*, a.name AS area_name
      FROM prospect_stores ps
@@ -593,17 +596,96 @@ async function loadProspectForRep(prospectId: number, rep: { id: number }) {
   );
   const p = rows[0];
   if (!p) throw new HttpError(404, "العميل المحتمل غير موجود");
-  const canAccess = today.expandedAreaIds.includes(p.area_id);
-  if (!canAccess) throw new HttpError(403, "ليس ضمن مسار اليوم");
+  const isWholesale = Boolean(p.is_wholesale);
+  if (isWholesale) {
+    if (!rep.isWholesaler) throw new HttpError(403, "عميل جملة — متاح لمندوبي الجملة فقط");
+  } else if (rep.isWholesaler) {
+    throw new HttpError(403, "مندوب الجملة يرى عملاء الجملة المحتملين فقط");
+  } else if (!today.expandedAreaIds.includes(p.area_id)) {
+    throw new HttpError(403, "ليس ضمن مسار اليوم");
+  }
   return p;
 }
 
-/** Possible clients (no QR) — open prospects in today's route zone only. */
+/** Possible clients (no QR) — open prospects in today's route (or all wholesale for wholesaler reps). */
 router.get("/prospect-stores", repAuthMiddleware, async (req, res, next) => {
   try {
     const rep = req.rep!;
     const today = await getRepTodayWorkAreaIds(rep.id);
+
+    if (rep.isWholesaler) {
+      const { rows } = await query<{
+        id: number;
+        name: string;
+        phone: string;
+        owner_name: string;
+        location_lat: number;
+        location_lng: number;
+        address_text: string | null;
+        image_url: string | null;
+        area_id: number;
+        area_name: string;
+        status: string;
+        converted_store_id: number | null;
+        created_at: string;
+        is_wholesale: boolean;
+        visited_today: boolean;
+        today_visit_note: string | null;
+        last_visited_at: Date | string | null;
+        last_visit_note: string | null;
+      }>(
+        `SELECT ps.id, ps.name, ps.phone, ps.owner_name, ps.location_lat, ps.location_lng,
+                ps.address_text, ps.image_url, ps.area_id, ps.status, ps.converted_store_id,
+                ps.created_at, COALESCE(ps.is_wholesale, false) AS is_wholesale,
+                a.name AS area_name,
+                EXISTS (
+                  SELECT 1 FROM prospect_visits pv
+                  WHERE pv.prospect_store_id = ps.id
+                    AND pv.representative_id = $1
+                    AND (pv.visited_at AT TIME ZONE 'Asia/Amman')::date =
+                        (NOW() AT TIME ZONE 'Asia/Amman')::date
+                ) AS visited_today,
+                (
+                  SELECT pv.note FROM prospect_visits pv
+                  WHERE pv.prospect_store_id = ps.id
+                    AND pv.representative_id = $1
+                    AND (pv.visited_at AT TIME ZONE 'Asia/Amman')::date =
+                        (NOW() AT TIME ZONE 'Asia/Amman')::date
+                  ORDER BY pv.visited_at DESC
+                  LIMIT 1
+                ) AS today_visit_note,
+                (
+                  SELECT MAX(pv.visited_at) FROM prospect_visits pv
+                  WHERE pv.prospect_store_id = ps.id
+                ) AS last_visited_at,
+                (
+                  SELECT pv.note FROM prospect_visits pv
+                  WHERE pv.prospect_store_id = ps.id
+                  ORDER BY pv.visited_at DESC
+                  LIMIT 1
+                ) AS last_visit_note
+         FROM prospect_stores ps
+         JOIN areas a ON a.id = ps.area_id
+         WHERE ps.status = 'open'
+           AND COALESCE(ps.is_wholesale, false) = true
+         ORDER BY visited_today ASC, a.name ASC, ps.name ASC`,
+        [rep.id]
+      );
+      return res.json({
+        prospects: rows.map((r) => ({
+          ...mapProspectRow(r),
+          visitedToday: r.visited_today,
+          todayVisitNote: r.today_visit_note,
+          lastVisitedAt: toIsoOrNull(r.last_visited_at),
+          lastVisitNote: r.last_visit_note,
+        })),
+      });
+    }
+
     const areaFilterIds = today.expandedAreaIds;
+    if (!areaFilterIds.length) {
+      return res.json({ prospects: [] });
+    }
     const { rows } = await query<{
       id: number;
       name: string;
@@ -618,6 +700,7 @@ router.get("/prospect-stores", repAuthMiddleware, async (req, res, next) => {
       status: string;
       converted_store_id: number | null;
       created_at: string;
+      is_wholesale: boolean;
       visited_today: boolean;
       today_visit_note: string | null;
       last_visited_at: Date | string | null;
@@ -625,7 +708,8 @@ router.get("/prospect-stores", repAuthMiddleware, async (req, res, next) => {
     }>(
       `SELECT ps.id, ps.name, ps.phone, ps.owner_name, ps.location_lat, ps.location_lng,
               ps.address_text, ps.image_url, ps.area_id, ps.status, ps.converted_store_id,
-              ps.created_at, a.name AS area_name,
+              ps.created_at, COALESCE(ps.is_wholesale, false) AS is_wholesale,
+              a.name AS area_name,
               EXISTS (
                 SELECT 1 FROM prospect_visits pv
                 WHERE pv.prospect_store_id = ps.id
@@ -655,6 +739,7 @@ router.get("/prospect-stores", repAuthMiddleware, async (req, res, next) => {
        FROM prospect_stores ps
        JOIN areas a ON a.id = ps.area_id
        WHERE ps.status = 'open'
+         AND COALESCE(ps.is_wholesale, false) = false
          AND ps.area_id = ANY($1::int[])
        ORDER BY visited_today ASC, a.name ASC, ps.name ASC`,
       [areaFilterIds, rep.id]
@@ -687,8 +772,8 @@ router.post("/prospect-stores", repAuthMiddleware, async (req, res, next) => {
     const { rows } = await query<{ id: number }>(
       `INSERT INTO prospect_stores (
          name, phone, owner_name, location_lat, location_lng, address_text, image_url,
-         area_id, created_by_representative_id
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+         area_id, created_by_representative_id, is_wholesale
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
        RETURNING id`,
       [
         body.name,
@@ -700,6 +785,7 @@ router.post("/prospect-stores", repAuthMiddleware, async (req, res, next) => {
         body.imageUrl || null,
         resolved.areaId,
         rep.id,
+        Boolean(rep.isWholesaler),
       ]
     );
     const prospectId = rows[0]!.id;
@@ -762,8 +848,9 @@ router.post("/prospect-stores/:id/convert", repAuthMiddleware, async (req, res, 
       const ins = await c.query<{ id: number }>(
         `INSERT INTO stores (
            qr_code_id, name, phone, owner_name, location_lat, location_lng, address_text, image_url,
-           area_id, deferred_payment_enabled, owner_portal_token, registered_by_representative_id
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,false,$10,$11)
+           area_id, deferred_payment_enabled, owner_portal_token, registered_by_representative_id,
+           is_wholesale
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,false,$10,$11,$12)
          RETURNING id`,
         [
           qr.rows[0].id,
@@ -777,6 +864,7 @@ router.post("/prospect-stores/:id/convert", repAuthMiddleware, async (req, res, 
           prospect.area_id,
           ownerToken,
           rep.id,
+          Boolean(prospect.is_wholesale),
         ]
       );
       const storeId = ins.rows[0]!.id;
@@ -943,17 +1031,17 @@ const routeStoresQuerySchema = z.object({
   lng: z.coerce.number().min(-180).max(180),
 });
 
-/** Today's scheduled route zone for this rep (weekday in Asia/Amman). */
+/** Today's scheduled route zone (calendar override, else weekly template). */
 router.get("/route/today", repAuthMiddleware, async (req, res, next) => {
   try {
     const rep = req.rep!;
-    const dayOfWeek = await ammanDayOfWeek();
-    const route = await getRepRouteZoneForDay(rep.id, dayOfWeek);
+    const today = await getRepTodayWorkAreaIds(rep.id);
+    const route = today.route;
     if (!route) {
       return res.json({
         active: false,
-        dayOfWeek,
-        dayName: ARABIC_WEEKDAY_NAMES[dayOfWeek],
+        dayOfWeek: today.dayOfWeek,
+        dayName: today.dayName,
         message: "لا يوجد مسار مجدول لهذا اليوم — تواصل مع الإدارة",
       });
     }
@@ -961,6 +1049,8 @@ router.get("/route/today", repAuthMiddleware, async (req, res, next) => {
       active: true,
       dayOfWeek: route.dayOfWeek,
       dayName: route.dayName,
+      source: route.source,
+      workDate: today.workDate,
       routeZone: {
         id: route.routeZone.id,
         name: route.routeZone.name,
@@ -1044,7 +1134,7 @@ router.get("/stores/route", repAuthMiddleware, async (req, res, next) => {
   try {
     const rep = req.rep!;
     const loc = routeStoresQuerySchema.parse(req.query);
-    const dayOfWeek = await ammanDayOfWeek();
+    const today = await getRepTodayWorkAreaIds(rep.id);
 
     if (rep.isWholesaler) {
       const { rows } = await query<{
@@ -1064,7 +1154,7 @@ router.get("/stores/route", repAuthMiddleware, async (req, res, next) => {
         last_visited_at: Date | string | null;
         last_visit_note: string | null;
         last_visit_had_purchase: boolean;
-        qr_public_token: string;
+        qr_public_token: string | null;
       }>(
         `SELECT s.id, s.name, s.phone, s.owner_name, s.location_lat, s.location_lng,
                 s.address_text, s.image_url, s.deferred_payment_enabled,
@@ -1091,7 +1181,7 @@ router.get("/stores/route", repAuthMiddleware, async (req, res, next) => {
                 ${STORE_LAST_VISIT_HAD_PURCHASE_SQL} AS last_visit_had_purchase
          FROM stores s
          JOIN areas a ON a.id = s.area_id
-         JOIN qr_codes qc ON qc.id = s.qr_code_id
+         LEFT JOIN qr_codes qc ON qc.id = s.qr_code_id
          WHERE s.is_wholesale = true
          ORDER BY s.name ASC`,
         [rep.id]
@@ -1100,8 +1190,9 @@ router.get("/stores/route", repAuthMiddleware, async (req, res, next) => {
       return res.json({
         active: true,
         isWholesaler: true,
-        dayOfWeek,
-        dayName: ARABIC_WEEKDAY_NAMES[dayOfWeek],
+        dayOfWeek: today.dayOfWeek,
+        dayName: today.dayName,
+        workDate: today.workDate,
         routeZone: null,
         stores: sorted.map((s) => ({
           id: s.id,
@@ -1109,7 +1200,7 @@ router.get("/stores/route", repAuthMiddleware, async (req, res, next) => {
           name: s.name,
           phone: s.phone,
           ownerName: s.owner_name,
-          location: { lat: s.location_lat, lng: s.location_lng },
+          location: { lat: Number(s.location_lat), lng: Number(s.location_lng) },
           addressText: s.address_text,
           imageUrl: s.image_url,
           areaName: formatAreaLabel(s.area_name, s.governorate),
@@ -1121,20 +1212,21 @@ router.get("/stores/route", repAuthMiddleware, async (req, res, next) => {
           lastVisitedAt: toIsoOrNull(s.last_visited_at),
           lastVisitNote: s.last_visit_note,
           lastVisitHadPurchase: Boolean(s.last_visit_had_purchase),
-          distanceM: Math.round(s.distance_m),
-          distanceLabel: formatDistanceM(s.distance_m),
+          distanceM: Number.isFinite(s.distance_m) ? Math.round(s.distance_m) : null,
+          distanceLabel: Number.isFinite(s.distance_m) ? formatDistanceM(s.distance_m) : null,
         })),
       });
     }
 
-    const route = await getRepRouteZoneForDay(rep.id, dayOfWeek);
+    const route = today.route;
 
     if (!route?.expandedAreaIds.length) {
       return res.json({
         active: false,
         isWholesaler: false,
-        dayOfWeek,
-        dayName: route?.dayName ?? ARABIC_WEEKDAY_NAMES[dayOfWeek],
+        dayOfWeek: today.dayOfWeek,
+        dayName: today.dayName,
+        workDate: today.workDate,
         stores: [],
         message: route
           ? "منطقة المسار اليوم لا تحتوي مناطق — راجع الإدارة"
@@ -1159,7 +1251,7 @@ router.get("/stores/route", repAuthMiddleware, async (req, res, next) => {
       last_visited_at: Date | string | null;
       last_visit_note: string | null;
       last_visit_had_purchase: boolean;
-      qr_public_token: string;
+      qr_public_token: string | null;
     }>(
       `SELECT s.id, s.name, s.phone, s.owner_name, s.location_lat, s.location_lng,
               s.address_text, s.image_url, s.deferred_payment_enabled,
@@ -1186,7 +1278,7 @@ router.get("/stores/route", repAuthMiddleware, async (req, res, next) => {
               ${STORE_LAST_VISIT_HAD_PURCHASE_SQL} AS last_visit_had_purchase
        FROM stores s
        JOIN areas a ON a.id = s.area_id
-       JOIN qr_codes qc ON qc.id = s.qr_code_id
+       LEFT JOIN qr_codes qc ON qc.id = s.qr_code_id
        WHERE s.area_id = ANY($1::int[])
          AND COALESCE(s.is_wholesale, false) = false
        ORDER BY s.name ASC`,
@@ -1200,6 +1292,8 @@ router.get("/stores/route", repAuthMiddleware, async (req, res, next) => {
       isWholesaler: false,
       dayOfWeek: route.dayOfWeek,
       dayName: route.dayName,
+      workDate: today.workDate,
+      source: route.source,
       routeZone: {
         id: route.routeZone.id,
         name: route.routeZone.name,
@@ -1213,7 +1307,7 @@ router.get("/stores/route", repAuthMiddleware, async (req, res, next) => {
         name: s.name,
         phone: s.phone,
         ownerName: s.owner_name,
-        location: { lat: s.location_lat, lng: s.location_lng },
+        location: { lat: Number(s.location_lat), lng: Number(s.location_lng) },
         addressText: s.address_text,
         imageUrl: s.image_url,
         areaName: formatAreaLabel(s.area_name, s.governorate),
@@ -1225,8 +1319,8 @@ router.get("/stores/route", repAuthMiddleware, async (req, res, next) => {
         lastVisitedAt: toIsoOrNull(s.last_visited_at),
         lastVisitNote: s.last_visit_note,
         lastVisitHadPurchase: Boolean(s.last_visit_had_purchase),
-        distanceM: Math.round(s.distance_m),
-        distanceLabel: formatDistanceM(s.distance_m),
+        distanceM: Number.isFinite(s.distance_m) ? Math.round(s.distance_m) : null,
+        distanceLabel: Number.isFinite(s.distance_m) ? formatDistanceM(s.distance_m) : null,
       })),
     });
   } catch (e) {
@@ -1285,7 +1379,7 @@ router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
                 ${STORE_LAST_VISIT_HAD_PURCHASE_SQL} AS last_visit_had_purchase
          FROM stores s
          JOIN areas a ON a.id = s.area_id
-         JOIN qr_codes qc ON qc.id = s.qr_code_id
+         LEFT JOIN qr_codes qc ON qc.id = s.qr_code_id
          WHERE s.is_wholesale = true
          ORDER BY visited_today ASC, a.name ASC, s.name ASC`,
         [rep.id]
@@ -1297,7 +1391,7 @@ router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
           name: s.name,
           phone: s.phone,
           ownerName: s.owner_name,
-          location: { lat: s.location_lat, lng: s.location_lng },
+          location: { lat: Number(s.location_lat), lng: Number(s.location_lng) },
           addressText: s.address_text,
           imageUrl: s.image_url,
           areaName: formatAreaLabel(s.area_name, s.governorate),
@@ -1375,7 +1469,7 @@ router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
               ${STORE_LAST_VISIT_HAD_PURCHASE_SQL} AS last_visit_had_purchase
        FROM stores s
        JOIN areas a ON a.id = s.area_id
-       JOIN qr_codes qc ON qc.id = s.qr_code_id
+       LEFT JOIN qr_codes qc ON qc.id = s.qr_code_id
        WHERE s.area_id = ANY($1::int[])
          AND COALESCE(s.is_wholesale, false) = false
        ORDER BY visited_today ASC, a.name ASC, s.name ASC`,
@@ -1398,7 +1492,7 @@ router.get("/stores/daily", repAuthMiddleware, async (req, res, next) => {
         name: s.name,
         phone: s.phone,
         ownerName: s.owner_name,
-        location: { lat: s.location_lat, lng: s.location_lng },
+        location: { lat: Number(s.location_lat), lng: Number(s.location_lng) },
         addressText: s.address_text,
         imageUrl: s.image_url,
         areaName: formatAreaLabel(s.area_name, s.governorate),
